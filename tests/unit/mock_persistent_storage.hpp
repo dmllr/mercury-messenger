@@ -24,8 +24,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   std::unordered_map<ContactID, identity::Contact> contacts_;
   std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
   std::unordered_map<uint64_t, std::string> large_messages_;
-  std::vector<storage::LedgerEntry> ledger_;
-  std::vector<storage::SyncRequest> sync_reqs_;
+  std::vector<messaging::LedgerEntry> ledger_;
+  std::vector<messaging::SyncRequest> sync_reqs_;
   std::atomic<uint64_t> next_history_id_{1};
   std::string db_path_ = "mock_db_path";
 
@@ -125,16 +125,16 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
   }
 
   // --- Synchronization Ledger ---
-  void AddLedgerEntry(storage::LedgerEntry const& entry) override {
+  void AddLedgerEntry(messaging::LedgerEntry const& entry) override {
     std::lock_guard const lock(mutex_);
     ledger_.push_back(entry);
   }
 
-  auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash)
-      -> std::vector<storage::LedgerEntry> override {
+  auto GetLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash)
+      -> std::vector<messaging::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
-    std::vector<storage::LedgerEntry> res;
-    bool found = (hash == std::string(64, '0'));
+    std::vector<messaging::LedgerEntry> res;
+    bool found = hash.IsEmpty();
     for (auto const& e : ledger_) {
       if (e.topic_id == topic_id) {
         if (found) res.push_back(e);
@@ -144,11 +144,11 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return res;
   }
 
-  auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<storage::LedgerEntry> override {
-    return GetLedgerEntriesAfter(topic_id, std::string(64, '0'));
+  auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<messaging::LedgerEntry> override {
+    return GetLedgerEntriesAfter(topic_id, messaging::LedgerHash());
   }
 
-  auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<storage::LedgerEntry> override {
+  auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<messaging::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
     for (auto it = ledger_.rbegin(); it != ledger_.rend(); ++it) {
       if (it->topic_id == topic_id) return *it;
@@ -156,9 +156,9 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return std::nullopt;
   }
 
-  void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) override {
+  void DeleteLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash) override {
     std::lock_guard const lock(mutex_);
-    if (hash == std::string(64, '0')) {
+    if (hash.IsEmpty()) {
       std::erase_if(ledger_, [&](auto& e) { return e.topic_id == topic_id; });
       return;
     }
@@ -172,8 +172,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     });
   }
 
-  auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash)
-      -> std::optional<storage::LedgerEntry> override {
+  auto GetLedgerEntryByHash(TopicID const& topic_id, messaging::LedgerHash const& hash)
+      -> std::optional<messaging::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
     for (auto const& e : ledger_) {
       if (e.topic_id == topic_id && e.hash == hash) return e;
@@ -181,18 +181,18 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return std::nullopt;
   }
 
-  auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> override {
+  auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<messaging::LedgerHash> override {
     std::lock_guard const lock(mutex_);
-    std::vector<std::string> res;
+    std::vector<messaging::LedgerHash> res;
     for (auto it = ledger_.rbegin(); it != ledger_.rend(); ++it) {
       if (it->topic_id == topic_id) res.push_back(it->hash);
     }
-    if (res.empty()) return {std::string(64, '0')};
+    if (res.empty()) return {messaging::LedgerHash()};
     return res;
   }
 
-  auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) -> bool override {
-    if (hash == std::string(64, '0')) return true;
+  auto HasLedgerEntry(TopicID const& topic_id, messaging::LedgerHash const& hash) -> bool override {
+    if (hash.IsEmpty()) return true;
     std::lock_guard const lock(mutex_);
     for (auto const& e : ledger_) {
       if (e.topic_id == topic_id && e.hash == hash) return true;
@@ -202,8 +202,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
   void ReplaceLedgerEntries(
       TopicID const& topic_id,
-      std::string const& lca_hash,
-      std::vector<storage::LedgerEntry> const& entries
+      messaging::LedgerHash const& lca_hash,
+      std::vector<messaging::LedgerEntry> const& entries
   ) override {
     DeleteLedgerEntriesAfter(topic_id, lca_hash);
     std::lock_guard const lock(mutex_);
@@ -215,17 +215,19 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
           break;
         }
       }
-      if (!exists) ledger_.push_back(e);
+      if (!exists) {
+        ledger_.push_back(e);
+      }
     }
   }
 
   // --- Sync Requests ---
-  void AddSyncRequest(storage::SyncRequest const& req) override {
+  void AddSyncRequest(messaging::SyncRequest const& req) override {
     std::lock_guard const lock(mutex_);
     sync_reqs_.push_back(req);
   }
 
-  auto GetSyncRequests() -> std::vector<storage::SyncRequest> override {
+  auto GetSyncRequests() -> std::vector<messaging::SyncRequest> override {
     std::lock_guard const lock(mutex_);
     return sync_reqs_;
   }

@@ -248,7 +248,7 @@ class MessagingService {
       json_msg["attachments"] = att_list;
     }
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, json_msg);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, json_msg);
 
     for (auto const& att : domain_attachments) {
       sm_->file_transfer->QueueUpload(peer_id, att);
@@ -264,7 +264,7 @@ class MessagingService {
 
     nlohmann::json const action = {{"type", "message_delete"}, {"target_id", message_id}};
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::MessageDelete, action);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::MessageDelete, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
@@ -273,7 +273,7 @@ class MessagingService {
 
     nlohmann::json const action = {{"type", "message_edit"}, {"target_id", message_id}, {"content", new_content}};
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::MessageEdit, action);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::MessageEdit, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
@@ -286,7 +286,7 @@ class MessagingService {
         {"reaction", static_cast<int>(reaction)}
     };
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Reaction, action);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Reaction, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
   }
 
@@ -308,7 +308,7 @@ class MessagingService {
           {"is_system", true},
           {"payload", {{"c", content}, {"v", protocolVersion}}}
       };
-      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, action_payload);
+      sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, action_payload);
     }
   }
 
@@ -367,7 +367,7 @@ class MessagingService {
 
     if (should_send_cancel) {
       nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
-      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, cancel_msg);
+      sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, cancel_msg);
     }
   }
 
@@ -472,11 +472,11 @@ class MessagingService {
       return;
     }
     nlohmann::json const msg = {{"type", "message_read"}, {"message_ids", message_ids}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, msg);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, msg);
   }
 
   // --- Read Model Projections ---
-  void ProjectMessage(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectMessage(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -596,7 +596,7 @@ class MessagingService {
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
     nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
 
     if (!is_system && !sm_->is_foreground) {
       auto contact = contact_manager_->GetContact(peer_id);
@@ -608,7 +608,7 @@ class MessagingService {
     }
   }
 
-  void ProjectEdit(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectEdit(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -621,7 +621,7 @@ class MessagingService {
     }
   }
 
-  void ProjectDelete(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectDelete(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -633,7 +633,7 @@ class MessagingService {
     }
   }
 
-  void ProjectReaction(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectReaction(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -646,7 +646,7 @@ class MessagingService {
     }
   }
 
-  void ProjectCallLog(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectCallLog(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -701,7 +701,7 @@ class MessagingService {
           {"call_status", static_cast<int>(params.status)},
           {"timestamp", entry.timestamp}
       };
-      sm_->sync_engine->AppendAction(TopicID(params.peer_id), storage::LedgerActionType::CallLog, payload);
+      sm_->sync_engine->AppendAction(TopicID(params.peer_id), messaging::LedgerActionType::CallLog, payload);
     }
     EventQueue::Instance().Push(EventChatMessageReceived{params.peer_id, entry});
   }
@@ -753,7 +753,7 @@ class MessagingService {
               {"status", "delivered"},
               {"message_id", message_id}
           };
-          sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
+          sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
           return;
         }
       }
@@ -774,7 +774,7 @@ class MessagingService {
            .kind = messaging::HistoryEntryKind::systemMessage}
       );
       nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-      sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
+      sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
       EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
       return;
     }
@@ -822,7 +822,7 @@ class MessagingService {
     }
 
     nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_id", message_id}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), storage::LedgerActionType::Message, receipt);
+    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
     if (!is_system && !sm_->is_foreground) {

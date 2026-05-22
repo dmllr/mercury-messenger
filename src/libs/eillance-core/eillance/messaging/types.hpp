@@ -9,7 +9,9 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/identity/topic_id.hpp"
 #include "eillance/utils/time.hpp"
+#include "eillance/utils/timestamp.hpp"
 
 namespace eillance::messaging {
 
@@ -209,6 +211,100 @@ struct ChatSummary {
 struct HistoryPage {
   std::vector<HistoryEntryRecord> messages{};
   size_t total_messages{};
+};
+
+enum class LedgerActionType : uint8_t {
+  Message = 1,
+  MessageEdit = 2,
+  MessageDelete = 3,
+  Reaction = 4,
+  CallLog = 5,
+  ProfileUpdate = 6,
+  ContactState = 7
+};
+
+struct LedgerHash {
+  static constexpr auto hashSize = 32U;
+  std::array<std::byte, hashSize> value{};
+
+  constexpr LedgerHash() = default;
+
+  explicit LedgerHash(std::span<std::byte const> span) {
+    if (!span.empty()) {
+      if (span.size() != hashSize) throw std::invalid_argument("LedgerHash must be 32 bytes");
+      std::ranges::copy(span, value.begin());
+    }
+  }
+
+  explicit LedgerHash(std::string_view hex) {
+    if (!hex.empty()) {
+      if (hex.size() != 2 * hashSize)
+        throw std::invalid_argument("Invalid hex length for LedgerHash: " + std::string(hex));
+      for (size_t i = 0; i < hashSize; ++i) {
+        auto const high = HexCharToInt(hex[2 * i]);
+        auto const low = HexCharToInt(hex[2 * i + 1]);
+        value[i] = static_cast<std::byte>((high << 4U) | low);
+      }
+    }
+  }
+
+  [[nodiscard]] auto ToString() const -> std::string {
+    if (IsEmpty()) return std::string(2 * hashSize, '0');
+    std::string hex(2 * hashSize, '0');
+    static constexpr std::array<char, 16> hexmap =
+        {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    for (size_t i = 0; i < hashSize; ++i) {
+      hex[2U * i] = hexmap[(static_cast<uint8_t>(value[i]) & 0xF0U) >> 4U];
+      hex[(2U * i) + 1] = hexmap[static_cast<uint8_t>(value[i]) & 0x0FU];
+    }
+    return hex;
+  }
+
+  [[nodiscard]] auto IsEmpty() const -> bool {
+    return std::ranges::all_of(value, [](std::byte byte) { return byte == std::byte{0}; });
+  }
+
+  auto operator<=>(LedgerHash const&) const = default;
+  auto operator==(LedgerHash const&) const -> bool = default;
+
+ private:
+  static constexpr auto HexCharToInt(char const chr) -> uint8_t {
+    auto const c = static_cast<unsigned char>(chr);
+    if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
+    if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return static_cast<uint8_t>(c - 'A' + 10);
+    throw std::invalid_argument(std::string("Invalid hex char: ") + chr);
+  }
+};
+
+inline void to_json(nlohmann::json& json, LedgerHash const& hash) {
+  json = hash.ToString();
+}
+
+inline void from_json(nlohmann::json const& json, LedgerHash& hash) {
+  auto const strval = json.get<std::string>();
+  if (strval.empty())
+    hash = LedgerHash();
+  else
+    hash = LedgerHash(strval);
+}
+
+struct LedgerEntry {
+  uint64_t seq_id = 0;
+  TopicID topic_id;
+  ContactID author_id;
+  Timestamp created_at;
+  LedgerActionType type;
+  std::string payload;
+  LedgerHash prev_hash;
+  LedgerHash hash;
+};
+
+struct SyncRequest {
+  TopicID topic_id;
+  ContactID target_peer_id;
+  Timestamp created_at;
+  Timestamp last_attempt;
 };
 
 }  // namespace eillance::messaging

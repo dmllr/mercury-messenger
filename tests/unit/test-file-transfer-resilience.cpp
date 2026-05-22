@@ -140,7 +140,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
         {"is_downloaded", false}}}
   );
 
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
   entry.topic_id = TopicID(peer1);
   entry.author_id = peer1;
   client_->Messaging()->ProjectMessage(entry, payload_msg, false);

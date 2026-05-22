@@ -186,7 +186,7 @@ class ContactService {
     manager_->DeleteContact(peer_id);
   }
 
-  void ProjectContactState(storage::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectContactState(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
     if (is_mine) return;
     std::string const type = json.value("type", "");
     ContactID const peer(entry.topic_id.value.Span());

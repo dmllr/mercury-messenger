@@ -57,7 +57,7 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
   // Verify "profile_info" message was appended to the ledger
   bool profile_sent = false;
   for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
-    if (entry.type == storage::LedgerActionType::ProfileUpdate) {
+    if (entry.type == messaging::LedgerActionType::ProfileUpdate) {
       auto json = nlohmann::json::parse(entry.payload);
       EXPECT_EQ(json["display_name"], "New Name");
       EXPECT_EQ(json["bio"], "New Bio");
@@ -98,7 +98,7 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
   // Verify NO profile sent to peer1 in ledger
   bool profile_sent = false;
   for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
-    if (entry.type == storage::LedgerActionType::ProfileUpdate) {
+    if (entry.type == messaging::LedgerActionType::ProfileUpdate) {
       profile_sent = true;
     }
   }
@@ -140,7 +140,7 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   eillance::EventQueue::Instance().WaitFor(
       [&]() -> bool {
         for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
-          if (entry.type == storage::LedgerActionType::ProfileUpdate) {
+          if (entry.type == messaging::LedgerActionType::ProfileUpdate) {
             auto json = nlohmann::json::parse(entry.payload);
             if (json.value("type", "") == "profile_info") {
               profile_sent = true;

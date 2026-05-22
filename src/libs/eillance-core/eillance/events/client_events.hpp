@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/events/service_connection_state.hpp"
+#include "eillance/identity/contact.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/topic_id.hpp"
 #include "eillance/messaging/types.hpp"
@@ -137,7 +138,7 @@ struct EventContactUnreachable {
 
 // --- Ledger Sync Events ---
 struct EventLedgerAppended {
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
 };
 
 // Orchestration Events replacing cross-service calls
