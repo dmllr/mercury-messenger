@@ -31,7 +31,7 @@ namespace eillance::sync {
 class SyncEngine {
   using Json = nlohmann::json;
 
-  static constexpr auto maxBatchSize = 500U;
+  static constexpr auto maxBatchSize = 25U;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -194,7 +194,7 @@ class SyncEngine {
       return;
     }
 
-    if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open) {
+    if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open && peer->crcp_verified) {
       ProposeSync(topic_id, target_peer);
     } else {
       if (type != messaging::LedgerActionType::ProfileUpdate) {
@@ -277,30 +277,26 @@ class SyncEngine {
           return;
         }
 
-        std::vector<messaging::LedgerHash> checkpoints;
-        messaging::LedgerHash current_hash = my_head;
-        int skip = 1;
-        int next_checkpoint = 0;
-        int index = 0;
-        while (!current_hash.IsEmpty()) {
-          if (index == next_checkpoint) {
-            checkpoints.push_back(current_hash);
-            if (checkpoints.size() >= 32) {
-              break;
-            }
-            skip *= 2;
-            next_checkpoint += skip;
+        auto build_checkpoints = [&](messaging::LedgerHash head) -> std::vector<messaging::LedgerHash> {
+          std::vector<messaging::LedgerHash> all_hashes;
+          messaging::LedgerHash curr = head;
+          while (!curr.IsEmpty()) {
+            all_hashes.push_back(curr);
+            auto entry = storage_->GetLedgerEntryByHash(topic_id, curr);
+            if (!entry) break;
+            curr = entry->prev_hash;
           }
-          auto entry = storage_->GetLedgerEntryByHash(topic_id, current_hash);
-          if (!entry) {
-            break;
+          all_hashes.push_back(messaging::LedgerHash());
+          std::vector<messaging::LedgerHash> chk;
+          for (size_t i = 0; i < all_hashes.size(); i += maxBatchSize) {
+            chk.push_back(all_hashes[i]);
           }
-          current_hash = entry->prev_hash;
-          index++;
-        }
-        if (checkpoints.empty() || !checkpoints.back().IsEmpty()) {
-          checkpoints.emplace_back();
-        }
+          if (chk.back() != all_hashes.back()) {
+            chk.push_back(all_hashes.back());
+          }
+          return chk;
+        };
+        std::vector<messaging::LedgerHash> checkpoints = build_checkpoints(my_head);
 
         lock.unlock();
         Json const req = {
@@ -541,7 +537,28 @@ class SyncEngine {
             current_hash = entry.hash;
           }
 
-          storage_->ReplaceLedgerEntries(topic_id, actual_lca, combined);
+          size_t match_count = 0;
+          while (match_count < my_entries.size() && match_count < combined.size()) {
+            auto const& o = my_entries[match_count];
+            auto const& n = combined[match_count];
+            if (o.author_id == n.author_id && o.created_at.value == n.created_at.value && 
+                o.type == n.type && o.payload == n.payload && o.hash == n.hash) {
+              match_count++;
+            } else {
+              break;
+            }
+          }
+
+          messaging::LedgerHash optimal_lca = actual_lca;
+          if (match_count > 0) {
+            optimal_lca = combined[match_count - 1].hash;
+          }
+
+          std::vector<messaging::LedgerEntry> entries_to_write(combined.begin() + match_count, combined.end());
+          
+          if (!entries_to_write.empty() || combined.size() != my_entries.size() || match_count != combined.size()) {
+            storage_->ReplaceLedgerEntries(topic_id, optimal_lca, entries_to_write);
+          }
 
           for (auto const& entry : new_entries) {
             EventQueue::Instance().Push(EventLedgerAppended{entry});
@@ -574,30 +591,26 @@ class SyncEngine {
             auto const result = ValidateAndRepairChain(topic_id);
             messaging::LedgerHash const my_head = result.first;
 
-            std::vector<messaging::LedgerHash> checkpoints;
-            messaging::LedgerHash current_hash = my_head;
-            int skip = 1;
-            int next_checkpoint = 0;
-            int index = 0;
-            while (!current_hash.IsEmpty()) {
-              if (index == next_checkpoint) {
-                checkpoints.push_back(current_hash);
-                if (checkpoints.size() >= 32) {
-                  break;
-                }
-                skip *= 2;
-                next_checkpoint += skip;
+            auto build_checkpoints = [&](messaging::LedgerHash head) -> std::vector<messaging::LedgerHash> {
+              std::vector<messaging::LedgerHash> all_hashes;
+              messaging::LedgerHash curr = head;
+              while (!curr.IsEmpty()) {
+                all_hashes.push_back(curr);
+                auto entry = storage_->GetLedgerEntryByHash(topic_id, curr);
+                if (!entry) break;
+                curr = entry->prev_hash;
               }
-              auto entry = storage_->GetLedgerEntryByHash(topic_id, current_hash);
-              if (!entry) {
-                break;
+              all_hashes.push_back(messaging::LedgerHash());
+              std::vector<messaging::LedgerHash> chk;
+              for (size_t i = 0; i < all_hashes.size(); i += maxBatchSize) {
+                chk.push_back(all_hashes[i]);
               }
-              current_hash = entry->prev_hash;
-              index++;
-            }
-            if (checkpoints.empty() || !checkpoints.back().IsEmpty()) {
-              checkpoints.emplace_back();
-            }
+              if (chk.back() != all_hashes.back()) {
+                chk.push_back(all_hashes.back());
+              }
+              return chk;
+            };
+            std::vector<messaging::LedgerHash> checkpoints = build_checkpoints(my_head);
             lock.unlock();
 
             Json const req = {
