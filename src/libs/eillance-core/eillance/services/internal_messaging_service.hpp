@@ -157,7 +157,7 @@ class InternalMessagingService {
     bool const is_confirmed = (contact && contact->status == identity::ContactStatus::confirmed);
 
     if (!is_confirmed && type != "call_reject" && type != "hangup") {
-      LGE << "CRCP Enforcement: Dropped message from unconfirmed peer: " << peer_id.ToString() << " type: " << type;
+      LGE << "CRCP Enforcement: Dropped message from unconfirmed or unverified peer";
       if (type == "call_request") {
         nlohmann::json const reject_msg = {
             {"type", "call_reject"},
@@ -173,8 +173,7 @@ class InternalMessagingService {
     }
 
     if (!peer || !peer->crcp_verified) {
-      LGE << "CRCP Enforcement: Dropped message from unverified connection: " << peer_id.ToString()
-          << " type: " << type;
+      LGE << "CRCP Enforcement: Dropped message from unconfirmed or unverified peer";
       return;
     }
 
@@ -303,18 +302,6 @@ class InternalMessagingService {
       auto sig = crypto::FromHex(sig_hex);
       if (!sig.empty() && crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
         peer->crcp_verified = true;
-        auto contact = sm_->contact_manager->GetContact(peer_id);
-        if (!contact) {
-          if (sm_->contact_manager->AddContact(peer_id)) {
-            sm_->contact_manager->StoreSignatureFrom(peer_id, sig);
-            sm_->contact_manager->MarkAsConfirmed(peer_id);
-            EventQueue::Instance().Push(EventContactRestored{peer_id});
-          }
-        } else if (contact->status == identity::ContactStatus::pendingApproval) {
-          sm_->contact_manager->StoreSignatureFrom(peer_id, sig);
-          sm_->contact_manager->MarkAsConfirmed(peer_id);
-          EventQueue::Instance().Push(EventContactRestored{peer_id});
-        }
       }
 
       if (!message.value("is_reply", false)) {
