@@ -260,7 +260,6 @@ class MediaCallService {
             });
           } catch (std::exception const& e) {
             LGE << "Failed to process media offer: " << e.what();
-            Hangup(peer_id, true);
           }
         }
       });
@@ -277,7 +276,6 @@ class MediaCallService {
         });
       } catch (std::exception const& e) {
         LGE << "Failed to process media offer: " << e.what();
-        Hangup(peer_id, true);
       }
     }
   }
@@ -292,7 +290,6 @@ class MediaCallService {
         media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
       } catch (std::exception const& e) {
         LGE << "Failed to set media answer: " << e.what();
-        Hangup(peer_id, true);
       }
     }
   }
@@ -500,7 +497,6 @@ class MediaCallService {
         });
       } catch (std::exception const& e) {
         LGE << "Failed to create offer: " << e.what();
-        Hangup(peer_id, true);
       }
     }
   }

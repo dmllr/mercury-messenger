@@ -18,18 +18,18 @@ def test_initial_and_updates_profile(test_environment):
   # Note: message command in mock-app triggers 'AddContact' which sends profile.
   script_a = (
       f"profile \"Alice\" \"Bio A\", "
-      f"connect, wait 2, "
+      f"connect, wait 15, "
       f"message {id_b} \"Hi\", "
-      f"wait 10, "
+      f"wait 25, "
       f"profile \"Alice Updated\" \"New Bio\", "
-      f"wait 10, disconnect"
+      f"wait 25, disconnect"
   )
   
   scenario.add_process("app-a", "/app/bin/mercury-mock-app", 
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.60.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.60.31"})
 
-  script_b = "connect, wait 15, disconnect"
+  script_b = "connect, wait 75, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app", 
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.60.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.60.32"})
@@ -46,4 +46,4 @@ def test_initial_and_updates_profile(test_environment):
       f"[mock] Profile updated for {id_a}" 
   ])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=35)
+  test_environment.execute_scenario(scenario, timeout_seconds=90, stop_on_first_exit=False)

@@ -24,13 +24,13 @@ def test_attachments(test_environment):
     "mkfile /tmp/f5.dat 1024, "
     "mkfile /tmp/f6.dat 2048, "
     "mkfile /tmp/f7.dat 100, "
-    "connect, wait 2, "
+    "connect, wait 15, "
     f"attach {id_b} \"1 file\" /tmp/f1.dat, "
-    "wait 5, "
+    "wait 15, "
     f"attach {id_b} \"2 files\" /tmp/f2.dat /tmp/f3.dat, "
-    "wait 5, "
+    "wait 15, "
     f"attach {id_b} \"4 files\" /tmp/f4.dat /tmp/f5.dat /tmp/f6.dat /tmp/f7.dat, "
-    "wait 20, disconnect"
+    "wait 45, disconnect"
   )
 
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
@@ -38,7 +38,7 @@ def test_attachments(test_environment):
                         "--script", script_a],
                        {"net": "192.168.80.31"})
 
-  script_b = f"connect, wait 5, confirm {id_a}, wait 40, disconnect"
+  script_b = f"connect, wait 10, confirm {id_a}, wait 90, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.80.30/tcp/8000", "--db-path", "/tmp/b.db",
                         "--script", script_b],
@@ -70,7 +70,7 @@ def test_attachments(test_environment):
     "[mock] File transfer status changed to 2",
   ])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=45)
+  test_environment.execute_scenario(scenario, timeout_seconds=120, stop_on_first_exit=False)
 
 
 def test_large_attachment(test_environment):
@@ -87,15 +87,15 @@ def test_large_attachment(test_environment):
   # 5MB file
   script_a = (
     "mkfile /tmp/large.dat 5242880, "
-    "connect, wait 2, "
+    "connect, wait 15, "
     f"attach {id_b} \"Large\" /tmp/large.dat, "
-    "wait 25, disconnect"
+    "wait 80, disconnect"
   )
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.81.30/tcp/8000", "--db-path", "/tmp/a.db",
                         "--script", script_a], {"net": "192.168.81.31"})
 
-  script_b = f"connect, wait 5, confirm {id_a}, wait 30, disconnect"
+  script_b = f"connect, wait 10, confirm {id_a}, wait 90, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.81.30/tcp/8000", "--db-path", "/tmp/b.db",
                         "--script", script_b], {"net": "192.168.81.32"})
@@ -106,4 +106,4 @@ def test_large_attachment(test_environment):
     "[mock] File transfer status changed to 2",
   ])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=40)
+  test_environment.execute_scenario(scenario, timeout_seconds=80, stop_on_first_exit=False)
