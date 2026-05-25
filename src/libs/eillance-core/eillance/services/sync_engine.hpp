@@ -1,8 +1,6 @@
-// src/libs/eillance-core/eillance/services/sync_engine.hpp
 #pragma once
 
 #include <algorithm>
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -130,13 +128,13 @@ class SyncEngine {
     messaging::LedgerHash curr = head;
     while (!curr.IsEmpty()) {
       all_hashes.push_back(curr);
-      auto entry = storage_->GetLedgerEntryByHash(topic_id, curr);
+      auto const entry = storage_->GetLedgerEntryByHash(topic_id, curr);
       if (!entry) {
         break;
       }
       curr = entry->prev_hash;
     }
-    all_hashes.push_back(messaging::LedgerHash());
+    all_hashes.emplace_back();
 
     std::vector<std::string> chk;
     for (size_t i = 0; i < all_hashes.size(); ++i) {
@@ -173,7 +171,7 @@ class SyncEngine {
     LGI << "[Sync] Sync finished with " << peer_id.ToString();
   }
 
-  auto parse_entries(ContactID const& peer_id, TopicID const& topic_id, Json const& msg_entries)
+  auto ParseEntries(ContactID const& peer_id, TopicID const& topic_id, Json const& msg_entries) const
       -> std::vector<messaging::LedgerEntry> {
     std::vector<messaging::LedgerEntry> parsed;
     auto const peer = transport_->GetPeer(peer_id);
@@ -190,11 +188,11 @@ class SyncEngine {
       e.prev_hash = messaging::LedgerHash(e_json.value("prev_hash", ""));
       e.hash = messaging::LedgerHash(e_json.value("hash", ""));
 
-      auto const encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
-      if (!encrypted_bytes.empty()) {
+      if (auto const encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
+          !encrypted_bytes.empty()) {
         auto const decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
         if (!decrypted.empty()) {
-          e.payload = std::string(reinterpret_cast<char const*>(decrypted.data()), decrypted.size());
+          e.payload = std::string(decrypted.data(), decrypted.size());
           parsed.push_back(e);
         } else {
           LGE << "[Sync] Decryption failed for entry " << e.hash.ToString();
@@ -424,9 +422,15 @@ class SyncEngine {
             << my_entries.size() << " entries to send.";
 
         std::ranges::sort(my_entries, [](auto const& a, auto const& b) -> bool {
-          if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
-          if (a.author_id != b.author_id) return a.author_id < b.author_id;
-          if (a.type != b.type) return a.type < b.type;
+          if (a.created_at.value != b.created_at.value) {
+            return a.created_at.value < b.created_at.value;
+          }
+          if (a.author_id != b.author_id) {
+            return a.author_id < b.author_id;
+          }
+          if (a.type != b.type) {
+            return a.type < b.type;
+          }
           return a.payload < b.payload;
         });
 
@@ -452,7 +456,7 @@ class SyncEngine {
         }
 
         size_t const end = std::min<size_t>(maxBatchSize, my_entries.size());
-        std::vector<messaging::LedgerEntry> batch(my_entries.begin(), my_entries.begin() + end);
+        std::vector<messaging::LedgerEntry> const batch(my_entries.begin(), my_entries.begin() + end);
 
         Json entries_json = Json::array();
         if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
@@ -489,7 +493,7 @@ class SyncEngine {
         LGI << "[Sync] Received sync_batch from " << peer_id.ToString() << " batch_index: " << batch_index
             << " containing " << msg["entries"].size() << " entries.";
 
-        auto peer_entries = parse_entries(peer_id, topic_id, msg["entries"]);
+        auto peer_entries = ParseEntries(peer_id, topic_id, msg["entries"]);
         std::vector<messaging::LedgerEntry> my_batch;
         size_t my_total_entries = 0;
 
@@ -499,12 +503,18 @@ class SyncEngine {
           session.active = true;
 
           if (batch_index == 0) {
-            std::unique_lock<std::mutex> db_lock(ledger_mutex_);
+            std::unique_lock<std::mutex> const db_lock(ledger_mutex_);
             auto my_entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
             std::ranges::sort(my_entries, [](auto const& a, auto const& b) -> bool {
-              if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
-              if (a.author_id != b.author_id) return a.author_id < b.author_id;
-              if (a.type != b.type) return a.type < b.type;
+              if (a.created_at.value != b.created_at.value) {
+                return a.created_at.value < b.created_at.value;
+              }
+              if (a.author_id != b.author_id) {
+                return a.author_id < b.author_id;
+              }
+              if (a.type != b.type) {
+                return a.type < b.type;
+              }
               return a.payload < b.payload;
             });
             session.my_entries_to_send = my_entries;
@@ -513,9 +523,9 @@ class SyncEngine {
           session.peer_total_entries = peer_total_entries;
           my_total_entries = session.my_entries_to_send.size();
 
-          size_t start_idx = batch_index * maxBatchSize;
+          size_t const start_idx = batch_index * maxBatchSize;
           if (start_idx < my_total_entries) {
-            size_t end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total_entries);
+            size_t const end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total_entries);
             my_batch.assign(
                 session.my_entries_to_send.begin() + start_idx,
                 session.my_entries_to_send.begin() + end_idx
@@ -525,7 +535,7 @@ class SyncEngine {
 
         std::vector<messaging::LedgerEntry> actually_new;
         if (!peer_entries.empty()) {
-          std::unique_lock<std::mutex> db_lock(ledger_mutex_);
+          std::unique_lock<std::mutex> const db_lock(ledger_mutex_);
           auto existing_entries = storage_->GetLedgerEntries(topic_id);
           std::unordered_set<std::string> existing_signatures;
           for (auto const& ex : existing_entries) {
@@ -536,8 +546,8 @@ class SyncEngine {
           }
 
           for (auto& e : peer_entries) {
-            std::string sig = e.author_id.ToString() + std::to_string(e.created_at.value) +
-                              std::to_string(static_cast<int>(e.type)) + e.payload;
+            std::string const sig = e.author_id.ToString() + std::to_string(e.created_at.value) +
+                                    std::to_string(static_cast<int>(e.type)) + e.payload;
             if (!existing_signatures.contains(sig)) {
               actually_new.push_back(e);
               storage_->AddLedgerEntry(e);
@@ -561,8 +571,7 @@ class SyncEngine {
         Json entries_json = Json::array();
         if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
           for (auto const& e : my_batch) {
-            auto encrypted = peer->session_cipher->Encrypt(e.payload);
-            if (!encrypted.empty()) {
+            if (auto encrypted = peer->session_cipher->Encrypt(e.payload); !encrypted.empty()) {
               entries_json.push_back(
                   {{"author", e.author_id.ToString()},
                    {"created", e.created_at.value},
@@ -594,7 +603,7 @@ class SyncEngine {
         LGI << "[Sync] Received sync_batch_reply from " << peer_id.ToString() << " batch_index: " << batch_index
             << " containing " << msg["entries"].size() << " entries.";
 
-        auto peer_entries = parse_entries(peer_id, topic_id, msg["entries"]);
+        auto peer_entries = ParseEntries(peer_id, topic_id, msg["entries"]);
         std::vector<messaging::LedgerEntry> actually_new;
 
         if (!peer_entries.empty()) {
@@ -640,9 +649,9 @@ class SyncEngine {
 
           if ((next_batch_index * maxBatchSize < my_total) || (next_batch_index * maxBatchSize < peer_total_entries)) {
             has_more_batches = true;
-            size_t start_idx = next_batch_index * maxBatchSize;
+            size_t const start_idx = next_batch_index * maxBatchSize;
             if (start_idx < my_total) {
-              size_t end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total);
+              size_t const end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total);
               my_next_batch.assign(
                   session.my_entries_to_send.begin() + start_idx,
                   session.my_entries_to_send.begin() + end_idx
@@ -658,8 +667,7 @@ class SyncEngine {
           Json entries_json = Json::array();
           if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
             for (auto const& e : my_next_batch) {
-              auto encrypted = peer->session_cipher->Encrypt(e.payload);
-              if (!encrypted.empty()) {
+              if (auto encrypted = peer->session_cipher->Encrypt(e.payload); !encrypted.empty()) {
                 entries_json.push_back(
                     {{"author", e.author_id.ToString()},
                      {"created", e.created_at.value},
