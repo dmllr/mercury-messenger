@@ -23,7 +23,9 @@ add_executable(h-e-tests
   test-backup-manager.cpp
   test-bit-reader.cpp
   test-bot-api.cpp
+  test-call-id.cpp
   test-call-view-model.cpp
+  test-capture.cpp
   test-circular-buffer.cpp
   test-client-core.cpp
   test-contact-id.cpp
@@ -32,6 +34,7 @@ add_executable(h-e-tests
   test-contacts-view-model.cpp
   test-conversation-view-model.cpp
   test-crypto.cpp
+  test-delivery-service.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-file-transfer-cancellation.cpp
@@ -39,17 +42,19 @@ add_executable(h-e-tests
   test-h264-utils.cpp
   test-id-manager.cpp
   test-internal-messaging-service.cpp
+  test-ledger-hash.cpp
   test-ledger-projection.cpp
   test-media-call-service.cpp
   test-message-history.cpp
   test-messaging-service.cpp
+  test-network-config.cpp
   test-packet.cpp
   test-profile-service.cpp
   test-profile-updates.cpp
   test-profile-view-model.cpp
   test-protocol-safety.cpp
-  test-resilience.cpp
   test-replies.cpp
+  test-resilience.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
   test-sqlite-storage.cpp
