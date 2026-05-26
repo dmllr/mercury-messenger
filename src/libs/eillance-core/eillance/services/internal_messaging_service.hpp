@@ -156,14 +156,14 @@ class InternalMessagingService {
     if (!is_confirmed && type != "call_reject" && type != "hangup") {
       LGE << "CRCP Enforcement: Dropped message from unconfirmed or unverified peer";
       if (type == "call_request") {
-        nlohmann::json const reject_msg = {
+        Json const reject_msg = {
             {"type", "call_reject"},
             {"call_id", message.value("call_id", "")},
             {"reason", "unauthorized"}
         };
         std::ignore = data_transport_->SendJson(peer_id, reject_msg);
       } else if (is_rejected) {
-        nlohmann::json const reject_msg = {{"type", "peer_unwilling"}};
+        Json const reject_msg = {{"type", "peer_unwilling"}};
         std::ignore = data_transport_->SendJson(peer_id, reject_msg);
       }
       return;
@@ -336,7 +336,7 @@ class InternalMessagingService {
   }
 
   void SendLegacyUpdatePrompt(ContactID const& peer_id) {
-    auto peer = data_transport_->GetPeer(peer_id);
+    auto const peer = data_transport_->GetPeer(peer_id);
     if (!peer || !peer->session_cipher->IsReady()) {
       return;
     }
@@ -344,16 +344,16 @@ class InternalMessagingService {
       return;
     }
 
-    nlohmann::json payload_json;
+    Json payload_json;
     payload_json["v"] = services::MessagingService::protocolVersion;
-    payload_json["c"] = nlohmann::json{{"action", "unsupported_format"}}.dump();
+    payload_json["c"] = Json{{"action", "unsupported_format"}}.dump();
 
     auto encrypted = peer->session_cipher->Encrypt(payload_json.dump());
     if (encrypted.empty()) {
       return;
     }
 
-    nlohmann::json const json_msg = {
+    Json const json_msg = {
         {"type", "chat"},
         {"message_id", messaging::GenerateMessageId()},
         {"is_system", true},

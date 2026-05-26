@@ -19,6 +19,8 @@
 namespace eillance::transport {
 
 struct Peer {
+  using Json = nlohmann::json;
+
   explicit Peer(ContactID const& id);
 
   // NOLINTBEGIN(*-non-private-member-variables-in-classes)
@@ -39,7 +41,7 @@ struct Peer {
 
   std::atomic<uint64_t> tx_seq{0};
   std::atomic<uint64_t> rx_seq{0};
-  std::map<uint64_t, nlohmann::json> out_of_order_queue;
+  std::map<uint64_t, Json> out_of_order_queue;
   std::mutex queue_mutex;
   // NOLINTEND(*-non-private-member-variables-in-classes)
 };

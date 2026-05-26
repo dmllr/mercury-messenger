@@ -283,10 +283,11 @@ inline void to_json(nlohmann::json& json, LedgerHash const& hash) {
 
 inline void from_json(nlohmann::json const& json, LedgerHash& hash) {
   auto const strval = json.get<std::string>();
-  if (strval.empty())
+  if (strval.empty()) {
     hash = LedgerHash();
-  else
+  } else {
     hash = LedgerHash(strval);
+  }
 }
 
 struct LedgerEntry {
