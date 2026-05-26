@@ -8,16 +8,16 @@
 #include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/contact_service.hpp"
-#include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
-#include "eillance/storage/data_types.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::services {
 
 class LedgerProjectionService {
+  using Json = nlohmann::json;
+
  public:
   explicit LedgerProjectionService(ServiceManager* sm)
       : sm_(sm) {
@@ -27,7 +27,9 @@ class LedgerProjectionService {
   }
 
   ~LedgerProjectionService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
   }
 
  private:
@@ -35,7 +37,7 @@ class LedgerProjectionService {
     bool const is_mine = (entry.author_id == sm_->account->GetId());
 
     try {
-      auto json = nlohmann::json::parse(entry.payload);
+      auto const json = Json::parse(entry.payload);
 
       switch (entry.type) {
         case messaging::LedgerActionType::Message:
