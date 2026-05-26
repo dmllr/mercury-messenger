@@ -164,13 +164,14 @@ class AccountService {
 
  private:
   void EvaluatePermissionBanner() {
-    PermissionBannerType banner = PermissionBannerType::none;
-    if (!has_notif_)
+    auto banner = PermissionBannerType::none;
+    if (!has_notif_) {
       banner = PermissionBannerType::notification;
-    else if (!has_battery_ && !settings_manager_->GetIgnoreBatteryOptimization())
+    } else if (!has_battery_ && !settings_manager_->GetIgnoreBatteryOptimization()) {
       banner = PermissionBannerType::battery;
-    else if (!has_calls_ && !settings_manager_->GetIgnoreCallPermissions())
+    } else if (!has_calls_ && !settings_manager_->GetIgnoreCallPermissions()) {
       banner = PermissionBannerType::callPermissions;
+    }
     EventQueue::Instance().Push(EventPermissionBannerChanged{banner});
   }
 

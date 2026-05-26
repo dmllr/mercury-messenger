@@ -94,7 +94,7 @@ class ContactService {
     }
 
     if (manager_->AddContact(peer_id) || (existing && existing->status == identity::ContactStatus::pendingApproval)) {
-      auto signature = sm_->account->Sign(peer_id.Span());
+      auto const signature = sm_->account->Sign(peer_id.Span());
       Json content = {
           {"type", "crcp_request"},
           {"signature", crypto::ToHex(signature)},
@@ -104,7 +104,7 @@ class ContactService {
         content["token"] = crypto::ToHex(*token);
       }
 
-      if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+      if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = transport_->SendJson(peer_id, content);
       }
 
@@ -239,7 +239,9 @@ class ContactService {
 
     if (type == "crcp_request") {
       std::optional<std::string> token;
-      if (json.contains("token")) token = json["token"];
+      if (json.contains("token")) {
+        token = json["token"];
+      }
       Json const profile = json.value("profile", Json::object());
       std::string const signature_hex = json.value("signature", "");
 
@@ -276,7 +278,9 @@ class ContactService {
         LGE << "Invalid signature in CRCP confirm from " << peer_id.ToString();
         return;
       }
-      if (auto peer = transport_->GetPeer(peer_id)) peer->crcp_verified = true;
+      if (auto peer = transport_->GetPeer(peer_id)) {
+        peer->crcp_verified = true;
+      }
       if (auto existing = manager_->GetContact(peer_id); existing) {
         OnContactConfirm(peer_id, sig, profile);
       } else {
@@ -342,7 +346,7 @@ class ContactService {
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
         EventQueue::Instance().Push(EventContactRequest{peer_id});
 
-        std::string name = profile.display_name ? *profile.display_name : peer_id.ToString().substr(0, 8);
+        auto const name = profile.display_name ? *profile.display_name : peer_id.ToString().substr(0, 8);
         EventQueue::Instance().Push(EventNotifyContactRequest{peer_id, name});
       }
 
@@ -369,9 +373,9 @@ class ContactService {
       manager_->StoreSignatureFrom(peer_id, sig);
     }
 
-    bool was_confirmed = manager_->IsConfirmedContact(peer_id);
+    auto const was_confirmed = manager_->IsConfirmedContact(peer_id);
     if (manager_->MarkAsConfirmed(peer_id)) {
-      identity::ProfileUpdate profile = ParseProfileJson(profile_json);
+      auto const profile = ParseProfileJson(profile_json);
       manager_->UpdateContactProfile(peer_id, profile);
 
       if (!was_confirmed) {
@@ -427,16 +431,19 @@ class ContactService {
   identity::ProfileUpdate ParseProfileJson(Json const& profile_json) const {
     identity::ProfileUpdate profile;
     if (profile_json.contains("display_name") && !profile_json["display_name"].is_null()) {
-      auto val = profile_json["display_name"].get<std::string>();
-      if (!val.empty()) profile.display_name = val;
+      if (auto val = profile_json["display_name"].get<std::string>(); !val.empty()) {
+        profile.display_name = val;
+      }
     }
     if (profile_json.contains("bio") && !profile_json["bio"].is_null()) {
-      auto val = profile_json["bio"].get<std::string>();
-      if (!val.empty()) profile.bio = val;
+      if (auto val = profile_json["bio"].get<std::string>(); !val.empty()) {
+        profile.bio = val;
+      }
     }
     if (profile_json.contains("photo") && !profile_json["photo"].is_null()) {
-      auto val = profile_json["photo"].get<std::string>();
-      if (!val.empty()) profile.photo_base64 = val;
+      if (auto val = profile_json["photo"].get<std::string>(); !val.empty()) {
+        profile.photo_base64 = val;
+      }
     }
     return profile;
   }
