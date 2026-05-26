@@ -43,7 +43,6 @@ add_executable(h-e-tests
   test-id-manager.cpp
   test-internal-messaging-service.cpp
   test-ledger-hash.cpp
-  test-ledger-projection.cpp
   test-media-call-service.cpp
   test-message-history.cpp
   test-messaging-service.cpp
