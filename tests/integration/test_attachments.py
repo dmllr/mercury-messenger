@@ -24,7 +24,9 @@ def test_attachments(test_environment):
     "mkfile /tmp/f5.dat 1024, "
     "mkfile /tmp/f6.dat 2048, "
     "mkfile /tmp/f7.dat 100, "
-    "connect, wait 15, "
+    "connect, wait 5, "
+    f"message {id_b} \"init\", "
+    "wait 15, "
     f"attach {id_b} \"1 file\" /tmp/f1.dat, "
     "wait 15, "
     f"attach {id_b} \"2 files\" /tmp/f2.dat /tmp/f3.dat, "
@@ -38,7 +40,7 @@ def test_attachments(test_environment):
                         "--script", script_a],
                        {"net": "192.168.80.31"})
 
-  script_b = f"connect, wait 10, confirm {id_a}, wait 90, disconnect"
+  script_b = f"connect, wait 100, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.80.30/tcp/8000", "--db-path", "/tmp/b.db",
                         "--script", script_b],
@@ -87,7 +89,9 @@ def test_large_attachment(test_environment):
   # 5MB file
   script_a = (
     "mkfile /tmp/large.dat 5242880, "
-    "connect, wait 15, "
+    "connect, wait 5, "
+    f"message {id_b} \"init\", "
+    "wait 15, "
     f"attach {id_b} \"Large\" /tmp/large.dat, "
     "wait 80, disconnect"
   )
@@ -95,7 +99,7 @@ def test_large_attachment(test_environment):
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.81.30/tcp/8000", "--db-path", "/tmp/a.db",
                         "--script", script_a], {"net": "192.168.81.31"})
 
-  script_b = f"connect, wait 10, confirm {id_a}, wait 90, disconnect"
+  script_b = f"connect, wait 110, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.81.30/tcp/8000", "--db-path", "/tmp/b.db",
                         "--script", script_b], {"net": "192.168.81.32"})

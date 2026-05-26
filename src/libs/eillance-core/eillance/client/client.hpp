@@ -486,9 +486,8 @@ class Client final {
     if (peer && peer->data_channel_is_open) {
       return;
     }
-    auto const state = sm_->data_transport->GetConnectionState(peer_id);
-    if (state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection ||
-        state == transport::PeerConnectionState::connected) {
+    if (auto const state = sm_->data_transport->GetConnectionState(peer_id);
+        state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection) {
       return;
     }
 
@@ -530,8 +529,10 @@ class Client final {
   }
 
   [[nodiscard]] auto GetCurrentCallState() const -> view_model::CallState {
-    auto session = sm_->media_call->GetCurrentSession();
-    if (!session) return {};
+    auto const session = sm_->media_call->GetCurrentSession();
+    if (!session) {
+      return {};
+    }
     return {
         .is_connecting = !session->is_active && !session->is_ringing,
         .is_in_call = session->is_active,
@@ -549,7 +550,9 @@ class Client final {
 
  private:
   void CheckForInactivePeers() {
-    if (!is_running_) return;
+    if (!is_running_) {
+      return;
+    }
     auto const now = Time::SteadyNow();
     auto const timeout =
         std::chrono::duration_cast<std::chrono::microseconds>(sm_->account->GetSettings()->GetPeerInactivityTimeout())
@@ -563,7 +566,9 @@ class Client final {
 
       if (peer->has_media_peer_connection) {
         peer->last_activity_time = now;
-        if (!peer->data_channel_is_open) Connect(id);
+        if (!peer->data_channel_is_open) {
+          Connect(id);
+        }
       } else if (is_data_connected) {
         auto const lat = peer->last_activity_time.load();
         if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
@@ -571,8 +576,7 @@ class Client final {
           sm_->data_transport->Disconnect(id);
         }
       } else if (is_connecting) {
-        auto const lat = peer->last_activity_time.load();
-        if (now > lat && (now - lat) > 45ULL * 1000000ULL) {
+        if (auto const lat = peer->last_activity_time.load(); now > lat && (now - lat) > 45ULL * Time::uS) {
           LGI << "Peer " << id.ToString() << " stuck in connecting. Closing.";
           EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
           sm_->data_transport->Disconnect(id);
@@ -607,7 +611,7 @@ class Client final {
         background_queue_.DispatchAfter(std::chrono::milliseconds(delay_ms), [this, peer_id = contact.peer_id]() {
           Connect(peer_id);
         });
-        delay_ms += 250;
+        delay_ms += 250;  // NOLINT(*-magic-numbers)
       }
     }
   }
@@ -621,15 +625,19 @@ class Client final {
     if (auto turn = settings->GetCustomTurn(); turn && !turn->empty()) {
       Json turn_server;
       turn_server["urls"] = std::vector<std::string>{*turn};
-      if (auto user = settings->GetCustomTurnUser(); user && !user->empty()) turn_server["username"] = *user;
-      if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) turn_server["credential"] = *pass;
+      if (auto user = settings->GetCustomTurnUser(); user && !user->empty()) {
+        turn_server["username"] = *user;
+      }
+      if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) {
+        turn_server["credential"] = *pass;
+      }
       final_config.push_back(turn_server);
     }
 
     {
       std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
       auto const now = std::chrono::steady_clock::now();
-      std::erase_if(dynamic_turn_servers_, [&](auto const& s) {
+      std::erase_if(dynamic_turn_servers_, [&](auto const& s) -> bool {
         return (now - s.discovered_at) > std::chrono::minutes(10);
       });
 

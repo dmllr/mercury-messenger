@@ -72,6 +72,10 @@ auto main(int argc, char** argv) -> int {
     eillance::Client client(storage, media_transport);
 
     auto mnemonic = client.GenerateNewIdentity();
+
+    // Force restore from mnemonic to guarantee the outputted ID strictly matches
+    // the PBKDF2 derivation used by nodes during the tests.
+    client.RestoreIdentity(mnemonic);
     auto id = client.GetId().ToString();
 
     std::cout << "MNEMONIC: " << mnemonic << std::endl;
