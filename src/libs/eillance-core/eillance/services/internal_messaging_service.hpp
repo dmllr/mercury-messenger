@@ -10,14 +10,11 @@
 #include <span>
 
 #include "eillance/events/client_events.hpp"
-#include "eillance/events/service_connection_state.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/contact_service.hpp"
-#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
-#include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/services/sync_engine.hpp"
 #include "eillance/transport/data_transport.hpp"
@@ -65,7 +62,7 @@ class InternalMessagingService {
     );
 
     event_unsubs_.push_back(
-        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) {
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
           if (e.state == transport::PeerConnectionState::disconnected ||
               e.state == transport::PeerConnectionState::failed || e.state == transport::PeerConnectionState::closed) {
             auto const current_state = data_transport_->GetConnectionState(e.peer_id);
@@ -296,9 +293,9 @@ class InternalMessagingService {
     int const peer_ft_version = message.value("ft_version", 0);
     CheckPeerVersion(peer_id, peer_sync_version, peer_ft_version);
 
-    auto pub_key = message["key"].get<std::vector<std::byte>>();
-    if (peer->session_cipher->ComputeSharedSecret(pub_key)) {
-      std::string sig_hex = message.value("signature", "");
+    if (auto const pub_key = message["key"].get<std::vector<std::byte>>();
+        peer->session_cipher->ComputeSharedSecret(pub_key)) {
+      auto const sig_hex = message.value("signature", "");
       auto sig = crypto::FromHex(sig_hex);
       if (!sig.empty() && crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
         peer->crcp_verified = true;
@@ -306,7 +303,7 @@ class InternalMessagingService {
 
       if (!message.value("is_reply", false)) {
         auto my_key = peer->session_cipher->GetPublicKey();
-        auto signature = sm_->account->Sign(peer_id.Span());
+        auto const signature = sm_->account->Sign(peer_id.Span());
         data_transport_->SendJson(
             peer_id,
             {{"type", "key_exchange"},
