@@ -55,7 +55,6 @@ class DeliveryService {
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
-      retry_delays_s_.erase(e.peer_id);
       if (unreachable_contacts_.erase(e.peer_id)) {
         EventQueue::Instance().Push(EventContactUnreachable{e.peer_id, false});
       }
