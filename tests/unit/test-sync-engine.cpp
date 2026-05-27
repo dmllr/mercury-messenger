@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "eillance/services/sync_engine.hpp"
+#include "eillance/services/messaging_service.hpp"
+#include "eillance/services/service_manager.hpp"
 #include "mock_call_log.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -69,7 +71,7 @@ class SyncEngineTest : public ::testing::Test {
   void PumpMessages() {
     int guard = 0;
     while (guard++ < 100) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
       bool activity = false;
       auto a_msgs = A->transport_mock->sent_jsons;
@@ -387,4 +389,55 @@ TEST_F(SyncEngineTest, SyncValidateAndRepairChain) {
   EXPECT_EQ(b_entries.size(), 2);
   EXPECT_EQ(repaired[0].hash, b_entries[0].hash);
   EXPECT_EQ(repaired[1].hash, b_entries[1].hash);
+}
+
+TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
+  services::ServiceManager sm;
+  sm.storage = A->storage;
+  sm.data_transport = A->transport;
+  sm.contact_manager = std::make_shared<identity::ContactManager>(A->storage);
+  
+  auto messaging_service = std::make_shared<services::MessagingService>(&sm);
+  sm.messaging = messaging_service;
+
+  messaging::LedgerEntry chat_entry;
+  chat_entry.topic_id = TopicID(idB_);
+  chat_entry.author_id = idA_;
+  chat_entry.created_at = Timestamp{1000};
+  chat_entry.type = messaging::LedgerActionType::Message;
+
+  nlohmann::json chat_json = {
+      {"type", "chat"},
+      {"message_id", 100},
+      {"payload", {{"c", "Hello"}}}
+  };
+  messaging_service->ProjectMessage(chat_entry, chat_json, true, false);
+
+  messaging::LedgerEntry read_entry;
+  read_entry.topic_id = TopicID(idB_);
+  read_entry.author_id = idB_;
+  read_entry.created_at = Timestamp{1001};
+  read_entry.type = messaging::LedgerActionType::Message;
+  nlohmann::json read_json = {
+      {"type", "message_read"},
+      {"message_ids", {100}}
+  };
+  messaging_service->ProjectMessage(read_entry, read_json, false, false);
+
+  messaging::LedgerEntry delivered_entry;
+  delivered_entry.topic_id = TopicID(idB_);
+  delivered_entry.author_id = idB_;
+  delivered_entry.created_at = Timestamp{1002};
+  delivered_entry.type = messaging::LedgerActionType::Message;
+  nlohmann::json delivered_json = {
+      {"type", "message_receipt"},
+      {"status", "delivered"},
+      {"message_ids", {100}}
+  };
+  messaging_service->ProjectMessage(delivered_entry, delivered_json, false, false);
+
+  auto entry = A->storage->GetHistoryEntry(idB_, 100);
+  if (entry) {
+    EXPECT_EQ(entry->status, messaging::MessageStatus::read);
+  }
 }

@@ -45,7 +45,7 @@ class LedgerProjectionService {
 
       switch (entry.type) {
         case messaging::LedgerActionType::Message:
-          sm_->messaging->ProjectMessage(entry, json, is_mine);
+          sm_->messaging->ProjectMessage(entry, json, is_mine, is_synced);
           break;
         case messaging::LedgerActionType::MessageEdit:
           sm_->messaging->ProjectEdit(entry, json, is_mine);
@@ -57,7 +57,7 @@ class LedgerProjectionService {
           sm_->messaging->ProjectReaction(entry, json, is_mine);
           break;
         case messaging::LedgerActionType::CallLog:
-          sm_->messaging->ProjectCallLog(entry, json, is_mine);
+          sm_->messaging->ProjectCallLog(entry, json, is_mine, is_synced);
           break;
         case messaging::LedgerActionType::ProfileUpdate:
           sm_->profile->ProjectProfileUpdate(entry, json, is_mine);
