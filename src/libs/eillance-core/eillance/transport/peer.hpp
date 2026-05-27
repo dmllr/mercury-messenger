@@ -1,15 +1,11 @@
 #pragma once
 
 #include <atomic>
-#include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
-#include <shared_mutex>
-#include <vector>
 
 #include <nlohmann/json.hpp>
-#include <span>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_id.hpp"
@@ -48,8 +44,7 @@ struct Peer {
 
 inline Peer::Peer(ContactID const& id)
     : id(id),
-      last_activity_time(Time::SteadyNow()),
-      last_connect_attempt(0) {
+      last_activity_time(Time::SteadyNow()) {
   session_cipher = std::make_unique<crypto::SessionCipher>();
 }
 

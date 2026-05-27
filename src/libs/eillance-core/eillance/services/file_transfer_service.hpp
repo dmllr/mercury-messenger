@@ -69,8 +69,8 @@ class FileTransferService {
                 ++it;
               }
             }
-            std::erase_if(upload_queue_, [&](auto const& q) { return q.peer_id == e.peer_id; });
-            std::erase_if(download_queue_, [&](auto const& q) { return q.peer_id == e.peer_id; });
+            std::erase_if(upload_queue_, [&](auto const& q) -> bool { return q.peer_id == e.peer_id; });
+            std::erase_if(download_queue_, [&](auto const& q) -> bool { return q.peer_id == e.peer_id; });
           }
         })
     );

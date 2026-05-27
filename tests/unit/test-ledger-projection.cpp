@@ -20,9 +20,8 @@ class LedgerProjectionServiceTest : public ::testing::Test {
     mock_log_ = std::make_shared<transport::MockCallLog>();
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
-    auto data_transport =
-        std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
-    
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
     std::ignore = client_->GenerateNewIdentity();
     client_->Start();
@@ -41,7 +40,7 @@ class LedgerProjectionServiceTest : public ::testing::Test {
 
 TEST_F(LedgerProjectionServiceTest, ProjectMessage) {
   ContactID const peer1("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
-  
+
   nlohmann::json const payload_json = {
       {"type", "chat"},
       {"message_id", 123},
@@ -54,13 +53,16 @@ TEST_F(LedgerProjectionServiceTest, ProjectMessage) {
   entry.author_id = peer1;
   entry.type = messaging::LedgerActionType::Message;
   entry.payload = payload_json.dump();
-  
+
   EventQueue::Instance().Push(EventLedgerAppended{entry});
 
-  EventQueue::Instance().WaitFor([&]() {
-    auto [messages, total] = client_->GetMessageHistoryPage(peer1, 0, 1);
-    return !messages.empty();
-  }, std::chrono::seconds(2));
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        auto [messages, total] = client_->GetMessageHistoryPage(peer1, 0, 1);
+        return !messages.empty();
+      },
+      std::chrono::seconds(2)
+  );
 
   auto [messages, total] = client_->GetMessageHistoryPage(peer1, 0, 10);
   bool found = false;

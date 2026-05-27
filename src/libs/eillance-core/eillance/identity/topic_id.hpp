@@ -3,8 +3,6 @@
 #include <string>
 #include <string_view>
 
-#include <compare>
-
 #include "eillance/identity/contact_id.hpp"
 
 namespace eillance {

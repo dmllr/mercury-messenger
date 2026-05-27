@@ -18,7 +18,6 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/topic_id.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/storage/data_types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
@@ -472,7 +471,7 @@ class SyncEngine {
               {"entries", entries_json}
           };
           transport_->SendJson(peer_id, req);
-          
+
           {
             std::lock_guard<std::mutex> const slock(sessions_mutex_);
             sessions_[peer_id].highest_sent_batch_index = i;
@@ -624,7 +623,7 @@ class SyncEngine {
 
         size_t my_total = 0;
         size_t highest_sent = 0;
-        
+
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
           auto& session = sessions_[peer_id];
@@ -646,14 +645,14 @@ class SyncEngine {
         }
 
         size_t const target_highest = std::min(batch_index + syncWindowSize, limit - 1);
-        
+
         std::vector<size_t> batches_to_send;
         for (size_t i = highest_sent + 1; i <= target_highest; ++i) {
           batches_to_send.push_back(i);
         }
 
         if (!batches_to_send.empty()) {
-          LGI << "[Sync] Sending next batches " << batches_to_send.front() << " to " << batches_to_send.back() 
+          LGI << "[Sync] Sending next batches " << batches_to_send.front() << " to " << batches_to_send.back()
               << " out of approx " << limit << " for peer " << peer_id.ToString();
         }
 
@@ -697,13 +696,13 @@ class SyncEngine {
               {"entries", entries_json}
           };
           transport_->SendJson(peer_id, req);
-          
+
           {
             std::lock_guard<std::mutex> const slock(sessions_mutex_);
             sessions_[peer_id].highest_sent_batch_index = next_batch_index;
           }
         }
-        
+
         if (!batches_to_send.empty()) {
           EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.5f});
         }
