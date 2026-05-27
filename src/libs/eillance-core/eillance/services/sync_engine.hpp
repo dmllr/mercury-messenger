@@ -31,6 +31,7 @@ class SyncEngine {
   using Json = nlohmann::json;
 
   static constexpr size_t maxBatchSize = 1;
+  static constexpr size_t syncWindowSize = 15;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -51,6 +52,7 @@ class SyncEngine {
     std::vector<messaging::LedgerEntry> my_entries_to_send;
     size_t peer_total_entries = 0;
     size_t current_batch_index = 0;
+    size_t highest_sent_batch_index = 0;
   };
 
   std::unordered_map<ContactID, SyncSession> sessions_;
@@ -430,37 +432,52 @@ class SyncEngine {
           session.my_entries_to_send = my_entries;
           session.current_batch_index = 0;
           session.peer_total_entries = 0;
+          session.highest_sent_batch_index = 0;
         }
 
-        size_t const end = std::min<size_t>(maxBatchSize, my_entries.size());
-        std::vector<messaging::LedgerEntry> const batch(my_entries.begin(), my_entries.begin() + end);
+        size_t initial_batches = (my_entries.size() + maxBatchSize - 1) / maxBatchSize;
+        if (initial_batches == 0) initial_batches = 1;
+        initial_batches = std::min<size_t>(syncWindowSize, initial_batches);
 
-        Json entries_json = Json::array();
-        if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
-          for (auto const& e : batch) {
-            auto encrypted = peer->session_cipher->Encrypt(e.payload);
-            if (!encrypted.empty()) {
-              entries_json.push_back(
-                  {{"author", e.author_id.ToString()},
-                   {"created", e.created_at.value},
-                   {"type", static_cast<int>(e.type)},
-                   {"payload", crypto::ToHex(encrypted)},
-                   {"prev_hash", e.prev_hash.ToString()},
-                   {"hash", e.hash.ToString()}}
-              );
+        for (size_t i = 0; i < initial_batches; ++i) {
+          size_t const start_idx = i * maxBatchSize;
+          std::vector<messaging::LedgerEntry> my_batch;
+          if (start_idx < my_entries.size()) {
+            size_t const end_idx = std::min<size_t>(start_idx + maxBatchSize, my_entries.size());
+            my_batch.assign(my_entries.begin() + start_idx, my_entries.begin() + end_idx);
+          }
+
+          Json entries_json = Json::array();
+          if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
+            for (auto const& e : my_batch) {
+              if (auto encrypted = peer->session_cipher->Encrypt(e.payload); !encrypted.empty()) {
+                entries_json.push_back(
+                    {{"author", e.author_id.ToString()},
+                     {"created", e.created_at.value},
+                     {"type", static_cast<int>(e.type)},
+                     {"payload", crypto::ToHex(encrypted)},
+                     {"prev_hash", e.prev_hash.ToString()},
+                     {"hash", e.hash.ToString()}}
+                );
+              }
             }
           }
-        }
 
-        Json const req = {
-            {"type", "sync_batch"},
-            {"topic", topic_id.ToString()},
-            {"lca", lca.ToString()},
-            {"batch_index", 0},
-            {"total_entries", my_entries.size()},
-            {"entries", entries_json}
-        };
-        transport_->SendJson(peer_id, req);
+          Json const req = {
+              {"type", "sync_batch"},
+              {"topic", topic_id.ToString()},
+              {"lca", lca.ToString()},
+              {"batch_index", i},
+              {"total_entries", my_entries.size()},
+              {"entries", entries_json}
+          };
+          transport_->SendJson(peer_id, req);
+          
+          {
+            std::lock_guard<std::mutex> const slock(sessions_mutex_);
+            sessions_[peer_id].highest_sent_batch_index = i;
+          }
+        }
 
       } else if (type == "sync_batch") {
         messaging::LedgerHash const lca(msg.value("lca", ""));
@@ -605,11 +622,9 @@ class SyncEngine {
           EventQueue::Instance().Push(EventLedgerAppended{e, true});
         }
 
-        bool has_more_batches = false;
-        size_t next_batch_index = batch_index + 1;
-        std::vector<messaging::LedgerEntry> my_next_batch;
         size_t my_total = 0;
-
+        size_t highest_sent = 0;
+        
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
           auto& session = sessions_[peer_id];
@@ -617,23 +632,45 @@ class SyncEngine {
 
           session.peer_total_entries = peer_total_entries;
           my_total = session.my_entries_to_send.size();
+          highest_sent = session.highest_sent_batch_index;
+        }
 
-          if ((next_batch_index * maxBatchSize < my_total) || (next_batch_index * maxBatchSize < peer_total_entries)) {
-            has_more_batches = true;
+        size_t const max_total_entries = std::max(my_total, peer_total_entries);
+        size_t const total_batches = (max_total_entries + maxBatchSize - 1) / maxBatchSize;
+        size_t const limit = (total_batches == 0) ? 1 : total_batches;
+
+        if (batch_index + 1 >= limit) {
+          LGI << "[Sync] Batch exchange complete for " << peer_id.ToString() << ". Repeating VerifySyncState.";
+          dispatchQueue_.Dispatch([this, peer_id, topic_id]() -> void { VerifySyncState(topic_id, peer_id); });
+          return;
+        }
+
+        size_t const target_highest = std::min(batch_index + syncWindowSize, limit - 1);
+        
+        std::vector<size_t> batches_to_send;
+        for (size_t i = highest_sent + 1; i <= target_highest; ++i) {
+          batches_to_send.push_back(i);
+        }
+
+        if (!batches_to_send.empty()) {
+          LGI << "[Sync] Sending next batches " << batches_to_send.front() << " to " << batches_to_send.back() 
+              << " out of approx " << limit << " for peer " << peer_id.ToString();
+        }
+
+        for (size_t next_batch_index : batches_to_send) {
+          std::vector<messaging::LedgerEntry> my_next_batch;
+          {
+            std::lock_guard<std::mutex> const slock(sessions_mutex_);
+            auto& session = sessions_[peer_id];
             size_t const start_idx = next_batch_index * maxBatchSize;
-            if (start_idx < my_total) {
-              size_t const end_idx = std::min<size_t>(start_idx + maxBatchSize, my_total);
+            if (start_idx < session.my_entries_to_send.size()) {
+              size_t const end_idx = std::min<size_t>(start_idx + maxBatchSize, session.my_entries_to_send.size());
               my_next_batch.assign(
                   session.my_entries_to_send.begin() + start_idx,
                   session.my_entries_to_send.begin() + end_idx
               );
             }
           }
-        }
-
-        if (has_more_batches) {
-          LGI << "[Sync] Sending next batch " << next_batch_index << " out of approx max(" << (my_total / maxBatchSize)
-              << ", " << (peer_total_entries / maxBatchSize) << ") for peer " << peer_id.ToString();
 
           Json entries_json = Json::array();
           if (auto peer = transport_->GetPeer(peer_id); peer && peer->session_cipher->IsReady()) {
@@ -660,10 +697,15 @@ class SyncEngine {
               {"entries", entries_json}
           };
           transport_->SendJson(peer_id, req);
+          
+          {
+            std::lock_guard<std::mutex> const slock(sessions_mutex_);
+            sessions_[peer_id].highest_sent_batch_index = next_batch_index;
+          }
+        }
+        
+        if (!batches_to_send.empty()) {
           EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.5f});
-        } else {
-          LGI << "[Sync] Batch exchange complete for " << peer_id.ToString() << ". Repeating VerifySyncState.";
-          dispatchQueue_.Dispatch([this, peer_id, topic_id]() -> void { VerifySyncState(topic_id, peer_id); });
         }
 
       } else if (type == "sync_done") {
