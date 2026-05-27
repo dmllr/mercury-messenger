@@ -105,17 +105,36 @@ class MessagingService {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSyncStateChanged>([this](auto const& e) -> void {
-      std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
-      is_syncing_[e.peer_id] = e.is_syncing;
-      if (!e.is_syncing) {
-        if (pending_delivery_receipts_.contains(e.peer_id) && !pending_delivery_receipts_[e.peer_id].empty()) {
-          if (!delivery_receipts_debounce_active_[e.peer_id]) {
-            delivery_receipts_debounce_active_[e.peer_id] = true;
-            bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, peer_id = e.peer_id]() {
-              FlushDeliveryReceipts(peer_id);
-            });
+      bool evaluate_unread = false;
+      bool evaluate_missed_calls = false;
+
+      {
+        std::lock_guard<std::mutex> const lock(sync_state_mutex_);
+        is_syncing_[e.peer_id] = e.is_syncing;
+        if (!e.is_syncing) {
+          if (pending_delivery_receipts_.contains(e.peer_id) && !pending_delivery_receipts_[e.peer_id].empty()) {
+            if (!delivery_receipts_debounce_active_[e.peer_id]) {
+              delivery_receipts_debounce_active_[e.peer_id] = true;
+              bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, peer_id = e.peer_id]() {
+                FlushDeliveryReceipts(peer_id);
+              });
+            }
+          }
+          if (unread_evaluation_needed_[e.peer_id]) {
+            evaluate_unread = true;
+            unread_evaluation_needed_[e.peer_id] = false;
+          }
+          if (missed_call_evaluation_needed_[e.peer_id]) {
+            evaluate_missed_calls = true;
+            missed_call_evaluation_needed_[e.peer_id] = false;
           }
         }
+      }
+
+      if ((evaluate_unread || evaluate_missed_calls) && !sm_->is_foreground) {
+        bg_queue_.Dispatch([this, peer_id = e.peer_id, evaluate_unread, evaluate_missed_calls]() {
+          EvaluateNotifications(peer_id, evaluate_unread, evaluate_missed_calls);
+        });
       }
     }));
   }
@@ -637,15 +656,23 @@ class MessagingService {
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
-    if (!is_mine && !is_synced) {
+    if (!is_mine) {
       QueueDeliveryReceipt(peer_id, message_id);
 
-      if (!is_system && !sm_->is_foreground) {
-        auto contact = contact_manager_->GetContact(peer_id);
-        std::string const name =
-            contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
-        if (auto unread = GetUnreadMessages(peer_id); !unread.empty()) {
-          EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, db_entry.id, name, std::move(unread)});
+      if (!is_system) {
+        bool should_evaluate_now = false;
+        {
+          std::lock_guard<std::mutex> const lock(sync_state_mutex_);
+          if (!is_syncing_[peer_id]) {
+            should_evaluate_now = true;
+          } else {
+            unread_evaluation_needed_[peer_id] = true;
+          }
+        }
+        if (should_evaluate_now && !sm_->is_foreground) {
+          bg_queue_.Dispatch([this, peer_id]() {
+            EvaluateNotifications(peer_id, true, false);
+          });
         }
       }
     }
@@ -715,11 +742,21 @@ class MessagingService {
     auto const db_entry = history_->AddCallEntry(params);
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
-    if (!is_synced && params.status == messaging::CallStatus::missed && !sm_->is_foreground) {
-      auto const contact = contact_manager_->GetContact(peer_id);
-      std::string const name =
-          contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
-      EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
+    if (!is_mine && params.status == messaging::CallStatus::missed) {
+      bool should_evaluate_now = false;
+      {
+        std::lock_guard<std::mutex> const lock(sync_state_mutex_);
+        if (!is_syncing_[peer_id]) {
+          should_evaluate_now = true;
+        } else {
+          missed_call_evaluation_needed_[peer_id] = true;
+        }
+      }
+      if (should_evaluate_now && !sm_->is_foreground) {
+        bg_queue_.Dispatch([this, peer_id]() {
+          EvaluateNotifications(peer_id, false, true);
+        });
+      }
     }
   }
 
@@ -870,6 +907,52 @@ class MessagingService {
   }
 
  private:
+  void EvaluateNotifications(ContactID const& peer_id, bool evaluate_unread, bool evaluate_missed_calls) {
+    if (sm_->is_foreground) return;
+
+    auto unread = GetUnreadMessages(peer_id);
+    if (unread.empty()) return;
+
+    auto contact = contact_manager_->GetContact(peer_id);
+    std::string const name =
+        contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+
+    if (evaluate_missed_calls) {
+      bool has_missed_call = false;
+      for (auto it = unread.rbegin(); it != unread.rend(); ++it) {
+        auto const& msg = *it;
+        if (msg.kind == messaging::HistoryEntryKind::voiceCall || msg.kind == messaging::HistoryEntryKind::videoCall) {
+          if (std::holds_alternative<messaging::CallEntry>(msg.data)) {
+            if (std::get<messaging::CallEntry>(msg.data).call_status == messaging::CallStatus::missed) {
+              has_missed_call = true;
+              break;
+            }
+          }
+        }
+      }
+      if (has_missed_call) {
+        EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
+      }
+    }
+
+    if (evaluate_unread) {
+      std::vector<messaging::HistoryEntryRecord> text_unread;
+      text_unread.reserve(unread.size());
+      for (auto& msg : unread) {
+        if (msg.kind != messaging::HistoryEntryKind::systemMessage &&
+            msg.kind != messaging::HistoryEntryKind::voiceCall &&
+            msg.kind != messaging::HistoryEntryKind::videoCall) {
+          text_unread.push_back(std::move(msg));
+        }
+      }
+
+      if (!text_unread.empty()) {
+        auto latest_id = text_unread.back().id;
+        EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, latest_id, name, std::move(text_unread)});
+      }
+    }
+  }
+
   static auto GenerateAttachmentId() -> std::string {
     static std::random_device random_device;
     static std::mt19937 gen(random_device());
@@ -882,7 +965,7 @@ class MessagingService {
   void FlushDeliveryReceipts(ContactID const& peer_id) {
     std::vector<uint64_t> ids;
     {
-      std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
+      std::lock_guard<std::mutex> const lock(sync_state_mutex_);
       if (is_syncing_[peer_id]) {
         delivery_receipts_debounce_active_[peer_id] = false;
         return;
@@ -899,7 +982,7 @@ class MessagingService {
   }
 
   void QueueDeliveryReceipt(ContactID const& peer_id, uint64_t message_id) {
-    std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
+    std::lock_guard<std::mutex> const lock(sync_state_mutex_);
     pending_delivery_receipts_[peer_id].push_back(message_id);
     if (!delivery_receipts_debounce_active_[peer_id]) {
       delivery_receipts_debounce_active_[peer_id] = true;
@@ -918,7 +1001,9 @@ class MessagingService {
   std::unordered_map<ContactID, std::vector<uint64_t>> pending_delivery_receipts_;
   std::unordered_map<ContactID, bool> delivery_receipts_debounce_active_;
   std::unordered_map<ContactID, bool> is_syncing_;
-  std::mutex delivery_receipts_mutex_;
+  std::unordered_map<ContactID, bool> unread_evaluation_needed_;
+  std::unordered_map<ContactID, bool> missed_call_evaluation_needed_;
+  std::mutex sync_state_mutex_;
   DispatchQueue bg_queue_{"MsgSvcBg", 1};
 };
 
