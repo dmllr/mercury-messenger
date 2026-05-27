@@ -416,7 +416,7 @@ fn handle_swarm_event(
         .iter()
         .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
       {
-        node_log!(callbacks, 3, "Node become relay");
+        node_log!(callbacks, 3, "Node became relayed client");
         return;
       }
       if state.public_port.is_none() {
@@ -845,7 +845,7 @@ fn handle_swarm_event(
           .iter()
           .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
         {
-          node_log!(callbacks, 3, "Node lost relay status");
+          node_log!(callbacks, 3, "Node lost relayed connection");
         }
       }
     }
