@@ -14,14 +14,13 @@
 namespace eillance::identity {
 
 class IdManager {
-  static constexpr auto kIdentityKeyFile = "identity.key";
-  static constexpr auto kMnemonicKeyFile = "identity.mnemonic";
+  static constexpr auto identityKeyFile = "identity.key";
+  static constexpr auto mnemonicKeyFile = "identity.mnemonic";
   std::unique_ptr<crypto::Identity> identity_{nullptr};
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   void LoadIdentity() {
-    auto const pem_data_opt = storage_->GetSetting(kIdentityKeyFile);
-    if (pem_data_opt) {
+    if (auto const pem_data_opt = storage_->GetSetting(identityKeyFile)) {
       identity_ = crypto::Identity::LoadFromMemory(*pem_data_opt);
       if (identity_) {
         LGI << "Identity loaded successfully.";
@@ -44,7 +43,7 @@ class IdManager {
   }
 
   [[nodiscard]] auto GetMnemonic() const -> std::optional<std::string> {
-    return storage_->GetSetting(kMnemonicKeyFile);
+    return storage_->GetSetting(mnemonicKeyFile);
   }
 
   [[nodiscard]] auto IdentityExists() const -> bool {
@@ -56,8 +55,8 @@ class IdManager {
     identity_ = crypto::Identity::CreateNew(mnemonic);
     if (identity_) {
       auto const pem_str = identity_->SaveToMemory();
-      storage_->SetSetting(kIdentityKeyFile, pem_str);
-      storage_->SetSetting(kMnemonicKeyFile, mnemonic);
+      storage_->SetSetting(identityKeyFile, pem_str);
+      storage_->SetSetting(mnemonicKeyFile, mnemonic);
       LGI << "New identity generated and saved.";
     }
     return mnemonic;
@@ -67,15 +66,15 @@ class IdManager {
     identity_ = crypto::Identity::GenerateFromMnemonic(mnemonic);
     if (identity_) {
       auto const pem_str = identity_->SaveToMemory();
-      storage_->SetSetting(kIdentityKeyFile, pem_str);
-      storage_->SetSetting(kMnemonicKeyFile, mnemonic);
+      storage_->SetSetting(identityKeyFile, pem_str);
+      storage_->SetSetting(mnemonicKeyFile, mnemonic);
       LGI << "Identity restored from mnemonic.";
       return true;
     }
     return false;
   }
 
-  [[nodiscard]] auto Sign(std::span<std::byte const> message) -> std::vector<std::byte> {
+  [[nodiscard]] auto Sign(std::span<std::byte const> const message) const -> std::vector<std::byte> {
     if (!identity_) {
       return {};
     }

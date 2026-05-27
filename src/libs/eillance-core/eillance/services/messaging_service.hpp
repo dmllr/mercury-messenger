@@ -36,7 +36,7 @@ namespace eillance::services {
 
 namespace {
 
-constexpr size_t kMaxAttachmentNoteLength = 120;
+constexpr size_t maxAttachmentNoteLength = 120;
 
 auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
   // NOLINTBEGIN(*-braces-around-statements)
@@ -224,8 +224,8 @@ class MessagingService {
       }
 
       std::string note = req.note;
-      if (note.length() > kMaxAttachmentNoteLength) {
-        note = note.substr(0, kMaxAttachmentNoteLength);
+      if (note.length() > maxAttachmentNoteLength) {
+        note = note.substr(0, maxAttachmentNoteLength);
       }
 
       domain_attachments.push_back(
@@ -564,7 +564,8 @@ class MessagingService {
 
       for (auto const target_id : target_ids) {
         if (auto current_entry = history_->GetHistoryEntry(peer_id, target_id)) {
-          if (current_entry->status == messaging::MessageStatus::read && msg_status == messaging::MessageStatus::delivered) {
+          if (current_entry->status == messaging::MessageStatus::read &&
+              msg_status == messaging::MessageStatus::delivered) {
             continue;
           }
           history_->UpdateMessageStatus(peer_id, target_id, msg_status);
@@ -670,9 +671,7 @@ class MessagingService {
           }
         }
         if (should_evaluate_now && !sm_->is_foreground) {
-          bg_queue_.Dispatch([this, peer_id]() {
-            EvaluateNotifications(peer_id, true, false);
-          });
+          bg_queue_.Dispatch([this, peer_id]() { EvaluateNotifications(peer_id, true, false); });
         }
       }
     }
@@ -753,9 +752,7 @@ class MessagingService {
         }
       }
       if (should_evaluate_now && !sm_->is_foreground) {
-        bg_queue_.Dispatch([this, peer_id]() {
-          EvaluateNotifications(peer_id, false, true);
-        });
+        bg_queue_.Dispatch([this, peer_id]() { EvaluateNotifications(peer_id, false, true); });
       }
     }
   }
@@ -940,8 +937,7 @@ class MessagingService {
       text_unread.reserve(unread.size());
       for (auto& msg : unread) {
         if (msg.kind != messaging::HistoryEntryKind::systemMessage &&
-            msg.kind != messaging::HistoryEntryKind::voiceCall &&
-            msg.kind != messaging::HistoryEntryKind::videoCall) {
+            msg.kind != messaging::HistoryEntryKind::voiceCall && msg.kind != messaging::HistoryEntryKind::videoCall) {
           text_unread.push_back(std::move(msg));
         }
       }

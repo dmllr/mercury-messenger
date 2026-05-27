@@ -9,7 +9,6 @@
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/messaging/types.hpp"
-#include "eillance/storage/data_types.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
 
 namespace eillance::view_model {

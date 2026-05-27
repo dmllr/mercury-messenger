@@ -43,8 +43,7 @@ class ContactService {
     }));
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-      auto contact = manager_->GetContact(e.peer_id);
-      if (contact) {
+      if (auto contact = manager_->GetContact(e.peer_id)) {
         if (contact->status == identity::ContactStatus::pendingApproval ||
             contact->status == identity::ContactStatus::confirmed) {
           auto signature = sm_->account->Sign(e.peer_id.Span());

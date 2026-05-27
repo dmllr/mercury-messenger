@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,9 +9,7 @@
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact.hpp"
 #include "eillance/identity/contact_id.hpp"
-#include "eillance/identity/topic_id.hpp"
 #include "eillance/messaging/types.hpp"
-#include "eillance/storage/data_types.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
 
 namespace eillance {

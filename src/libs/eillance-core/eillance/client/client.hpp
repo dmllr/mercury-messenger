@@ -169,7 +169,7 @@ class Client final {
     );
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-      background_queue_.DispatchAfter(std::chrono::seconds(2), [this, peer_id = e.peer_id]() {
+      background_queue_.DispatchAfter(std::chrono::seconds(2), [this, peer_id = e.peer_id]() -> void {
         sm_->data_transport->AuthTurnRelay(peer_id);
       });
     }));
@@ -181,7 +181,9 @@ class Client final {
           std::shuffle(relays.begin(), relays.end(), g);
           int count = 0;
           for (auto const& r : relays) {
-            if (count++ >= 10) break;
+            if (count++ >= 10) {
+              break;
+            }
             sm_->data_transport->AuthTurnRelay(r);
           }
         })

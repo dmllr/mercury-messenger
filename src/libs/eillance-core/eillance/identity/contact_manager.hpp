@@ -11,7 +11,6 @@
 
 #include <openssl/rand.h>
 
-#include "eillance/crypto/crypto.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/storage/persistent_storage.hpp"
