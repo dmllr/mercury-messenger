@@ -30,7 +30,7 @@ namespace eillance::sync {
 class SyncEngine {
   using Json = nlohmann::json;
 
-  static constexpr size_t maxBatchSize = 25;
+  static constexpr size_t maxBatchSize = 1;
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -47,8 +47,6 @@ class SyncEngine {
 
     int zero_progress_loops = 0;
     messaging::LedgerHash last_head;
-
-    std::vector<messaging::LedgerEntry> postponed_events;
 
     std::vector<messaging::LedgerEntry> my_entries_to_send;
     size_t peer_total_entries = 0;
@@ -149,22 +147,15 @@ class SyncEngine {
   }
 
   void FinishSync(ContactID const& peer_id, TopicID const& topic_id) {
-    std::vector<messaging::LedgerEntry> events_to_fire;
     {
       std::lock_guard<std::mutex> const lock(sessions_mutex_);
       auto& session = sessions_[peer_id];
       session.active = false;
-      events_to_fire = std::move(session.postponed_events);
-      session.postponed_events.clear();
       session.zero_progress_loops = 0;
       session.last_head = messaging::LedgerHash();
     }
 
     storage_->RemoveSyncRequest(topic_id, peer_id);
-
-    for (auto const& e : events_to_fire) {
-      EventQueue::Instance().Push(EventLedgerAppended{e});
-    }
 
     EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
     EventQueue::Instance().Push(EventDataReloaded{});
@@ -289,18 +280,7 @@ class SyncEngine {
     storage_->AddLedgerEntry(entry);
     lock.unlock();
 
-    bool is_syncing = false;
-    {
-      std::lock_guard<std::mutex> const slock(sessions_mutex_);
-      if (sessions_[target_peer].active) {
-        is_syncing = true;
-        sessions_[target_peer].postponed_events.push_back(entry);
-      }
-    }
-
-    if (!is_syncing) {
-      EventQueue::Instance().Push(EventLedgerAppended{entry});
-    }
+    EventQueue::Instance().Push(EventLedgerAppended{entry});
 
     storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
 
@@ -349,10 +329,7 @@ class SyncEngine {
       }
       session.peer_id = target_peer;
       session.active = true;
-      session.current_lca = messaging::LedgerHash();
-      session.zero_progress_loops = 0;
       session.last_head = messaging::LedgerHash();
-      session.postponed_events.clear();
     }
 
     EventQueue::Instance().Push(EventSyncStateChanged{target_peer, true, 0.0f});
@@ -563,9 +540,10 @@ class SyncEngine {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
           auto& session = sessions_[peer_id];
           session.active = true;
-          for (auto& e : actually_new) {
-            session.postponed_events.push_back(e);
-          }
+        }
+
+        for (auto const& e : actually_new) {
+          EventQueue::Instance().Push(EventLedgerAppended{e});
         }
 
         Json entries_json = Json::array();
@@ -631,6 +609,10 @@ class SyncEngine {
           }
         }
 
+        for (auto const& e : actually_new) {
+          EventQueue::Instance().Push(EventLedgerAppended{e});
+        }
+
         bool has_more_batches = false;
         size_t next_batch_index = batch_index + 1;
         std::vector<messaging::LedgerEntry> my_next_batch;
@@ -640,9 +622,6 @@ class SyncEngine {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
           auto& session = sessions_[peer_id];
           session.active = true;
-          for (auto& e : actually_new) {
-            session.postponed_events.push_back(e);
-          }
 
           session.peer_total_entries = peer_total_entries;
           my_total = session.my_entries_to_send.size();
