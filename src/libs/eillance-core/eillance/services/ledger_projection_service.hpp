@@ -22,7 +22,7 @@ class LedgerProjectionService {
   explicit LedgerProjectionService(ServiceManager* sm)
       : sm_(sm) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventLedgerAppended>([this](auto const& e) {
-      this->ProjectEntry(e.entry);
+      this->ProjectEntry(e.entry, e.is_synced);
     }));
   }
 
@@ -33,8 +33,12 @@ class LedgerProjectionService {
   }
 
  private:
-  void ProjectEntry(messaging::LedgerEntry const& entry) {
+  void ProjectEntry(messaging::LedgerEntry const& entry, bool is_synced) {
     bool const is_mine = (entry.author_id == sm_->account->GetId());
+
+    if (is_mine && !is_synced) {
+      return;
+    }
 
     try {
       auto const json = Json::parse(entry.payload);

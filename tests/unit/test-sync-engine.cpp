@@ -342,6 +342,31 @@ TEST_F(SyncEngineTest, SyncHistoryLargerThanMaxBatchSize) {
   EXPECT_EQ(total_transferred_B_to_A_, 0);
 }
 
+TEST_F(SyncEngineTest, RestoreDeletedContactHistoryTriggersSyncedEvents) {
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"type", "chat"}, {"message_id", 1}, {"payload", {{"c", "Hello from A"}}}});
+  B->engine->AppendAction(TopicID(idA_), messaging::LedgerActionType::Message, {{"type", "chat"}, {"message_id", 2}, {"payload", {{"c", "Hello from B"}}}});
+
+  PumpMessages();
+
+  // B deletes contact A
+  B->storage->DeleteLedgerEntriesAfter(TopicID(idA_), messaging::LedgerHash());
+  
+  int synced_events_received = 0;
+  auto sub_id = EventQueue::Instance().Subscribe<EventLedgerAppended>([&](auto const& e) {
+    if (e.is_synced && e.entry.author_id == idB_) {
+      synced_events_received++;
+    }
+  });
+
+  B->engine->ProposeSync(TopicID(idA_), idA_);
+  PumpMessages();
+
+  EventQueue::Instance().Unsubscribe(sub_id);
+
+  // B should have received 1 synced event for its own message
+  EXPECT_EQ(synced_events_received, 1);
+}
+
 TEST_F(SyncEngineTest, SyncValidateAndRepairChain) {
   A->InjectEntry(TopicID(idB_), "msg1", 1000, idA_);
   A->InjectEntry(TopicID(idB_), "msg2", 1001, idA_);

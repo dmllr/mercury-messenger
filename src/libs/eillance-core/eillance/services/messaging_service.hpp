@@ -495,10 +495,6 @@ class MessagingService {
 
   // --- Read Model Projections ---
   void ProjectMessage(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    if (is_mine) {
-      return;
-    }
-
     ContactID const peer_id(entry.topic_id.value.Span());
 
     if (!contact_manager_->GetContact(peer_id)) {
@@ -518,6 +514,9 @@ class MessagingService {
     }
 
     if (type == "message_receipt") {
+      if (is_mine) {
+        return;
+      }
       std::string const status_str = json.value("status", "");
       std::vector<uint64_t> target_ids;
       if (json.contains("message_ids")) {
@@ -606,12 +605,17 @@ class MessagingService {
         {.peer_id = peer_id,
          .content = content,
          .attachments = attachments,
-         .direction = messaging::MessageDirection::received,
+         .direction = is_mine ? messaging::MessageDirection::sent : messaging::MessageDirection::received,
          .kind = kind,
          .id = message_id,
          .reply_to_id = reply_to_id,
          .timestamp = msg_timestamp}
     );
+
+    if (is_mine) {
+      history_->UpdateMessageStatus(peer_id, message_id, messaging::MessageStatus::delivered);
+      db_entry.status = messaging::MessageStatus::delivered;
+    }
 
     for (auto const& att : attachments) {
       if (!att.is_downloaded && att.status != messaging::AttachmentStatus::discarded &&
@@ -623,22 +627,21 @@ class MessagingService {
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
-    QueueDeliveryReceipt(peer_id, message_id);
+    if (!is_mine) {
+      QueueDeliveryReceipt(peer_id, message_id);
 
-    if (!is_system && !sm_->is_foreground) {
-      auto contact = contact_manager_->GetContact(peer_id);
-      std::string const name =
-          contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
-      if (auto unread = GetUnreadMessages(peer_id); !unread.empty()) {
-        EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, db_entry.id, name, std::move(unread)});
+      if (!is_system && !sm_->is_foreground) {
+        auto contact = contact_manager_->GetContact(peer_id);
+        std::string const name =
+            contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+        if (auto unread = GetUnreadMessages(peer_id); !unread.empty()) {
+          EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, db_entry.id, name, std::move(unread)});
+        }
       }
     }
   }
 
   void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    if (is_mine) {
-      return;
-    }
     ContactID const peer_id(entry.topic_id.value.Span());
     uint64_t const target_id = json.value("target_id", 0ULL);
     std::string const content = json.value("content", "");
@@ -649,9 +652,6 @@ class MessagingService {
   }
 
   void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    if (is_mine) {
-      return;
-    }
     ContactID const peer_id(entry.topic_id.value.Span());
     uint64_t const target_id = json.value("target_id", 0ULL);
     if (history_->GetHistoryEntry(peer_id, target_id)) {
@@ -661,9 +661,6 @@ class MessagingService {
   }
 
   void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    if (is_mine) {
-      return;
-    }
     ContactID const peer_id(entry.topic_id.value.Span());
     uint64_t const target_id = json.value("target_id", 0ULL);
     auto const reaction = static_cast<messaging::Reaction>(json.value("reaction", 0));
@@ -674,9 +671,6 @@ class MessagingService {
   }
 
   void ProjectCallLog(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    if (is_mine) {
-      return;
-    }
     ContactID const peer_id(entry.topic_id.value.Span());
 
     auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
@@ -702,7 +696,7 @@ class MessagingService {
         .peer_id = peer_id,
         .kind = json.value("is_video", false) ? messaging::HistoryEntryKind::videoCall
                                               : messaging::HistoryEntryKind::voiceCall,
-        .direction = messaging::CallDirection::incoming,
+        .direction = is_mine ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
         .status = static_cast<messaging::CallStatus>(json.value("call_status", 0)),
         .duration_seconds = json.value("duration_seconds", 0U),
         .id = json.value("message_id", 0ULL),
