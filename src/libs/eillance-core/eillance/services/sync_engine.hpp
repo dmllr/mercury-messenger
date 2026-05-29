@@ -41,6 +41,7 @@ class SyncEngine {
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   struct SyncSession {
+    TopicID topic_id;
     ContactID peer_id;
     bool active = false;
     messaging::LedgerHash current_lca;
@@ -54,7 +55,11 @@ class SyncEngine {
     size_t highest_sent_batch_index = 0;
   };
 
-  std::unordered_map<ContactID, SyncSession> sessions_;
+  std::unordered_map<std::string, SyncSession> sessions_;
+
+  auto GetSessionKey(TopicID const& topic_id, ContactID const& peer_id) const -> std::string {
+    return topic_id.ToString() + "_" + peer_id.ToString();
+  }
   std::mutex sessions_mutex_;
   std::mutex ledger_mutex_;
 
@@ -148,19 +153,30 @@ class SyncEngine {
   }
 
   void FinishSync(ContactID const& peer_id, TopicID const& topic_id) {
+    bool any_active = false;
     {
       std::lock_guard<std::mutex> const lock(sessions_mutex_);
-      auto& session = sessions_[peer_id];
+      auto& session = sessions_[GetSessionKey(topic_id, peer_id)];
       session.active = false;
       session.zero_progress_loops = 0;
       session.last_head = messaging::LedgerHash();
+
+      for (auto const& [key, s] : sessions_) {
+        if (s.peer_id == peer_id && s.active) {
+          any_active = true;
+          break;
+        }
+      }
     }
 
     storage_->RemoveSyncRequest(topic_id, peer_id);
 
-    EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
+    if (!any_active) {
+      EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
+    }
     EventQueue::Instance().Push(EventDataReloaded{});
     LGI << "[Sync] Sync finished with " << peer_id.ToString();
+    dispatchQueue_.Dispatch([this]() -> void { ProcessPendingSyncs(); });
   }
 
   auto ParseEntries(ContactID const& peer_id, TopicID const& topic_id, Json const& msg_entries) const
@@ -223,8 +239,10 @@ class SyncEngine {
           if (e.state == transport::PeerConnectionState::disconnected ||
               e.state == transport::PeerConnectionState::failed || e.state == transport::PeerConnectionState::closed) {
             std::lock_guard<std::mutex> const lock(sessions_mutex_);
-            if (sessions_.contains(e.peer_id)) {
-              sessions_[e.peer_id].active = false;
+            for (auto& [key, session] : sessions_) {
+              if (session.peer_id == e.peer_id) {
+                session.active = false;
+              }
             }
           }
         })
@@ -289,7 +307,8 @@ class SyncEngine {
         for (auto const& member : group->members) {
           if (member.contact_id != my_id_) {
             storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
-            if (auto peer = transport_->GetPeer(member.contact_id); peer && peer->data_channel_is_open && peer->crcp_verified) {
+            if (auto peer = transport_->GetPeer(member.contact_id);
+                peer && peer->data_channel_is_open && peer->crcp_verified) {
               ProposeSync(topic_id, member.contact_id);
             } else {
               EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
@@ -298,10 +317,33 @@ class SyncEngine {
         }
       } else {
         storage_->AddSyncRequest({topic_id, group->owner_id, Timestamp::Now(), Timestamp{0}});
-        if (auto peer = transport_->GetPeer(group->owner_id); peer && peer->data_channel_is_open && peer->crcp_verified) {
+        if (auto peer = transport_->GetPeer(group->owner_id);
+            peer && peer->data_channel_is_open && peer->crcp_verified) {
           ProposeSync(topic_id, group->owner_id);
         } else {
           EventQueue::Instance().Push(EventConnectionRequested{group->owner_id});
+        }
+      }
+    } else if (auto channel = storage_->GetChannel(topic_id.AsChannelID())) {
+      if (channel->owner_id == my_id_) {
+        for (auto const& member : channel->members) {
+          if (member.contact_id != my_id_) {
+            storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+            if (auto peer = transport_->GetPeer(member.contact_id);
+                peer && peer->data_channel_is_open && peer->crcp_verified) {
+              ProposeSync(topic_id, member.contact_id);
+            } else {
+              EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+            }
+          }
+        }
+      } else {
+        storage_->AddSyncRequest({topic_id, channel->owner_id, Timestamp::Now(), Timestamp{0}});
+        if (auto peer = transport_->GetPeer(channel->owner_id);
+            peer && peer->data_channel_is_open && peer->crcp_verified) {
+          ProposeSync(topic_id, channel->owner_id);
+        } else {
+          EventQueue::Instance().Push(EventConnectionRequested{channel->owner_id});
         }
       }
     } else {
@@ -347,10 +389,11 @@ class SyncEngine {
 
     {
       std::lock_guard<std::mutex> const lock(sessions_mutex_);
-      auto& session = sessions_[target_peer];
+      auto& session = sessions_[GetSessionKey(topic_id, target_peer)];
       if (session.active) {
         return;
       }
+      session.topic_id = topic_id;
       session.peer_id = target_peer;
       session.active = true;
       session.last_head = messaging::LedgerHash();
@@ -365,7 +408,9 @@ class SyncEngine {
     try {
       std::string const type = msg.value("type", "");
 
-      TopicID const topic_id(peer_id);
+      std::string const topic_str = msg.value("topic", peer_id.ToString());
+      TopicID const topic_id(topic_str);
+      std::string const session_key = GetSessionKey(topic_id, peer_id);
 
       if (type == "sync_start") {
         LGD << "[Sync] Received sync_start from " << peer_id.ToString() << " with head " << msg.value("head", "");
@@ -393,7 +438,7 @@ class SyncEngine {
 
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
-          auto& session = sessions_[peer_id];
+          auto& session = sessions_[session_key];
           session.active = true;
           session.last_head = peer_head;
         }
@@ -437,7 +482,7 @@ class SyncEngine {
 
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
-          auto& session = sessions_[peer_id];
+          auto& session = sessions_[session_key];
           session.active = true;
 
           if (session.current_lca == lca) {
@@ -497,7 +542,7 @@ class SyncEngine {
 
           {
             std::lock_guard<std::mutex> const slock(sessions_mutex_);
-            sessions_[peer_id].highest_sent_batch_index = i;
+            sessions_[session_key].highest_sent_batch_index = i;
           }
         }
 
@@ -515,7 +560,7 @@ class SyncEngine {
 
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
-          auto& session = sessions_[peer_id];
+          auto& session = sessions_[session_key];
           session.active = true;
 
           if (batch_index == 0) {
@@ -573,7 +618,7 @@ class SyncEngine {
 
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
-          auto& session = sessions_[peer_id];
+          auto& session = sessions_[session_key];
           session.active = true;
         }
 
@@ -653,6 +698,14 @@ class SyncEngine {
                 EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
               }
             }
+          } else if (auto channel = storage_->GetChannel(topic_id.AsChannelID());
+                     channel && channel->owner_id == my_id_) {
+            for (auto const& member : channel->members) {
+              if (member.contact_id != my_id_ && member.contact_id != peer_id) {
+                storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+                EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+              }
+            }
           }
         }
 
@@ -661,7 +714,7 @@ class SyncEngine {
 
         {
           std::lock_guard<std::mutex> const slock(sessions_mutex_);
-          auto& session = sessions_[peer_id];
+          auto& session = sessions_[session_key];
           session.active = true;
 
           session.peer_total_entries = peer_total_entries;
@@ -695,7 +748,7 @@ class SyncEngine {
           std::vector<messaging::LedgerEntry> my_next_batch;
           {
             std::lock_guard<std::mutex> const slock(sessions_mutex_);
-            auto& session = sessions_[peer_id];
+            auto& session = sessions_[session_key];
             size_t const start_idx = next_batch_index * maxBatchSize;
             if (start_idx < session.my_entries_to_send.size()) {
               size_t const end_idx = std::min<size_t>(start_idx + maxBatchSize, session.my_entries_to_send.size());
@@ -734,7 +787,7 @@ class SyncEngine {
 
           {
             std::lock_guard<std::mutex> const slock(sessions_mutex_);
-            sessions_[peer_id].highest_sent_batch_index = next_batch_index;
+            sessions_[session_key].highest_sent_batch_index = next_batch_index;
           }
         }
 
@@ -757,12 +810,13 @@ class SyncEngine {
       return;
     }
     auto const reqs = storage_->GetSyncRequests();
-    std::unordered_set<ContactID> processed;
+    std::unordered_set<std::string> processed;
     for (auto const& req : reqs) {
-      if (processed.contains(req.target_peer_id)) {
+      std::string const key = GetSessionKey(req.topic_id, req.target_peer_id);
+      if (processed.contains(key)) {
         continue;
       }
-      processed.insert(req.target_peer_id);
+      processed.insert(key);
 
       auto contact = storage_->GetContact(req.target_peer_id);
       if (!contact || contact->status != identity::ContactStatus::confirmed) {

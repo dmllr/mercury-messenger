@@ -2,7 +2,9 @@
 
 #include <stdexcept>
 #include <string>
+
 #include <sqlite3.h>
+
 #include "eillance/logging/logging.hpp"
 
 namespace eillance::storage::migrations {

@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "eillance/storage/persistent_storage_interface.hpp"
 #include "eillance/identity/group.hpp"
+#include "eillance/storage/persistent_storage_interface.hpp"
 
 namespace eillance::storage {
 
@@ -57,10 +57,32 @@ class PersistentStorage {
   }
 
   // --- Groups ---
-  void AddGroup(identity::Group const& group) const { pimpl_->AddGroup(group); }
-  [[nodiscard]] auto GetGroup(GroupID const& group_id) const { return pimpl_->GetGroup(group_id); }
-  [[nodiscard]] auto GetGroups() const { return pimpl_->GetGroups(); }
-  void RemoveGroup(GroupID const& group_id) const { pimpl_->RemoveGroup(group_id); }
+  void AddGroup(identity::Group const& group) const {
+    pimpl_->AddGroup(group);
+  }
+  [[nodiscard]] auto GetGroup(GroupID const& group_id) const {
+    return pimpl_->GetGroup(group_id);
+  }
+  [[nodiscard]] auto GetGroups() const {
+    return pimpl_->GetGroups();
+  }
+  void RemoveGroup(GroupID const& group_id) const {
+    pimpl_->RemoveGroup(group_id);
+  }
+
+  // --- Channels ---
+  void AddChannel(identity::Channel const& channel) const {
+    pimpl_->AddChannel(channel);
+  }
+  [[nodiscard]] auto GetChannel(ChannelID const& channel_id) const {
+    return pimpl_->GetChannel(channel_id);
+  }
+  [[nodiscard]] auto GetChannels() const {
+    return pimpl_->GetChannels();
+  }
+  void RemoveChannel(ChannelID const& channel_id) const {
+    pimpl_->RemoveChannel(channel_id);
+  }
 
   void Close() const {
     pimpl_->Close();

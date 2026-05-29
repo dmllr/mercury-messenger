@@ -202,6 +202,8 @@ class ContactsViewModel {
                .last_message = std::nullopt,
                .last_activity_timestamp = 0,
                .is_group = false,
+               .is_channel = false,
+               .is_read_only = false,
                .owner_id = std::nullopt}
           );
           contact_ids.push_back(contact.peer_id);
@@ -219,9 +221,39 @@ class ContactsViewModel {
                .last_message = std::nullopt,
                .last_activity_timestamp = 0,
                .is_group = true,
+               .is_channel = false,
+               .is_read_only = false,
                .owner_id = group.owner_id}
           );
           contact_ids.push_back(group.id.AsContactID());
+        }
+
+        for (auto const& channel : client->GetChannels()) {
+          bool is_read_only = (channel.owner_id != client->GetId());
+          if (is_read_only) {
+            for (auto const& m : channel.members) {
+              if (m.contact_id == client->GetId() && m.role == 1) {
+                is_read_only = false;
+                break;
+              }
+            }
+          }
+          temp_contacts.push_back(
+              {.peer_id = channel.id.AsContactID(),
+               .display_name = channel.name,
+               .bio = "Channel",
+               .photo = std::nullopt,
+               .status = identity::ContactStatus::confirmed,
+               .connection_state = transport::PeerConnectionState::disconnected,
+               .unread_count = 0,
+               .last_message = std::nullopt,
+               .last_activity_timestamp = 0,
+               .is_group = false,
+               .is_channel = true,
+               .is_read_only = is_read_only,
+               .owner_id = channel.owner_id}
+          );
+          contact_ids.push_back(channel.id.AsContactID());
         }
 
         auto const chat_summaries = client->GetChatSummaries(contact_ids);

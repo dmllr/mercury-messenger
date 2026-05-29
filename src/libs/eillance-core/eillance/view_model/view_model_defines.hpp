@@ -44,6 +44,8 @@ struct ViewContact {
   std::optional<messaging::HistoryEntryRecord> last_message;
   uint64_t last_activity_timestamp = 0;
   bool is_group = false;
+  bool is_channel = false;
+  bool is_read_only = false;
   std::optional<ContactID> owner_id;
 };
 
