@@ -6,10 +6,10 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/events/client_events.hpp"
+#include "eillance/identity/group_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/messaging_service.hpp"
-#include "eillance/identity/group_manager.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -69,6 +69,37 @@ class LedgerProjectionService {
         case messaging::LedgerActionType::GroupState:
           sm_->group_manager->ProjectGroupState(entry, json, is_mine);
           break;
+        case messaging::LedgerActionType::ChannelState: {
+          if (is_mine) break;
+          std::string const type = json.value("type", "");
+          if (type == "channel_create") {
+            identity::Channel c;
+            c.id = entry.topic_id.AsChannelID();
+            c.name = json.value("name", "");
+            c.description = json.value("description", "");
+            c.owner_id = ContactID(json.value("owner_id", ""));
+            sm_->channel_manager->CreateChannelLocal(c);
+            EventQueue::Instance().Push(EventGroupsStateUpdated{});
+          } else if (type == "channel_subscribe" || type == "channel_member_add") {
+            auto c = sm_->channel_manager->GetChannel(entry.topic_id.AsChannelID());
+            if (c) {
+              sm_->channel_manager
+                  ->AddMemberLocal(c->id, ContactID(json.value("contact_id", "")), json.value("role", 0));
+              EventQueue::Instance().Push(EventGroupsStateUpdated{});
+            }
+          } else if (type == "channel_unsubscribe" || type == "channel_member_remove") {
+            auto c = sm_->channel_manager->GetChannel(entry.topic_id.AsChannelID());
+            ContactID target(json.value("contact_id", ""));
+            if (c) {
+              if (type == "channel_unsubscribe" && target != entry.author_id) break;  // Can only unsubscribe self
+              if (type == "channel_member_remove" && c->owner_id != entry.author_id)
+                break;  // Only owner can remove others
+              sm_->channel_manager->RemoveMemberLocal(c->id, target);
+              EventQueue::Instance().Push(EventGroupsStateUpdated{});
+            }
+          }
+          break;
+        }
       }
     } catch (std::exception const& e) {
       LGE << "Failed to parse and project ledger entry: " << e.what();

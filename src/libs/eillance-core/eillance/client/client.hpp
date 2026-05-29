@@ -10,10 +10,11 @@
 
 #include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
+#include "eillance/identity/channel_manager.hpp"
+#include "eillance/identity/group_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
-#include "eillance/identity/group_manager.hpp"
 #include "eillance/services/delivery_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/internal_messaging_service.hpp"
@@ -56,6 +57,7 @@ class Client final {
     sm_->media_transport = std::move(media_transport);
     sm_->contact_manager = std::make_shared<identity::ContactManager>(sm_->storage);
     sm_->group_manager = std::make_shared<identity::GroupManager>(sm_->storage);
+    sm_->channel_manager = std::make_shared<identity::ChannelManager>(sm_->storage);
 
     sm_->account = std::make_shared<services::AccountService>(sm_.get());
     sm_->file_transfer = std::make_shared<services::FileTransferService>(sm_.get());
@@ -469,6 +471,67 @@ class Client final {
 
   [[nodiscard]] auto GetGroups() const -> std::vector<identity::Group> {
     return sm_->group_manager->GetGroups();
+  }
+
+  auto CreateChannel(std::string const& name, std::string const& description) -> ChannelID {
+    auto cid = identity::ChannelManager::GenerateChannelID();
+    identity::Channel c;
+    c.id = cid;
+    c.name = name;
+    c.description = description;
+    c.owner_id = sm_->account->GetId();
+    c.members.push_back({c.owner_id, 1});
+    sm_->channel_manager->CreateChannelLocal(c);
+    Json payload =
+        {{"type", "channel_create"}, {"name", name}, {"description", description}, {"owner_id", c.owner_id.ToString()}};
+    sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    return cid;
+  }
+  void SubscribeToChannel(ChannelID const& cid, ContactID const& owner_id) {
+    auto c = sm_->channel_manager->GetChannel(cid);
+    if (!c) {
+      identity::Channel stub;
+      stub.id = cid;
+      stub.name = "Syncing Channel...";
+      stub.owner_id = owner_id;
+      sm_->channel_manager->CreateChannelLocal(stub);
+    }
+    sm_->channel_manager->AddMemberLocal(cid, sm_->account->GetId(), 0);
+    Json payload = {{"type", "channel_subscribe"}, {"contact_id", sm_->account->GetId().ToString()}};
+    sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+  }
+  void UnsubscribeChannel(ChannelID const& cid) {
+    sm_->channel_manager->RemoveMemberLocal(cid, sm_->account->GetId());
+    Json payload = {{"type", "channel_unsubscribe"}, {"contact_id", sm_->account->GetId().ToString()}};
+    sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+  }
+  auto GetChannels() const -> std::vector<identity::Channel> {
+    return sm_->channel_manager->GetChannels();
+  }
+  auto GetChannelMembers(ChannelID const& cid) const -> std::vector<identity::ChannelMember> {
+    if (auto c = sm_->channel_manager->GetChannel(cid)) return c->members;
+    return {};
+  }
+  auto AddChannelMember(ChannelID const& cid, ContactID const& member_id) -> bool {
+    auto c = sm_->channel_manager->GetChannel(cid);
+    if (!c || c->owner_id != sm_->account->GetId()) return false;
+    sm_->channel_manager->AddMemberLocal(cid, member_id, 0);
+    Json payload = {{"type", "channel_member_add"}, {"contact_id", member_id.ToString()}, {"role", 0}};
+    sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    return true;
+  }
+  auto RemoveChannelMember(ChannelID const& cid, ContactID const& member_id) -> bool {
+    auto c = sm_->channel_manager->GetChannel(cid);
+    if (!c || c->owner_id != sm_->account->GetId()) return false;
+    sm_->channel_manager->RemoveMemberLocal(cid, member_id);
+    Json payload = {{"type", "channel_member_remove"}, {"contact_id", member_id.ToString()}};
+    sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    return true;
   }
 
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact> {

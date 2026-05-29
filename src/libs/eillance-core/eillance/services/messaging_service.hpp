@@ -20,6 +20,7 @@
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
+#include "eillance/identity/channel_manager.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/group_manager.hpp"
 #include "eillance/logging/logging.hpp"
@@ -153,7 +154,8 @@ class MessagingService {
       std::uint64_t reply_to_id = 0
   ) -> messaging::HistoryEntryRecord {
     auto group = sm_->group_manager->GetGroup(topic_id.AsGroupID());
-    if (!group && !contact_manager_->GetContact(topic_id.AsContactID())) {
+    auto channel = sm_->channel_manager->GetChannel(topic_id.AsChannelID());
+    if (!group && !channel && !contact_manager_->GetContact(topic_id.AsContactID())) {
       LGE << "Cannot send message. Topic not found.";
       return {};
     }
@@ -522,10 +524,25 @@ class MessagingService {
     ContactID const pseudo_peer_id = topic_id.AsContactID();
 
     auto group = sm_->group_manager->GetGroup(topic_id.AsGroupID());
-    if (!group && !contact_manager_->GetContact(pseudo_peer_id)) {
+    auto channel = sm_->channel_manager->GetChannel(topic_id.AsChannelID());
+    if (!group && !channel && !contact_manager_->GetContact(pseudo_peer_id)) {
       contact_manager_->AddContact(pseudo_peer_id);
       contact_manager_->MarkAsConfirmed(pseudo_peer_id);
       EventQueue::Instance().Push(EventContactRestored{pseudo_peer_id});
+    }
+
+    if (channel) {
+      bool is_admin = (channel->owner_id == entry.author_id);
+      for (auto const& m : channel->members) {
+        if (m.contact_id == entry.author_id && m.role == 1) {
+          is_admin = true;
+          break;
+        }
+      }
+      if (!is_admin) {
+        LGE << "CRCP Enforcement: Dropped message from non-admin in channel " << topic_id.ToString();
+        return;
+      }
     }
 
     std::string const type = json.value("type", "");

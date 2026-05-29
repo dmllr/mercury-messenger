@@ -807,7 +807,10 @@ fun ConversationScreen(
           }
 
           else -> {
-            MessageInputArea(
+            if (contact?.isReadOnly == true) {
+              hela.eillance.screens.conversation.ChannelReadOnlyBar()
+            } else {
+              MessageInputArea(
               inputValue = messageText,
               onInputValueChange = chatVM::updateMessageText,
               draftAttachments = draftAttachments,
@@ -833,6 +836,7 @@ fun ConversationScreen(
               onRemoveDraft = chatVM::removeDraft,
               onUpdateNote = chatVM::updateDraftNote
             )
+            }
           }
         }
       }

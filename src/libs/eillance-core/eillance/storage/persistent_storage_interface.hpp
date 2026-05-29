@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "eillance/identity/channel.hpp"
 #include "eillance/identity/contact.hpp"
 #include "eillance/identity/group.hpp"
 #include "eillance/messaging/types.hpp"
@@ -39,6 +40,12 @@ class PersistentStorageImpl {
   virtual auto GetGroup(GroupID const& group_id) -> std::optional<identity::Group> = 0;
   virtual auto GetGroups() -> std::vector<identity::Group> = 0;
   virtual void RemoveGroup(GroupID const& group_id) = 0;
+
+  // --- Channels ---
+  virtual void AddChannel(identity::Channel const& channel) = 0;
+  virtual auto GetChannel(ChannelID const& channel_id) -> std::optional<identity::Channel> = 0;
+  virtual auto GetChannels() -> std::vector<identity::Channel> = 0;
+  virtual void RemoveChannel(ChannelID const& channel_id) = 0;
 
   // --- Lifecycle ---
   virtual void Close() = 0;

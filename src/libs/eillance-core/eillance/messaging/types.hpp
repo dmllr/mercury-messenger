@@ -221,7 +221,8 @@ enum class LedgerActionType : uint8_t {
   CallLog = 5,
   ProfileUpdate = 6,
   ContactState = 7,
-  GroupState = 8
+  GroupState = 8,
+  ChannelState = 9
 };
 
 struct LedgerHash {
