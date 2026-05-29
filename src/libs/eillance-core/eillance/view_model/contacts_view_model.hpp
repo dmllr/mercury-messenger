@@ -32,6 +32,7 @@ class ContactsViewModel {
     Subscribe<EventMessageStatusChanged>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventMessageUpdated>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
     Subscribe<EventDataReloaded>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
+    Subscribe<EventGroupsStateUpdated>(queue, [impl](auto const&) { impl->UpdateContactsList(); });
 
     Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) {
       impl->UpdateContactConnectionState(event.peer_id, event.state);
@@ -80,6 +81,19 @@ class ContactsViewModel {
   }
   void MarkAllAsRead(ContactID const& peer_id) {
     impl_->MarkAllAsRead(peer_id);
+  }
+
+  auto GetGroupMembers(std::string const& group_id) -> std::vector<identity::GroupMember> {
+    return impl_->client->GetGroupMembers(GroupID(group_id));
+  }
+  bool AddGroupMember(std::string const& group_id, std::string const& contact_id) {
+    return impl_->client->AddGroupMember(GroupID(group_id), ContactID(contact_id));
+  }
+  bool RemoveGroupMember(std::string const& group_id, std::string const& contact_id) {
+    return impl_->client->RemoveGroupMember(GroupID(group_id), ContactID(contact_id));
+  }
+  void LeaveGroup(std::string const& group_id) {
+    impl_->client->LeaveGroup(GroupID(group_id));
   }
 
  private:
@@ -184,9 +198,30 @@ class ContactsViewModel {
                .photo = contact.photo_base64,
                .status = contact.status,
                .connection_state = client->GetPeerConnectionState(contact.peer_id),
-               .unread_count = 0}
+               .unread_count = 0,
+               .last_message = std::nullopt,
+               .last_activity_timestamp = 0,
+               .is_group = false,
+               .owner_id = std::nullopt}
           );
           contact_ids.push_back(contact.peer_id);
+        }
+
+        for (auto const& group : client->GetGroups()) {
+          temp_contacts.push_back(
+              {.peer_id = group.id.AsContactID(),
+               .display_name = group.name,
+               .bio = "Group Chat",
+               .photo = std::nullopt,
+               .status = identity::ContactStatus::confirmed,
+               .connection_state = transport::PeerConnectionState::disconnected,
+               .unread_count = 0,
+               .last_message = std::nullopt,
+               .last_activity_timestamp = 0,
+               .is_group = true,
+               .owner_id = group.owner_id}
+          );
+          contact_ids.push_back(group.id.AsContactID());
         }
 
         auto const chat_summaries = client->GetChatSummaries(contact_ids);

@@ -169,7 +169,9 @@ data class Contact(
   val lastActivityTimestamp: Long,
   val lastMessageAttachmentPath: String?,
   val lastMessageAttachmentType: Int,
-  val lastMessageDuration: Int
+  val lastMessageDuration: Int,
+  val isGroup: Boolean = false,
+  val ownerId: String? = null
 ) {
   val displayName: String get() = name.ifEmpty { peerId.take(8) }
   val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
@@ -206,4 +208,9 @@ data class MyProfileInfo(
 data class GlobalSearchResult(
   val peerId: String,
   val entry: HistoryEntry
+)
+
+data class GroupMember(
+  val peerId: String,
+  val role: Int
 )

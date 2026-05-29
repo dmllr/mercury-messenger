@@ -108,17 +108,19 @@ fun ConversationDefaultTopBar(
       IconButton(onClick = onSearchClick) {
         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
       }
-      IconButton(onClick = onStartVoiceCall) {
-        Icon(
-          Icons.Default.Call,
-          contentDescription = stringResource(id = R.string.action_voice_call)
-        )
-      }
-      IconButton(onClick = onStartVideoCall) {
-        Icon(
-          Icons.Default.Videocam,
-          contentDescription = stringResource(id = R.string.action_video_call)
-        )
+      if (contact?.isGroup != true) {
+        IconButton(onClick = onStartVoiceCall) {
+          Icon(
+            Icons.Default.Call,
+            contentDescription = stringResource(id = R.string.action_voice_call)
+          )
+        }
+        IconButton(onClick = onStartVideoCall) {
+          Icon(
+            Icons.Default.Videocam,
+            contentDescription = stringResource(id = R.string.action_video_call)
+          )
+        }
       }
     }
   )

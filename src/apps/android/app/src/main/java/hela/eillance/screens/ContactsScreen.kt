@@ -115,6 +115,16 @@ fun ContactsScreen(
   val focusRequester = remember { FocusRequester() }
   val focusManager = LocalFocusManager.current
 
+  var showCreateGroupDialog by remember { mutableStateOf(false) }
+
+  if (showCreateGroupDialog) {
+    CreateGroupDialog(
+      contacts = contacts.filter { it.status == ContactStatus.confirmed },
+      onDismissRequest = { showCreateGroupDialog = false },
+      onCreateGroup = { name, ids -> contactsVM.createGroup(name, ids) }
+    )
+  }
+
   LaunchedEffect(contactsVM) {
     contactsVM.errorMessage.collect { message ->
       snackbarHostState.showSnackbar(message)
@@ -438,6 +448,10 @@ fun ContactsScreen(
                       DropdownMenuItem(
                         text = { Text(stringResource(R.string.add_a_new_contact)) },
                         onClick = { menuExpanded = false; contactsVM.onAddContactClicked() }
+                      )
+                      DropdownMenuItem(
+                        text = { Text(stringResource(R.string.group_new)) },
+                        onClick = { menuExpanded = false; showCreateGroupDialog = true }
                       )
                     }
                   }

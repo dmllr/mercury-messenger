@@ -18,3 +18,4 @@
 #include "eillance/storage/sqlite/migrations/0010_reply_to.hpp"
 #include "eillance/storage/sqlite/migrations/0011_sync_ledger.hpp"
 #include "eillance/storage/sqlite/migrations/0012_unify_message_ids.hpp"
+#include "eillance/storage/sqlite/migrations/0013_group_chats.hpp"

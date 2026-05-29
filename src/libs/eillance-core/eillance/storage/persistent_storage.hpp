@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "eillance/storage/persistent_storage_interface.hpp"
+#include "eillance/identity/group.hpp"
 
 namespace eillance::storage {
 
@@ -54,6 +55,12 @@ class PersistentStorage {
   void RemoveContact(ContactID const& peer_id) const {
     pimpl_->RemoveContact(peer_id);
   }
+
+  // --- Groups ---
+  void AddGroup(identity::Group const& group) const { pimpl_->AddGroup(group); }
+  [[nodiscard]] auto GetGroup(GroupID const& group_id) const { return pimpl_->GetGroup(group_id); }
+  [[nodiscard]] auto GetGroups() const { return pimpl_->GetGroups(); }
+  void RemoveGroup(GroupID const& group_id) const { pimpl_->RemoveGroup(group_id); }
 
   void Close() const {
     pimpl_->Close();

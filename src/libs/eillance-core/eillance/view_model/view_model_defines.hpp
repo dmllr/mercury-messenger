@@ -43,6 +43,8 @@ struct ViewContact {
   uint32_t unread_count = 0;
   std::optional<messaging::HistoryEntryRecord> last_message;
   uint64_t last_activity_timestamp = 0;
+  bool is_group = false;
+  std::optional<ContactID> owner_id;
 };
 
 struct DraftAttachment {

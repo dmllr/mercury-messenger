@@ -13,6 +13,7 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/contact_service.hpp"
+#include "eillance/identity/group_manager.hpp"
 #include "eillance/services/delivery_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/internal_messaging_service.hpp"
@@ -54,6 +55,7 @@ class Client final {
     }
     sm_->media_transport = std::move(media_transport);
     sm_->contact_manager = std::make_shared<identity::ContactManager>(sm_->storage);
+    sm_->group_manager = std::make_shared<identity::GroupManager>(sm_->storage);
 
     sm_->account = std::make_shared<services::AccountService>(sm_.get());
     sm_->file_transfer = std::make_shared<services::FileTransferService>(sm_.get());
@@ -403,17 +405,83 @@ class Client final {
   void ResetContactDisplayNameOverride(ContactID const& id) const {
     sm_->contact->ResetContactDisplayNameOverride(id);
   }
+
+  auto CreateGroup(std::string const& name, std::vector<ContactID> const& member_ids) -> GroupID {
+    auto gid = identity::GroupManager::GenerateGroupID();
+    identity::Group g;
+    g.id = gid;
+    g.name = name;
+    g.owner_id = sm_->account->GetId();
+    g.members.push_back({g.owner_id, 1});
+    for (auto const& m : member_ids) {
+      g.members.push_back({m, 0});
+    }
+
+    sm_->group_manager->CreateGroupLocal(g);
+
+    Json payload = {{"type", "group_create"}, {"name", name}, {"owner_id", g.owner_id.ToString()}};
+    Json members_array = Json::array();
+    for (auto const& m : g.members) {
+      members_array.push_back({{"contact_id", m.contact_id.ToString()}, {"role", m.role}});
+    }
+    payload["members"] = members_array;
+
+    sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    return gid;
+  }
+
+  auto AddGroupMember(GroupID const& gid, ContactID const& member_id) -> bool {
+    auto g = sm_->group_manager->GetGroup(gid);
+    if (!g || g->owner_id != sm_->account->GetId()) return false;
+    sm_->group_manager->AddMemberLocal(gid, member_id, 0);
+    Json payload = {{"type", "group_member_add"}, {"contact_id", member_id.ToString()}, {"role", 0}};
+    sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    return true;
+  }
+
+  auto RemoveGroupMember(GroupID const& gid, ContactID const& member_id) -> bool {
+    auto g = sm_->group_manager->GetGroup(gid);
+    if (!g || g->owner_id != sm_->account->GetId()) return false;
+    sm_->group_manager->RemoveMemberLocal(gid, member_id);
+    Json payload = {{"type", "group_member_remove"}, {"contact_id", member_id.ToString()}};
+    sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    return true;
+  }
+
+  void LeaveGroup(GroupID const& gid) {
+    auto g = sm_->group_manager->GetGroup(gid);
+    if (!g) return;
+    sm_->group_manager->RemoveMemberLocal(gid, sm_->account->GetId());
+    Json payload = {{"type", "group_member_remove"}, {"contact_id", sm_->account->GetId().ToString()}};
+    sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
+  }
+
+  [[nodiscard]] auto GetGroupMembers(GroupID const& gid) const -> std::vector<identity::GroupMember> {
+    if (auto g = sm_->group_manager->GetGroup(gid)) {
+      return g->members;
+    }
+    return {};
+  }
+
+  [[nodiscard]] auto GetGroups() const -> std::vector<identity::Group> {
+    return sm_->group_manager->GetGroups();
+  }
+
   [[nodiscard]] auto GetContacts() const -> std::vector<identity::Contact> {
     return sm_->contact->GetContacts();
   }
 
   auto SendChatMessage(
-      ContactID const& id,
+      TopicID const& topic_id,
       std::string const& msg,
       std::vector<messaging::AttachmentRequest> const& attachments = {},
       std::uint64_t reply_to_id = 0
   ) -> messaging::HistoryEntryRecord {
-    return sm_->messaging->SendChatMessage(id, msg, attachments, reply_to_id);
+    return sm_->messaging->SendChatMessage(topic_id, msg, attachments, reply_to_id);
   }
   void MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> const& mids) const {
     sm_->messaging->MarkMessagesAsRead(id, mids);
