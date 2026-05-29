@@ -147,6 +147,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
     contacts.find { it.peerId == pid }?.let { c ->
       ContactProfileDialog(
         contact = c,
+        contactsVM = contactsVM,
+        myId = myProfile.myId,
         onDismissRequest = { contactsVM.onContactProfileDialogDismiss() },
         onOverrideSave = { name -> contactsVM.setContactDisplayNameOverride(pid, name) },
         onOverrideReset = { contactsVM.resetContactDisplayNameOverride(pid) },

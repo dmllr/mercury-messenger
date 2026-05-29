@@ -131,6 +131,28 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     if (nativePtr != 0L) nativeResetDisplayName(nativePtr, peerId)
   }
 
+  fun createGroup(name: String, peerIds: List<String>) {
+    if (nativePtr != 0L) {
+      nativeCreateGroup(nativePtr, name, peerIds.joinToString(","))
+    }
+  }
+
+  fun getGroupMembers(groupId: String): List<hela.eillance.ndkio.GroupMember> {
+    return if (nativePtr != 0L) nativeGetGroupMembers(nativePtr, groupId).toList() else emptyList()
+  }
+
+  fun addGroupMember(groupId: String, contactId: String): Boolean {
+    return if (nativePtr != 0L) nativeAddGroupMember(nativePtr, groupId, contactId) else false
+  }
+
+  fun removeGroupMember(groupId: String, contactId: String): Boolean {
+    return if (nativePtr != 0L) nativeRemoveGroupMember(nativePtr, groupId, contactId) else false
+  }
+
+  fun leaveGroup(groupId: String) {
+    if (nativePtr != 0L) nativeLeaveGroup(nativePtr, groupId)
+  }
+
   fun generateContactToken(): String? {
     return if (nativePtr != 0L) nativeGenerateToken(nativePtr) else null
   }
@@ -181,8 +203,14 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeUnblockContact(ptr: Long, peerId: String)
   private external fun nativeSetDisplayName(ptr: Long, peerId: String, name: String)
   private external fun nativeResetDisplayName(ptr: Long, peerId: String)
+  private external fun nativeCreateGroup(ptr: Long, name: String, peerIdsCsv: String): String
   private external fun nativeGenerateToken(ptr: Long): String
   private external fun nativeGetUnreadMessages(ptr: Long, peerId: String): List<HistoryEntry>
   private external fun nativeMarkAllAsRead(ptr: Long, peerId: String)
   private external fun nativeSearchAllMessages(ptr: Long, query: String): List<GlobalSearchResult>
+  
+  private external fun nativeGetGroupMembers(ptr: Long, groupId: String): Array<hela.eillance.ndkio.GroupMember>
+  private external fun nativeAddGroupMember(ptr: Long, groupId: String, contactId: String): Boolean
+  private external fun nativeRemoveGroupMember(ptr: Long, groupId: String, contactId: String): Boolean
+  private external fun nativeLeaveGroup(ptr: Long, groupId: String)
 }

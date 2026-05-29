@@ -9,6 +9,7 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/messaging_service.hpp"
+#include "eillance/identity/group_manager.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -64,6 +65,9 @@ class LedgerProjectionService {
           break;
         case messaging::LedgerActionType::ContactState:
           sm_->contact->ProjectContactState(entry, json, is_mine);
+          break;
+        case messaging::LedgerActionType::GroupState:
+          sm_->group_manager->ProjectGroupState(entry, json, is_mine);
           break;
       }
     } catch (std::exception const& e) {

@@ -262,7 +262,7 @@ class SyncEngine {
     entry.type = type;
     entry.payload = payload.dump();
 
-    ContactID const target_peer(topic_id.value.Span());
+    ContactID const target_peer = topic_id.AsContactID();
 
     std::unique_lock<std::mutex> lock(ledger_mutex_);
     auto latest = storage_->GetLatestLedgerEntry(topic_id);
@@ -283,19 +283,42 @@ class SyncEngine {
 
     EventQueue::Instance().Push(EventLedgerAppended{entry, false});
 
-    storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
-
-    auto contact = storage_->GetContact(target_peer);
-    if (!contact || contact->status != identity::ContactStatus::confirmed) {
-      LGE << "Sync error/rejection: Contact " << target_peer.ToString() << " is not confirmed.";
-      return;
-    }
-
-    if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open && peer->crcp_verified) {
-      ProposeSync(topic_id, target_peer);
+    auto group = storage_->GetGroup(topic_id.AsGroupID());
+    if (group) {
+      if (group->owner_id == my_id_) {
+        for (auto const& member : group->members) {
+          if (member.contact_id != my_id_) {
+            storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+            if (auto peer = transport_->GetPeer(member.contact_id); peer && peer->data_channel_is_open && peer->crcp_verified) {
+              ProposeSync(topic_id, member.contact_id);
+            } else {
+              EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+            }
+          }
+        }
+      } else {
+        storage_->AddSyncRequest({topic_id, group->owner_id, Timestamp::Now(), Timestamp{0}});
+        if (auto peer = transport_->GetPeer(group->owner_id); peer && peer->data_channel_is_open && peer->crcp_verified) {
+          ProposeSync(topic_id, group->owner_id);
+        } else {
+          EventQueue::Instance().Push(EventConnectionRequested{group->owner_id});
+        }
+      }
     } else {
-      if (type != messaging::LedgerActionType::ProfileUpdate) {
-        EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+      storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
+
+      auto contact = storage_->GetContact(target_peer);
+      if (!contact || contact->status != identity::ContactStatus::confirmed) {
+        LGE << "Sync error/rejection: Contact " << target_peer.ToString() << " is not confirmed.";
+        return;
+      }
+
+      if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open && peer->crcp_verified) {
+        ProposeSync(topic_id, target_peer);
+      } else {
+        if (type != messaging::LedgerActionType::ProfileUpdate) {
+          EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+        }
       }
     }
   }
@@ -619,6 +642,18 @@ class SyncEngine {
 
         for (auto const& e : actually_new) {
           EventQueue::Instance().Push(EventLedgerAppended{e, true});
+        }
+
+        if (!actually_new.empty()) {
+          auto group = storage_->GetGroup(topic_id.AsGroupID());
+          if (group && group->owner_id == my_id_) {
+            for (auto const& member : group->members) {
+              if (member.contact_id != my_id_ && member.contact_id != peer_id) {
+                storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+                EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+              }
+            }
+          }
         }
 
         size_t my_total = 0;

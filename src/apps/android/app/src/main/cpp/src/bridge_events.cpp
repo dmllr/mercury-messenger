@@ -42,6 +42,7 @@ void InitEventBridge(JavaVM* jvm) {
         jstring lm_att_path = nullptr;
         jint lm_att_type = -1;
         jint lm_duration = 0;
+        jstring owner_id = contact_cpp.owner_id ? env->NewStringUTF(contact_cpp.owner_id->ToString().c_str()) : nullptr;
 
         if (contact_cpp.last_message) {
           lm_kind = static_cast<jint>(contact_cpp.last_message->kind);
@@ -76,7 +77,9 @@ void InitEventBridge(JavaVM* jvm) {
             static_cast<jlong>(contact_cpp.last_activity_timestamp),
             lm_att_path,
             lm_att_type,
-            lm_duration
+            lm_duration,
+            static_cast<jboolean>(contact_cpp.is_group),
+            owner_id
         );
         env->CallBooleanMethod(contact_list, list_add_method, contact_java);
 
@@ -86,6 +89,7 @@ void InitEventBridge(JavaVM* jvm) {
         if (photo) env->DeleteLocalRef(photo);
         if (lm_content) env->DeleteLocalRef(lm_content);
         if (lm_att_path) env->DeleteLocalRef(lm_att_path);
+        if (owner_id) env->DeleteLocalRef(owner_id);
         env->DeleteLocalRef(contact_java);
       }
 
