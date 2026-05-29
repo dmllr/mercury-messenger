@@ -6,9 +6,9 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <span>
 
 #include <nlohmann/json.hpp>
+#include <span>
 
 namespace eillance {
 
@@ -33,12 +33,15 @@ struct GroupID {
     }
   }
 
-  [[nodiscard]] auto Span() const -> std::span<std::byte const> { return value_; }
+  [[nodiscard]] auto Span() const -> std::span<std::byte const> {
+    return value_;
+  }
 
   [[nodiscard]] auto ToString() const -> std::string {
     if (IsEmpty()) return "";
     std::string hex(2 * identitySize, '0');
-    static constexpr std::array<char, 16> hexmap = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    static constexpr std::array<char, 16> hexmap =
+        {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
     for (size_t i = 0; i < identitySize; ++i) {
       hex[2U * i] = hexmap[(static_cast<uint8_t>(value_[i]) & 0xF0U) >> 4U];
       hex[(2U * i) + 1] = hexmap[static_cast<uint8_t>(value_[i]) & 0x0FU];
@@ -46,7 +49,9 @@ struct GroupID {
     return hex;
   }
 
-  [[nodiscard]] auto AsContactID() const -> ContactID { return ContactID(value_); }
+  [[nodiscard]] auto AsContactID() const -> ContactID {
+    return ContactID(value_);
+  }
 
   [[nodiscard]] auto IsEmpty() const -> bool {
     return std::ranges::all_of(value_, [](std::byte byte) { return byte == std::byte{0}; });
@@ -66,18 +71,26 @@ struct GroupID {
   }
 };
 
-inline void to_json(nlohmann::json& json, GroupID const& gid) { json = gid.ToString(); }
+inline void to_json(nlohmann::json& json, GroupID const& gid) {
+  json = gid.ToString();
+}
 inline void from_json(nlohmann::json const& json, GroupID& gid) {
   auto const strval = json.get<std::string>();
-  if (strval.empty()) gid = GroupID();
-  else gid = GroupID(strval);
+  if (strval.empty())
+    gid = GroupID();
+  else
+    gid = GroupID(strval);
 }
 }  // namespace eillance
 
-template <> struct std::hash<eillance::GroupID> {
+template <>
+struct std::hash<eillance::GroupID> {
   auto operator()(eillance::GroupID const& id) const noexcept -> size_t {
     auto hash = 2166136261U;
-    for (auto byte : id.Span()) { hash ^= static_cast<size_t>(byte); hash *= 16777619U; }
+    for (auto byte : id.Span()) {
+      hash ^= static_cast<size_t>(byte);
+      hash *= 16777619U;
+    }
     return hash;
   }
 };

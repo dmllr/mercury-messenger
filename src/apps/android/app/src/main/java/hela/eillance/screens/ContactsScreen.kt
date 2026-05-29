@@ -116,12 +116,20 @@ fun ContactsScreen(
   val focusManager = LocalFocusManager.current
 
   var showCreateGroupDialog by remember { mutableStateOf(false) }
+  var showCreateChannelDialog by remember { mutableStateOf(false) }
 
   if (showCreateGroupDialog) {
     CreateGroupDialog(
       contacts = contacts.filter { it.status == ContactStatus.confirmed },
       onDismissRequest = { showCreateGroupDialog = false },
       onCreateGroup = { name, ids -> contactsVM.createGroup(name, ids) }
+    )
+  }
+
+  if (showCreateChannelDialog) {
+    CreateChannelDialog(
+      onDismissRequest = { showCreateChannelDialog = false },
+      onCreateChannel = { name, desc -> contactsVM.createChannel(name, desc) }
     )
   }
 
@@ -452,6 +460,10 @@ fun ContactsScreen(
                       DropdownMenuItem(
                         text = { Text(stringResource(R.string.group_new)) },
                         onClick = { menuExpanded = false; showCreateGroupDialog = true }
+                      )
+                      DropdownMenuItem(
+                        text = { Text(stringResource(R.string.channel_new)) },
+                        onClick = { menuExpanded = false; showCreateChannelDialog = true }
                       )
                     }
                   }

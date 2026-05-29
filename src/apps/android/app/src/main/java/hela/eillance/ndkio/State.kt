@@ -171,6 +171,8 @@ data class Contact(
   val lastMessageAttachmentType: Int,
   val lastMessageDuration: Int,
   val isGroup: Boolean = false,
+  val isChannel: Boolean = false,
+  val isReadOnly: Boolean = false,
   val ownerId: String? = null
 ) {
   val displayName: String get() = name.ifEmpty { peerId.take(8) }

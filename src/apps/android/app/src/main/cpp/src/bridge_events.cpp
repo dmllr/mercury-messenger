@@ -79,6 +79,8 @@ void InitEventBridge(JavaVM* jvm) {
             lm_att_type,
             lm_duration,
             static_cast<jboolean>(contact_cpp.is_group),
+            static_cast<jboolean>(contact_cpp.is_channel),
+            static_cast<jboolean>(contact_cpp.is_read_only),
             owner_id
         );
         env->CallBooleanMethod(contact_list, list_add_method, contact_java);

@@ -90,7 +90,14 @@ fun ContactProfileDialog(
         }
         HorizontalDivider()
 
-        if (contact.isGroup) {
+        if (contact.isChannel) {
+          ChannelProfileContent(
+            contact = contact,
+            contactsVM = contactsVM,
+            myId = myId,
+            onDismissRequest = onDismissRequest
+          )
+        } else if (contact.isGroup) {
           GroupProfileContent(
             contact = contact,
             contactsVM = contactsVM,
@@ -217,6 +224,99 @@ private fun GroupProfileContent(
       modifier = Modifier.fillMaxWidth(),
       colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
     ) { Text(stringResource(id = R.string.group_leave)) }
+  }
+}
+
+@Composable
+private fun ChannelProfileContent(
+  contact: Contact,
+  contactsVM: ContactsViewModel,
+  myId: String,
+  onDismissRequest: () -> Unit
+) {
+  var members by remember { mutableStateOf<List<GroupMember>>(emptyList()) }
+  var showAddMemberDialog by remember { mutableStateOf(false) }
+
+  LaunchedEffect(contact.peerId) {
+    members = contactsVM.getChannelMembers(contact.peerId)
+  }
+
+  val isOwner = contact.ownerId == myId || !contact.isReadOnly
+
+  if (showAddMemberDialog) {
+    val allConfirmed = contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel }
+    AddGroupMemberDialog(
+      allContacts = allConfirmed,
+      existingMembers = members,
+      onDismiss = { showAddMemberDialog = false },
+      onAdd = { cid ->
+        contactsVM.addChannelMember(contact.peerId, cid)
+        members = contactsVM.getChannelMembers(contact.peerId)
+        showAddMemberDialog = false
+      }
+    )
+  }
+
+  Column(
+    modifier = Modifier.padding(24.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    UserAvatar(
+      photoBase64 = null,
+      modifier = Modifier.size(100.dp),
+      fallbackBackground = MaterialTheme.colorScheme.secondaryContainer
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Text(text = contact.displayName, style = MaterialTheme.typography.headlineSmall)
+    if (!contact.bio.isNullOrBlank()) {
+      Text(text = contact.bio, style = MaterialTheme.typography.bodyMedium)
+    }
+
+    Spacer(modifier = Modifier.height(24.dp))
+    HorizontalDivider()
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      Text(stringResource(id = R.string.channel_subscribers), style = MaterialTheme.typography.titleMedium)
+      if (isOwner) {
+        TextButton(onClick = { showAddMemberDialog = true }) {
+          Text(stringResource(id = R.string.channel_add_subscribers))
+        }
+      }
+    }
+
+    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+      items(members) { member ->
+        val memberContact = contactsVM.contacts.value.find { it.peerId == member.peerId }
+        val displayName = if (member.peerId == myId) stringResource(R.string.me) else memberContact?.displayName ?: member.peerId.take(8)
+
+        Row(
+          modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column {
+            Text(displayName, style = MaterialTheme.typography.bodyLarge)
+            if (member.role == 1) {
+              Text(stringResource(id = R.string.group_owner), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
+          }
+          if (isOwner && member.peerId != myId) {
+            TextButton(onClick = {
+              contactsVM.removeChannelMember(contact.peerId, member.peerId)
+              members = contactsVM.getChannelMembers(contact.peerId)
+            }) { Text(stringResource(id = R.string.group_remove_member), color = MaterialTheme.colorScheme.error) }
+          }
+        }
+      }
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+    OutlinedButton(onClick = { contactsVM.unsubscribeChannel(contact.peerId); onDismissRequest() }, modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+      Text(stringResource(id = R.string.channel_unsubscribe))
+    }
   }
 }
 
