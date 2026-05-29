@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "eillance/identity/contact.hpp"
+#include "eillance/identity/group.hpp"
 #include "eillance/messaging/types.hpp"
 
 namespace eillance::storage {
@@ -32,6 +33,12 @@ class PersistentStorageImpl {
   virtual auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> = 0;
   virtual void UpdateContact(identity::Contact const& contact) = 0;
   virtual void RemoveContact(ContactID const& peer_id) = 0;
+
+  // --- Groups ---
+  virtual void AddGroup(identity::Group const& group) = 0;
+  virtual auto GetGroup(GroupID const& group_id) -> std::optional<identity::Group> = 0;
+  virtual auto GetGroups() -> std::vector<identity::Group> = 0;
+  virtual void RemoveGroup(GroupID const& group_id) = 0;
 
   // --- Lifecycle ---
   virtual void Close() = 0;

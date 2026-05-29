@@ -319,6 +319,104 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
+  // --- Groups ---
+  void AddGroup(identity::Group const& group) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    SQLiteStatement const s_grp(db_, "REPLACE INTO groups (id, name, owner_id) VALUES (?, ?, ?);");
+    BindText(s_grp.Get(), 1, group.id.ToString());
+    BindText(s_grp.Get(), 2, group.name);
+    BindText(s_grp.Get(), 3, group.owner_id.ToString());
+    sqlite3_step(s_grp.Get());
+
+    SQLiteStatement const s_del(db_, "DELETE FROM group_members WHERE group_id = ?;");
+    BindText(s_del.Get(), 1, group.id.ToString());
+    sqlite3_step(s_del.Get());
+
+    SQLiteStatement const s_mem(db_, "INSERT INTO group_members (group_id, contact_id, role) VALUES (?, ?, ?);");
+    for (auto const& member : group.members) {
+      sqlite3_reset(s_mem.Get());
+      sqlite3_clear_bindings(s_mem.Get());
+      BindText(s_mem.Get(), 1, group.id.ToString());
+      BindText(s_mem.Get(), 2, member.contact_id.ToString());
+      sqlite3_bind_int(s_mem.Get(), 3, member.role);
+      sqlite3_step(s_mem.Get());
+    }
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+  }
+
+  auto GetGroup(GroupID const& group_id) -> std::optional<identity::Group> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s_grp(db_, "SELECT name, owner_id FROM groups WHERE id = ?;");
+    BindText(s_grp.Get(), 1, group_id.ToString());
+    if (sqlite3_step(s_grp.Get()) == SQLITE_ROW) {
+      identity::Group group;
+      group.id = group_id;
+      group.name = ColumnString(s_grp.Get(), 0);
+      group.owner_id = ContactID(ColumnString(s_grp.Get(), 1));
+
+      SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM group_members WHERE group_id = ?;");
+      BindText(s_mem.Get(), 1, group_id.ToString());
+      while (sqlite3_step(s_mem.Get()) == SQLITE_ROW) {
+        group.members.push_back({
+          ContactID(ColumnString(s_mem.Get(), 0)),
+          sqlite3_column_int(s_mem.Get(), 1)
+        });
+      }
+      return group;
+    }
+    return std::nullopt;
+  }
+
+  auto GetGroups() -> std::vector<identity::Group> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    std::vector<identity::Group> groups;
+    SQLiteStatement const s_grp(db_, "SELECT id, name, owner_id FROM groups;");
+    while (sqlite3_step(s_grp.Get()) == SQLITE_ROW) {
+      identity::Group group;
+      group.id = GroupID(ColumnString(s_grp.Get(), 0));
+      group.name = ColumnString(s_grp.Get(), 1);
+      group.owner_id = ContactID(ColumnString(s_grp.Get(), 2));
+
+      SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM group_members WHERE group_id = ?;");
+      BindText(s_mem.Get(), 1, group.id.ToString());
+      while (sqlite3_step(s_mem.Get()) == SQLITE_ROW) {
+        group.members.push_back({
+          ContactID(ColumnString(s_mem.Get(), 0)),
+          sqlite3_column_int(s_mem.Get(), 1)
+        });
+      }
+      groups.push_back(std::move(group));
+    }
+    return groups;
+  }
+
+  void RemoveGroup(GroupID const& group_id) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    SQLiteStatement const s_msg(db_, "DELETE FROM messages WHERE peer_id = ?;");
+    BindText(s_msg.Get(), 1, group_id.ToString());
+    sqlite3_step(s_msg.Get());
+
+    SQLiteStatement const s_led(db_, "DELETE FROM ledger_entries WHERE topic_id = ?;");
+    BindText(s_led.Get(), 1, group_id.ToString());
+    sqlite3_step(s_led.Get());
+
+    SQLiteStatement const s_sync(db_, "DELETE FROM sync_requests WHERE topic_id = ?;");
+    BindText(s_sync.Get(), 1, group_id.ToString());
+    sqlite3_step(s_sync.Get());
+
+    SQLiteStatement const s_grp(db_, "DELETE FROM groups WHERE id = ?;");
+    BindText(s_grp.Get(), 1, group_id.ToString());
+    sqlite3_step(s_grp.Get());
+
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+  }
+
   // --- Synchronization Ledger ---
   void AddLedgerEntry(messaging::LedgerEntry const& entry) override {
     std::lock_guard const lock(mutex_);
@@ -1355,6 +1453,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 10) migrations::MigrateToV0010(db_);
     if (user_version < 11) migrations::MigrateToV0011(db_);
     if (user_version < 12) migrations::MigrateToV0012(db_);
+    if (user_version < 13) migrations::MigrateToV0013(db_);
     // NOLINTEND(*-braces-around-statements)
   }
 

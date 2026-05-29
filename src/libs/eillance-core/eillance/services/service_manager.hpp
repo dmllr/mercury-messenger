@@ -14,6 +14,7 @@ class Libp2pNode;
 }  // namespace transport
 namespace identity {
 class ContactManager;
+class GroupManager;
 }
 namespace sync {
 class SyncEngine;
@@ -39,6 +40,7 @@ struct ServiceManager {
   std::shared_ptr<transport::DataTransport> data_transport;
   std::shared_ptr<transport::MediaTransport> media_transport;
   std::shared_ptr<identity::ContactManager> contact_manager;
+  std::shared_ptr<identity::GroupManager> group_manager;
 
   std::shared_ptr<AccountService> account;
   std::shared_ptr<FileTransferService> file_transfer;
