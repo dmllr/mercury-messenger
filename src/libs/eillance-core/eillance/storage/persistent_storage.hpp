@@ -162,6 +162,14 @@ class PersistentStorage {
   ) const {
     pimpl_->UpdateMessageStatuses(topic_id, message_ids, new_status);
   }
+  void UpdateMessagePeerStatus(
+      TopicID const& topic_id,
+      uint64_t message_id,
+      ContactID const& peer_id,
+      messaging::MessageStatus new_status
+  ) const {
+    pimpl_->UpdateMessagePeerStatus(topic_id, message_id, peer_id, new_status);
+  }
   virtual void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) {
     pimpl_->UpdateMessageContent(topic_id, message_id, new_content);
   };

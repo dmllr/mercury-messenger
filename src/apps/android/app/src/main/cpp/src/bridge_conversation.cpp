@@ -271,16 +271,16 @@ static jobject ConvertSingleHistoryEntry(JNIEnv* env, eillance::messaging::Histo
   auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
   auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
   auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
+  auto& peer_status_holder = class_refs.Class("hela/eillance/ndkio/PeerMessageStatus");
 
   std::string const* content_str = nullptr;
   std::vector<eillance::messaging::Attachment> const* attachments_ptr = nullptr;
   jlong j_reply_to_id = 0;
 
-  if (std::holds_alternative<eillance::messaging::MessageEntry>(entry_cpp.data)) {
-    auto const& msg = std::get<eillance::messaging::MessageEntry>(entry_cpp.data);
-    content_str = &msg.content;
-    attachments_ptr = &msg.attachments;
-    j_reply_to_id = msg.reply_to_id;
+  if (auto const* content = eillance::messaging::GetMessageContent(entry_cpp.data)) {
+    content_str = &content->content;
+    attachments_ptr = &content->attachments;
+    j_reply_to_id = content->reply_to_id;
   }
 
   auto const* call_entry = std::get_if<eillance::messaging::CallEntry>(&entry_cpp.data);
@@ -330,6 +330,17 @@ static jobject ConvertSingleHistoryEntry(JNIEnv* env, eillance::messaging::Histo
     env->DeleteLocalRef(j_react);
   }
 
+  jobject j_peer_statuses = list_holder.NewObject(env);
+  if (auto const* group_entry = std::get_if<eillance::messaging::GroupMessageEntry>(&entry_cpp.data)) {
+    for (auto const& ps : group_entry->peer_statuses) {
+      jstring p_id = env->NewStringUTF(ps.peer_id.ToString().c_str());
+      jobject j_ps = peer_status_holder.NewObject(env, p_id, static_cast<jint>(ps.status));
+      env->CallBooleanMethod(j_peer_statuses, list_add_method, j_ps);
+      env->DeleteLocalRef(p_id);
+      env->DeleteLocalRef(j_ps);
+    }
+  }
+
   jobject entry_java = entry_holder.NewObject(
       env,
       static_cast<jlong>(entry_cpp.id),
@@ -346,12 +357,14 @@ static jobject ConvertSingleHistoryEntry(JNIEnv* env, eillance::messaging::Histo
       static_cast<jboolean>(entry_cpp.is_deleted),
       j_attachments,
       j_reactions,
-      j_reply_to_id
+      j_reply_to_id,
+      j_peer_statuses
   );
 
   if (content) env->DeleteLocalRef(content);
   env->DeleteLocalRef(j_attachments);
   env->DeleteLocalRef(j_reactions);
+  env->DeleteLocalRef(j_peer_statuses);
 
   return entry_java;
 }

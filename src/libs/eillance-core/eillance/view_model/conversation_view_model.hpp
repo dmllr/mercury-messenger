@@ -219,8 +219,8 @@ class ConversationViewModel {
       std::lock_guard<std::mutex> const lock(mutex);
       if (pending_attachment_updates.contains(attachment_id)) return true;
       for (auto const& entry : state.history) {
-        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-          for (auto const& att : std::get<messaging::MessageEntry>(entry.data).attachments) {
+        if (auto const* content = messaging::GetMessageContent(entry.data)) {
+          for (auto const& att : content->attachments) {
             if (att.id == attachment_id) return true;
           }
         }
@@ -277,9 +277,8 @@ class ConversationViewModel {
       std::lock_guard<std::mutex> const lock(mutex);
 
       // If we have pending updates for these attachments (e.g. upload finished synchronously), apply them now
-      if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
-        for (auto& att : msg_entry.attachments) {
+      if (auto* content = messaging::GetMessageContent(entry.data)) {
+        for (auto& att : content->attachments) {
           if (pending_attachment_updates.contains(att.id)) {
             att.status = pending_attachment_updates[att.id];
             pending_attachment_updates.erase(att.id);
@@ -355,9 +354,8 @@ class ConversationViewModel {
       bool updated = false;
       for (auto& entry : state.history) {
         if (entry.id == message_id) {
-          if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-            auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
-            msg_entry.content = *full_content;
+          if (auto* content = messaging::GetMessageContent(entry.data)) {
+            content->content = *full_content;
             entry.is_truncated = false;
             updated = true;
             break;
@@ -386,7 +384,7 @@ class ConversationViewModel {
                                                     .count()),
            .direction = messaging::MessageDirection::received,
            .is_truncated = false,
-           .data = messaging::MessageEntry{message}}
+           .data = messaging::ChatMessageEntry{messaging::MessageContent{message, {}, 0}}}
       );
       EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
@@ -394,9 +392,8 @@ class ConversationViewModel {
     void OnMessageReceived(TopicID const&, messaging::HistoryEntryRecord const& message) {
       std::lock_guard<std::mutex> const lock(mutex);
       auto msg_copy = message;
-      if (std::holds_alternative<messaging::MessageEntry>(msg_copy.data)) {
-        auto& msg_entry = std::get<messaging::MessageEntry>(msg_copy.data);
-        for (auto& att : msg_entry.attachments) {
+      if (auto* content = messaging::GetMessageContent(msg_copy.data)) {
+        for (auto& att : content->attachments) {
           if (pending_attachment_updates.contains(att.id)) {
             att.status = pending_attachment_updates[att.id];
             pending_attachment_updates.erase(att.id);
@@ -443,9 +440,8 @@ class ConversationViewModel {
 
           // Manually check attachments because DB fetch might have stale attachment status (pending)
           // while VM knows current transfer state.
-          if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-            auto& msg_entry = std::get<messaging::MessageEntry>(entry.data);
-            for (auto& att : msg_entry.attachments) {
+          if (auto* content = messaging::GetMessageContent(entry.data)) {
+            for (auto& att : content->attachments) {
               if (pending_attachment_updates.contains(att.id)) {
                 att.status = pending_attachment_updates[att.id];
               }
@@ -462,9 +458,8 @@ class ConversationViewModel {
       bool found = false;
 
       for (auto& entry : state.history) {
-        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-          auto& msg = std::get<messaging::MessageEntry>(entry.data);
-          for (auto& att : msg.attachments) {
+        if (auto* content = messaging::GetMessageContent(entry.data)) {
+          for (auto& att : content->attachments) {
             if (att.id == attachment_id) {
               att.is_downloaded = true;  // Actual state update
               att.status = messaging::AttachmentStatus::done;
@@ -504,9 +499,8 @@ class ConversationViewModel {
       bool found = false;
 
       for (auto& entry : state.history) {
-        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-          auto& msg = std::get<messaging::MessageEntry>(entry.data);
-          for (auto& att : msg.attachments) {
+        if (auto* content = messaging::GetMessageContent(entry.data)) {
+          for (auto& att : content->attachments) {
             if (att.id == attachment_id) {
               att.status = status;
               found = true;
@@ -542,9 +536,8 @@ class ConversationViewModel {
 
       // Cleanup pending updates if any match loaded history (unlikely but safe)
       for (auto& entry : state.history) {
-        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-          auto& msg = std::get<messaging::MessageEntry>(entry.data);
-          for (auto& att : msg.attachments) {
+        if (auto* content = messaging::GetMessageContent(entry.data)) {
+          for (auto& att : content->attachments) {
             if (pending_attachment_updates.contains(att.id)) {
               att.status = pending_attachment_updates[att.id];
               pending_attachment_updates.erase(att.id);

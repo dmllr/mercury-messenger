@@ -798,6 +798,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
     SQLiteStatement const s2(db_, "DELETE FROM reactions WHERE peer_id = ?;");
     BindText(s2.Get(), 1, topic_id.ToString());
     sqlite3_step(s2.Get());
+    SQLiteStatement const s3(db_, "DELETE FROM message_peer_statuses WHERE topic_id = ?;");
+    BindText(s3.Get(), 1, topic_id.ToString());
+    sqlite3_step(s3.Get());
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
@@ -837,17 +840,17 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     std::optional<std::string> full_content_for_storage;
 
-    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
-      if (msg_entry->content.length() > kMaxInlineContentSize) {
+    if (auto* content = messaging::GetMessageContent(entry.data)) {
+      if (content->content.length() > kMaxInlineContentSize) {
         entry.is_truncated = true;
-        full_content_for_storage = msg_entry->content;
-        msg_entry->content = full_content_for_storage->substr(0, kMaxInlineContentSize);
+        full_content_for_storage = content->content;
+        content->content = full_content_for_storage->substr(0, kMaxInlineContentSize);
       } else {
         entry.is_truncated = false;
       }
       sqlite3_bind_int(statement.Get(), 7, static_cast<int>(entry.is_truncated));
-      BindText(statement.Get(), 8, msg_entry->content);
-      sqlite3_bind_int64(statement.Get(), 9, msg_entry->reply_to_id);
+      BindText(statement.Get(), 8, content->content);
+      sqlite3_bind_int64(statement.Get(), 9, content->reply_to_id);
     } else if (auto const* call_entry = std::get_if<messaging::CallEntry>(&entry.data)) {
       entry.is_truncated = false;
       sqlite3_bind_int(statement.Get(), 7, 0);  // is_truncated = false
@@ -884,8 +887,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
 
     // 3. Insert attachments if present
-    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
-      for (auto const& att : msg_entry->attachments) {
+    if (auto* content = messaging::GetMessageContent(entry.data)) {
+      for (auto const& att : content->attachments) {
         // v6 update: added `file_name`
         SQLiteStatement const att_stmt(db_, R"SQL(
           INSERT INTO message_attachments (
@@ -914,6 +917,22 @@ class SQLiteStorage final : public PersistentStorageImpl {
       }
     }
 
+    if (auto* group_entry = std::get_if<messaging::GroupMessageEntry>(&entry.data)) {
+      for (auto const& ps : group_entry->peer_statuses) {
+        SQLiteStatement const ps_stmt(
+            db_,
+            "INSERT INTO message_peer_statuses (topic_id, message_id, peer_id, status) VALUES (?, ?, ?, ?);"
+        );
+        BindText(ps_stmt.Get(), 1, entry.topic_id.ToString());
+        sqlite3_bind_int64(ps_stmt.Get(), 2, entry.id);
+        BindText(ps_stmt.Get(), 3, ps.peer_id.ToString());
+        sqlite3_bind_int(ps_stmt.Get(), 4, static_cast<int>(ps.status));
+        if (sqlite3_step(ps_stmt.Get()) != SQLITE_DONE) {
+          LGE << "Failed to insert peer status: " << sqlite3_errmsg(db_);
+        }
+      }
+    }
+
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
     return entry;
   }
@@ -930,8 +949,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_bind_int64(statement.Get(), 2, entry.timestamp);
     sqlite3_bind_int(statement.Get(), 3, static_cast<int>(entry.direction));
     sqlite3_bind_int(statement.Get(), 4, static_cast<int>(entry.status));
-    if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
-      BindText(statement.Get(), 5, msg->content);
+    if (auto* content = messaging::GetMessageContent(entry.data)) {
+      BindText(statement.Get(), 5, content->content);
     } else {
       BindText(statement.Get(), 5, "");
     }
@@ -939,8 +958,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_bind_int64(statement.Get(), 7, entry.id);
     sqlite3_step(statement.Get());
 
-    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
-      for (auto const& att : msg_entry->attachments) {
+    if (auto* content = messaging::GetMessageContent(entry.data)) {
+      for (auto const& att : content->attachments) {
         SQLiteStatement const att_update(
             db_,
             "UPDATE message_attachments SET is_downloaded = ?, status = ? WHERE id = ?;"
@@ -961,6 +980,25 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
     BindText(s.Get(), 2, topic_id.ToString());
     sqlite3_bind_int64(s.Get(), 3, message_id);
+    sqlite3_step(s.Get());
+  }
+
+  void UpdateMessagePeerStatus(
+      TopicID const& topic_id,
+      uint64_t message_id,
+      ContactID const& peer_id,
+      messaging::MessageStatus new_status
+  ) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s(
+        db_,
+        "REPLACE INTO message_peer_statuses (topic_id, message_id, peer_id, status) VALUES (?, ?, ?, ?);"
+    );
+    BindText(s.Get(), 1, topic_id.ToString());
+    sqlite3_bind_int64(s.Get(), 2, message_id);
+    BindText(s.Get(), 3, peer_id.ToString());
+    sqlite3_bind_int(s.Get(), 4, static_cast<int>(new_status));
     sqlite3_step(s.Get());
   }
 
@@ -1201,46 +1239,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
       record.topic_id = topic_id;
-
-      if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
-        // v6 update: select `file_name`
-        SQLiteStatement const att_stmt(db_, R"SQL(
-          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note, file_name
-          FROM message_attachments
-          WHERE peer_id = ? AND message_id = ?;
-        )SQL");
-        BindText(att_stmt.Get(), 1, topic_id.ToString());
-        sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
-
-        while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
-          msg_entry->attachments.push_back(
-              {.id = ColumnString(att_stmt.Get(), 0),
-               .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
-               .file_path = ColumnString(att_stmt.Get(), 2),
-               .mime_type = ColumnString(att_stmt.Get(), 3),
-               .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
-               .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
-               .hash = ColumnString(att_stmt.Get(), 6),
-               .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
-               .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
-               .note = ColumnString(att_stmt.Get(), 9),
-               .file_name = ColumnString(att_stmt.Get(), 10)}
-          );
-        }
-      }
-
-      // Populate reactions
-      SQLiteStatement const react_stmt(db_, R"SQL(
-        SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;
-      )SQL");
-      BindText(react_stmt.Get(), 1, topic_id.ToString());
-      sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
-      while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
-        record.reactions.push_back(
-            {ContactID(ColumnString(react_stmt.Get(), 0)),
-             static_cast<messaging::Reaction>(sqlite3_column_int(react_stmt.Get(), 1))}
-        );
-      }
+      PopulateEntryDetails(record);
 
       page.messages.push_back(std::move(record));
     }
@@ -1266,43 +1265,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     auto record = ParseHistoryEntry(statement.Get());
     record.topic_id = topic_id;
-
-    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
-      SQLiteStatement const att_stmt(db_, R"SQL(
-        SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note, file_name
-        FROM message_attachments
-        WHERE peer_id = ? AND message_id = ?;
-      )SQL");
-      BindText(att_stmt.Get(), 1, topic_id.ToString());
-      sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
-      while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
-        msg_entry->attachments.push_back(
-            {.id = ColumnString(att_stmt.Get(), 0),
-             .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
-             .file_path = ColumnString(att_stmt.Get(), 2),
-             .mime_type = ColumnString(att_stmt.Get(), 3),
-             .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
-             .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
-             .hash = ColumnString(att_stmt.Get(), 6),
-             .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
-             .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
-             .note = ColumnString(att_stmt.Get(), 9),
-             .file_name = ColumnString(att_stmt.Get(), 10)}
-        );
-      }
-    }
-    SQLiteStatement const react_stmt(
-        db_,
-        "SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;"
-    );
-    BindText(react_stmt.Get(), 1, topic_id.ToString());
-    sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
-    while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
-      record.reactions.push_back(
-          {ContactID(ColumnString(react_stmt.Get(), 0)),
-           static_cast<messaging::Reaction>(sqlite3_column_int(react_stmt.Get(), 1))}
-      );
-    }
+    PopulateEntryDetails(record);
     return record;
   }
 
@@ -1348,6 +1311,17 @@ class SQLiteStorage final : public PersistentStorageImpl {
         if (sqlite3_step(s.Get()) == SQLITE_ROW) {
           summary.last_message = ParseHistoryEntry(s.Get());
           summary.last_message.topic_id = topic_id;
+
+          bool is_group = GetGroup(GroupID(topic_id.Span())).has_value();
+          bool is_channel = GetChannel(ChannelID(topic_id.Span())).has_value();
+          if (auto* chat_entry = std::get_if<messaging::ChatMessageEntry>(&summary.last_message.data)) {
+            if (is_group) {
+              summary.last_message.data = messaging::GroupMessageEntry{std::move(chat_entry->message), {}};
+            } else if (is_channel) {
+              summary.last_message.data = messaging::ChannelMessageEntry{std::move(chat_entry->message)};
+            }
+          }
+
           summaries.push_back(summary);
         }
       }
@@ -1373,33 +1347,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
       record.topic_id = topic_id;
-
-      if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
-        // v6 update: select `file_name`
-        SQLiteStatement const att_stmt(db_, R"SQL(
-          SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note, file_name
-          FROM message_attachments
-          WHERE peer_id = ? AND message_id = ?;
-        )SQL");
-        BindText(att_stmt.Get(), 1, topic_id.ToString());
-        sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
-
-        while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
-          msg_entry->attachments.push_back(
-              {.id = ColumnString(att_stmt.Get(), 0),
-               .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
-               .file_path = ColumnString(att_stmt.Get(), 2),
-               .mime_type = ColumnString(att_stmt.Get(), 3),
-               .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
-               .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
-               .hash = ColumnString(att_stmt.Get(), 6),
-               .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
-               .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
-               .note = ColumnString(att_stmt.Get(), 9),
-               .file_name = ColumnString(att_stmt.Get(), 10)}
-          );
-        }
-      }
+      PopulateEntryDetails(record);
       records.push_back(std::move(record));
     }
     return records;
@@ -1469,9 +1417,22 @@ class SQLiteStorage final : public PersistentStorageImpl {
     BindText(statement.Get(), 3, pattern);
 
     std::vector<messaging::HistoryEntryRecord> results;
+
+    bool is_group = GetGroup(GroupID(topic_id.Span())).has_value();
+    bool is_channel = GetChannel(ChannelID(topic_id.Span())).has_value();
+
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
       record.topic_id = topic_id;
+
+      if (auto* chat_entry = std::get_if<messaging::ChatMessageEntry>(&record.data)) {
+        if (is_group) {
+          record.data = messaging::GroupMessageEntry{std::move(chat_entry->message), {}};
+        } else if (is_channel) {
+          record.data = messaging::ChannelMessageEntry{std::move(chat_entry->message)};
+        }
+      }
+
       results.push_back(std::move(record));
     }
     return results;
@@ -1505,15 +1466,102 @@ class SQLiteStorage final : public PersistentStorageImpl {
     BindText(statement.Get(), 2, pattern);
 
     std::vector<messaging::HistoryEntryRecord> results;
+    std::unordered_map<std::string, bool> group_cache;
+    std::unordered_map<std::string, bool> channel_cache;
+
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
       record.topic_id = TopicID(ColumnString(statement.Get(), 10));
+
+      std::string ts = record.topic_id.ToString();
+      if (!group_cache.contains(ts)) {
+        group_cache[ts] = GetGroup(GroupID(record.topic_id.Span())).has_value();
+      }
+      if (!channel_cache.contains(ts)) {
+        channel_cache[ts] = GetChannel(ChannelID(record.topic_id.Span())).has_value();
+      }
+
+      if (auto* chat_entry = std::get_if<messaging::ChatMessageEntry>(&record.data)) {
+        if (group_cache[ts]) {
+          record.data = messaging::GroupMessageEntry{std::move(chat_entry->message), {}};
+        } else if (channel_cache[ts]) {
+          record.data = messaging::ChannelMessageEntry{std::move(chat_entry->message)};
+        }
+      }
+
       results.push_back(std::move(record));
     }
     return results;
   }
 
  private:
+  void PopulateEntryDetails(messaging::HistoryEntryRecord& record) {
+    bool is_group = GetGroup(GroupID(record.topic_id.Span())).has_value();
+    bool is_channel = GetChannel(ChannelID(record.topic_id.Span())).has_value();
+
+    if (auto* chat_entry = std::get_if<messaging::ChatMessageEntry>(&record.data)) {
+      if (is_group) {
+        record.data = messaging::GroupMessageEntry{std::move(chat_entry->message), {}};
+      } else if (is_channel) {
+        record.data = messaging::ChannelMessageEntry{std::move(chat_entry->message)};
+      }
+    }
+
+    if (auto* group_entry = std::get_if<messaging::GroupMessageEntry>(&record.data)) {
+      SQLiteStatement const ps_stmt(
+          db_,
+          "SELECT peer_id, status FROM message_peer_statuses WHERE topic_id=? AND message_id=?;"
+      );
+      BindText(ps_stmt.Get(), 1, record.topic_id.ToString());
+      sqlite3_bind_int64(ps_stmt.Get(), 2, record.id);
+      while (sqlite3_step(ps_stmt.Get()) == SQLITE_ROW) {
+        group_entry->peer_statuses.push_back(
+            {ContactID(ColumnString(ps_stmt.Get(), 0)),
+             static_cast<messaging::MessageStatus>(sqlite3_column_int(ps_stmt.Get(), 1))}
+        );
+      }
+    }
+
+    if (auto* content = messaging::GetMessageContent(record.data)) {
+      SQLiteStatement const att_stmt(db_, R"SQL(
+        SELECT id, type, file_path, mime_type, size_bytes, thumbnail_base64, hash, is_downloaded, status, note, file_name
+        FROM message_attachments
+        WHERE peer_id = ? AND message_id = ?;
+      )SQL");
+      BindText(att_stmt.Get(), 1, record.topic_id.ToString());
+      sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
+
+      while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
+        content->attachments.push_back(
+            {.id = ColumnString(att_stmt.Get(), 0),
+             .type = static_cast<messaging::AttachmentType>(sqlite3_column_int(att_stmt.Get(), 1)),
+             .file_path = ColumnString(att_stmt.Get(), 2),
+             .mime_type = ColumnString(att_stmt.Get(), 3),
+             .size_bytes = static_cast<uint64_t>(sqlite3_column_int64(att_stmt.Get(), 4)),
+             .thumbnail_base64 = ColumnString(att_stmt.Get(), 5),
+             .hash = ColumnString(att_stmt.Get(), 6),
+             .is_downloaded = (sqlite3_column_int(att_stmt.Get(), 7) != 0),
+             .status = static_cast<messaging::AttachmentStatus>(sqlite3_column_int(att_stmt.Get(), 8)),
+             .note = ColumnString(att_stmt.Get(), 9),
+             .file_name = ColumnString(att_stmt.Get(), 10)}
+        );
+      }
+    }
+
+    SQLiteStatement const react_stmt(
+        db_,
+        "SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;"
+    );
+    BindText(react_stmt.Get(), 1, record.topic_id.ToString());
+    sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
+    while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
+      record.reactions.push_back(
+          {ContactID(ColumnString(react_stmt.Get(), 0)),
+           static_cast<messaging::Reaction>(sqlite3_column_int(react_stmt.Get(), 1))}
+      );
+    }
+  }
+
   void RunMigrations() const {
     int user_version = 0;
     {
@@ -1538,6 +1586,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 12) migrations::MigrateToV0012(db_);
     if (user_version < 13) migrations::MigrateToV0013(db_);
     if (user_version < 14) migrations::MigrateToV0014(db_);
+    if (user_version < 15) migrations::MigrateToV0015(db_);
     // NOLINTEND(*-braces-around-statements)
   }
 
@@ -1556,11 +1605,11 @@ class SQLiteStorage final : public PersistentStorageImpl {
     switch (record.kind) {
       case messaging::HistoryEntryKind::textMessage:
       case messaging::HistoryEntryKind::systemMessage:
-        record.data = messaging::MessageEntry{
+        record.data = messaging::ChatMessageEntry{messaging::MessageContent{
             .content = ColumnString(stmt, 6),
             .attachments = {},
             .reply_to_id = static_cast<uint64_t>(sqlite3_column_int64(stmt, 9))
-        };
+        }};
         break;
       case messaging::HistoryEntryKind::voiceCall:
       case messaging::HistoryEntryKind::videoCall: {
