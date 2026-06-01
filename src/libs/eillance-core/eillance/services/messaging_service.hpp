@@ -673,8 +673,8 @@ class MessagingService {
     for (auto const& att : attachments) {
       if (!att.is_downloaded && att.status != messaging::AttachmentStatus::discarded &&
           att.status != messaging::AttachmentStatus::canceled) {
-        sm_->file_transfer->QueueDownload(pseudo_peer_id, att, db_entry.id);
-        sm_->file_transfer->ResumeTransfer(pseudo_peer_id, att.id, false);
+        sm_->file_transfer->QueueDownload(entry.author_id, att, db_entry.id);
+        sm_->file_transfer->ResumeTransfer(entry.author_id, att.id, false);
       }
     }
 
