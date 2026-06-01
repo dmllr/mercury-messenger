@@ -91,6 +91,13 @@ data class ReactionEntry(
   val reaction: Reaction? get() = Reaction.fromInt(reactionValue)
 }
 
+data class PeerMessageStatus(
+  val peerId: String,
+  private val statusValue: Int
+) {
+  val status: MessageStatus get() = MessageStatus.fromInt(statusValue)
+}
+
 @Serializable
 data class Attachment(
   val id: String,
@@ -123,7 +130,8 @@ data class HistoryEntry(
   val isDeleted: Boolean = false,
   val attachments: List<Attachment> = emptyList(),
   val reactions: List<ReactionEntry> = emptyList(),
-  private val replyToIdValue: Long = 0L
+  private val replyToIdValue: Long = 0L,
+  val peerStatuses: List<PeerMessageStatus> = emptyList()
 ) {
   val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
   val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)

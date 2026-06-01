@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "eillance/events/client_events.hpp"
+#include "eillance/identity/channel_id.hpp"
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/identity/group_id.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -49,6 +51,15 @@ class MessageHistory {
       entry_id = GenerateMessageId();
     }
 
+    HistoryEntryData data;
+    if (storage_->GetGroup(GroupID(params.topic_id.Span()))) {
+      data = GroupMessageEntry{MessageContent{params.content, params.attachments, params.reply_to_id}, {}};
+    } else if (storage_->GetChannel(ChannelID(params.topic_id.Span()))) {
+      data = ChannelMessageEntry{MessageContent{params.content, params.attachments, params.reply_to_id}};
+    } else {
+      data = ChatMessageEntry{MessageContent{params.content, params.attachments, params.reply_to_id}};
+    }
+
     return storage_->AddHistoryEntry({
         .id = entry_id,
         .kind = params.kind,
@@ -56,7 +67,7 @@ class MessageHistory {
         .direction = params.direction,
         .status = initial_status,
         .is_truncated = false,
-        .data = MessageEntry{params.content, params.attachments, params.reply_to_id},
+        .data = data,
         .topic_id = params.topic_id,
     });
   }
@@ -96,6 +107,16 @@ class MessageHistory {
   void UpdateMessageStatus(TopicID const& topic_id, std::uint64_t const message_id, MessageStatus const new_status) {
     storage_->UpdateMessageStatus(topic_id, message_id, new_status);
     EventQueue::Instance().Push(EventMessageStatusChanged{topic_id, message_id, new_status});
+  }
+
+  void UpdateMessagePeerStatus(
+      TopicID const& topic_id,
+      std::uint64_t const message_id,
+      ContactID const& peer_id,
+      MessageStatus const new_status
+  ) {
+    storage_->UpdateMessagePeerStatus(topic_id, message_id, peer_id, new_status);
+    EventQueue::Instance().Push(EventMessageUpdated{topic_id, message_id});
   }
 
   void UpdateMessageContent(TopicID const& topic_id, std::uint64_t message_id, std::string const& content) {

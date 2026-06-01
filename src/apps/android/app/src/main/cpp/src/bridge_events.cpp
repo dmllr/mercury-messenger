@@ -49,12 +49,11 @@ void InitEventBridge(JavaVM* jvm) {
           lm_direction = static_cast<jint>(contact_cpp.last_message->direction);
           lm_status = static_cast<jint>(contact_cpp.last_message->status);
 
-          if (std::holds_alternative<messaging::MessageEntry>(contact_cpp.last_message->data)) {
-            auto const& txt = std::get<messaging::MessageEntry>(contact_cpp.last_message->data);
-            lm_content = env->NewStringUTF(txt.content.c_str());
-            if (!txt.attachments.empty()) {
-              lm_att_path = env->NewStringUTF(txt.attachments.front().file_path.c_str());
-              lm_att_type = static_cast<jint>(txt.attachments.front().type);
+          if (auto const* content = messaging::GetMessageContent(contact_cpp.last_message->data)) {
+            lm_content = env->NewStringUTF(content->content.c_str());
+            if (!content->attachments.empty()) {
+              lm_att_path = env->NewStringUTF(content->attachments.front().file_path.c_str());
+              lm_att_type = static_cast<jint>(content->attachments.front().type);
             }
           }
           auto const* call = std::get_if<messaging::CallEntry>(&contact_cpp.last_message->data);
@@ -110,22 +109,17 @@ void InitEventBridge(JavaVM* jvm) {
       auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
       auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
       auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
+      auto& peer_status_holder = class_refs.Class("hela/eillance/ndkio/PeerMessageStatus");
 
       for (auto const& entry_cpp : e.state.history) {
         std::string const* content_str = nullptr;
         std::vector<messaging::Attachment> const* attachments_ptr = nullptr;
         jlong j_reply_to_id = 0;
-        std::visit(
-            [&](auto&& arg) {
-              using T = std::decay_t<decltype(arg)>;
-              if constexpr (std::is_same_v<T, messaging::MessageEntry>) {
-                content_str = &arg.content;
-                attachments_ptr = &arg.attachments;
-                j_reply_to_id = arg.reply_to_id;
-              }
-            },
-            entry_cpp.data
-        );
+        if (auto const* content = messaging::GetMessageContent(entry_cpp.data)) {
+          content_str = &content->content;
+          attachments_ptr = &content->attachments;
+          j_reply_to_id = content->reply_to_id;
+        }
         auto const* call_entry = std::get_if<messaging::CallEntry>(&entry_cpp.data);
         jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
         jint const duration = call_entry ? static_cast<jint>(call_entry->duration_seconds) : 0;
@@ -170,6 +164,18 @@ void InitEventBridge(JavaVM* jvm) {
           env->DeleteLocalRef(r_auth);
           env->DeleteLocalRef(j_react);
         }
+
+        jobject j_peer_statuses = list_holder.NewObject(env);
+        if (auto const* group_entry = std::get_if<messaging::GroupMessageEntry>(&entry_cpp.data)) {
+          for (auto const& ps : group_entry->peer_statuses) {
+            jstring p_id = env->NewStringUTF(ps.peer_id.ToString().c_str());
+            jobject j_ps = peer_status_holder.NewObject(env, p_id, static_cast<jint>(ps.status));
+            env->CallBooleanMethod(j_peer_statuses, list_add_method, j_ps);
+            env->DeleteLocalRef(p_id);
+            env->DeleteLocalRef(j_ps);
+          }
+        }
+
         jobject entry_java = entry_holder.NewObject(
             env,
             static_cast<jlong>(entry_cpp.id),
@@ -186,12 +192,14 @@ void InitEventBridge(JavaVM* jvm) {
             static_cast<jboolean>(entry_cpp.is_deleted),
             j_attachments,
             j_reactions,
-            j_reply_to_id
+            j_reply_to_id,
+            j_peer_statuses
         );
         env->CallBooleanMethod(history_list, list_add_method, entry_java);
         if (content) env->DeleteLocalRef(content);
         env->DeleteLocalRef(j_attachments);
         env->DeleteLocalRef(j_reactions);
+        env->DeleteLocalRef(j_peer_statuses);
         env->DeleteLocalRef(entry_java);
       }
       auto& page_holder = class_refs.Class("hela/eillance/ndkio/HistoryPage");
@@ -408,16 +416,16 @@ void InitEventBridge(JavaVM* jvm) {
     auto& entry_holder = class_refs.Class("hela/eillance/ndkio/HistoryEntry");
     auto& attachment_holder = class_refs.Class("hela/eillance/ndkio/Attachment");
     auto& reaction_holder = class_refs.Class("hela/eillance/ndkio/ReactionEntry");
+    auto& peer_status_holder = class_refs.Class("hela/eillance/ndkio/PeerMessageStatus");
 
     for (auto const& entry_cpp : e.unread_messages) {
       std::string const* content_str = nullptr;
       std::vector<messaging::Attachment> const* attachments_ptr = nullptr;
       jlong j_reply_to_id = 0;
-      if (std::holds_alternative<messaging::MessageEntry>(entry_cpp.data)) {
-        auto const& msg = std::get<messaging::MessageEntry>(entry_cpp.data);
-        content_str = &msg.content;
-        attachments_ptr = &msg.attachments;
-        j_reply_to_id = msg.reply_to_id;
+      if (auto const* content = messaging::GetMessageContent(entry_cpp.data)) {
+        content_str = &content->content;
+        attachments_ptr = &content->attachments;
+        j_reply_to_id = content->reply_to_id;
       }
       auto const* call_entry = std::get_if<messaging::CallEntry>(&entry_cpp.data);
       jstring content = content_str ? env->NewStringUTF(content_str->c_str()) : nullptr;
@@ -463,6 +471,18 @@ void InitEventBridge(JavaVM* jvm) {
         env->DeleteLocalRef(r_auth);
         env->DeleteLocalRef(j_react);
       }
+
+      jobject j_peer_statuses = list_holder.NewObject(env);
+      if (auto const* group_entry = std::get_if<messaging::GroupMessageEntry>(&entry_cpp.data)) {
+        for (auto const& ps : group_entry->peer_statuses) {
+          jstring p_id = env->NewStringUTF(ps.peer_id.ToString().c_str());
+          jobject j_ps = peer_status_holder.NewObject(env, p_id, static_cast<jint>(ps.status));
+          env->CallBooleanMethod(j_peer_statuses, list_add_method, j_ps);
+          env->DeleteLocalRef(p_id);
+          env->DeleteLocalRef(j_ps);
+        }
+      }
+
       jobject entry_java = entry_holder.NewObject(
           env,
           static_cast<jlong>(entry_cpp.id),
@@ -479,12 +499,14 @@ void InitEventBridge(JavaVM* jvm) {
           static_cast<jboolean>(entry_cpp.is_deleted),
           j_attachments,
           j_reactions,
-          j_reply_to_id
+          j_reply_to_id,
+          j_peer_statuses
       );
       env->CallBooleanMethod(history_list, list_add_method, entry_java);
       if (content) env->DeleteLocalRef(content);
       env->DeleteLocalRef(j_attachments);
       env->DeleteLocalRef(j_reactions);
+      env->DeleteLocalRef(j_peer_statuses);
       env->DeleteLocalRef(entry_java);
     }
 

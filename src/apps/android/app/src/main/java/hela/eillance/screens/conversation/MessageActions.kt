@@ -25,7 +25,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,6 +59,7 @@ import androidx.compose.ui.window.PopupProperties
 import hela.eillance.camera.R
 import hela.eillance.ndkio.Reaction
 import hela.eillance.theme.ListItem
+import hela.eillance.theme.extendedColors
 
 @Composable
 fun MessageActionMenu(
@@ -67,7 +71,9 @@ fun MessageActionMenu(
   onForward: () -> Unit,
   onReact: (Reaction) -> Unit,
   currentReactions: Set<Reaction>,
-  isFromMe: Boolean
+  isFromMe: Boolean,
+  peerStatuses: List<hela.eillance.ndkio.PeerMessageStatus>,
+  resolveContactName: (String) -> String
 ) {
   // Use Popup to position near the anchor (the Box in MessageBubble)
   // Alignment BottomStart or BottomEnd depending on message direction
@@ -150,6 +156,28 @@ fun MessageActionMenu(
             color = MaterialTheme.colorScheme.error,
             onClick = onDelete
           )
+        }
+
+        if (isFromMe && peerStatuses.isNotEmpty()) {
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Text(stringResource(R.string.message_read_by), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            peerStatuses.forEach { ps ->
+              val name = resolveContactName(ps.peerId)
+              val icon = when(ps.status) {
+                hela.eillance.ndkio.MessageStatus.Read -> Icons.Filled.DoneAll
+                hela.eillance.ndkio.MessageStatus.Delivered -> Icons.Filled.Done
+                else -> Icons.Filled.Schedule
+              }
+              val tint = if (ps.status == hela.eillance.ndkio.MessageStatus.Read) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.onSurfaceVariant
+              ListItem(
+                headlineContent = { Text(name, style = MaterialTheme.typography.bodyMedium) },
+                trailingContent = { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp)) },
+                modifier = Modifier.height(36.dp),
+                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
+              )
+            }
+          }
         }
       }
     }
