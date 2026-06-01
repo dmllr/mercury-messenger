@@ -828,7 +828,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
     )SQL");
 
-    BindText(statement.Get(), 1, entry.peer_id.ToString());
+    BindText(statement.Get(), 1, entry.topic_id.ToString());
     sqlite3_bind_int64(statement.Get(), 2, entry.id);
     sqlite3_bind_int(statement.Get(), 3, static_cast<int>(entry.kind));
     sqlite3_bind_int64(statement.Get(), 4, entry.timestamp);
@@ -873,7 +873,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         VALUES
           (?, ?, ?);
         )SQL");
-      BindText(large_msg_stmt.Get(), 1, entry.peer_id.ToString());
+      BindText(large_msg_stmt.Get(), 1, entry.topic_id.ToString());
       sqlite3_bind_int64(large_msg_stmt.Get(), 2, entry.id);
       BindText(large_msg_stmt.Get(), 3, *full_content_for_storage);
       if (sqlite3_step(large_msg_stmt.Get()) != SQLITE_DONE) {
@@ -893,7 +893,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         )SQL");
         BindText(att_stmt.Get(), 1, att.id);
-        BindText(att_stmt.Get(), 2, entry.peer_id.ToString());
+        BindText(att_stmt.Get(), 2, entry.topic_id.ToString());
         sqlite3_bind_int64(att_stmt.Get(), 3, entry.id);
         sqlite3_bind_int(att_stmt.Get(), 4, static_cast<int>(att.type));
         BindText(att_stmt.Get(), 5, att.file_path);
@@ -935,7 +935,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     } else {
       BindText(statement.Get(), 5, "");
     }
-    BindText(statement.Get(), 6, entry.peer_id.ToString());
+    BindText(statement.Get(), 6, entry.topic_id.ToString());
     sqlite3_bind_int64(statement.Get(), 7, entry.id);
     sqlite3_step(statement.Get());
 
@@ -954,19 +954,18 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
-  void
-  UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
+  void UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id=?;");
     sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
-    BindText(s.Get(), 2, peer_id.ToString());
+    BindText(s.Get(), 2, topic_id.ToString());
     sqlite3_bind_int64(s.Get(), 3, message_id);
     sqlite3_step(s.Get());
   }
 
   void UpdateMessageStatuses(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       std::vector<uint64_t> const& message_ids,
       messaging::MessageStatus new_status
   ) override {
@@ -979,12 +978,12 @@ class SQLiteStorage final : public PersistentStorageImpl {
         "UPDATE messages SET status=? WHERE peer_id=? AND id IN (SELECT value FROM json_each(?));"
     );
     sqlite3_bind_int(s.Get(), 1, static_cast<int>(new_status));
-    BindText(s.Get(), 2, peer_id.ToString());
+    BindText(s.Get(), 2, topic_id.ToString());
     BindText(s.Get(), 3, ids_json.dump());
     sqlite3_step(s.Get());
   }
 
-  void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) override {
+  void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -992,7 +991,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         "UPDATE messages SET content=?, is_edited=1, is_truncated=0 WHERE peer_id=? AND id=?;"
     );
     BindText(s.Get(), 1, new_content);
-    BindText(s.Get(), 2, peer_id.ToString());
+    BindText(s.Get(), 2, topic_id.ToString());
     sqlite3_bind_int64(s.Get(), 3, message_id);
     sqlite3_step(s.Get());
 
@@ -1000,36 +999,36 @@ class SQLiteStorage final : public PersistentStorageImpl {
     // logic) For robustness: we just delete the large entry. If the new content is huge, we should logic like
     // AddHistoryEntry. But here we rely on the caller to not send >2KB edits via this path or handle truncation.
     SQLiteStatement const del_large(db_, "DELETE FROM large_messages WHERE peer_id=? AND message_id=?;");
-    BindText(del_large.Get(), 1, peer_id.ToString());
+    BindText(del_large.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(del_large.Get(), 2, message_id);
     sqlite3_step(del_large.Get());
   }
 
-  void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) override {
+  void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
         db_,
         "UPDATE messages SET is_deleted=1, content='', is_truncated=0 WHERE peer_id=? AND id=?;"
     );
-    BindText(s.Get(), 1, peer_id.ToString());
+    BindText(s.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(s.Get(), 2, message_id);
     sqlite3_step(s.Get());
 
     // Clear content details
     SQLiteStatement const del_large(db_, "DELETE FROM large_messages WHERE peer_id=? AND message_id=?;");
-    BindText(del_large.Get(), 1, peer_id.ToString());
+    BindText(del_large.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(del_large.Get(), 2, message_id);
     sqlite3_step(del_large.Get());
 
     SQLiteStatement const del_atts(db_, "DELETE FROM message_attachments WHERE peer_id=? AND message_id=?;");
-    BindText(del_atts.Get(), 1, peer_id.ToString());
+    BindText(del_atts.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(del_atts.Get(), 2, message_id);
     sqlite3_step(del_atts.Get());
   }
 
   void ToggleReaction(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
@@ -1042,7 +1041,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         db_,
         "SELECT 1 FROM reactions WHERE peer_id=? AND message_id=? AND author_id=? AND reaction=?;"
     );
-    BindText(check.Get(), 1, peer_id.ToString());
+    BindText(check.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(check.Get(), 2, message_id);
     BindText(check.Get(), 3, author_id.ToString());
     sqlite3_bind_int(check.Get(), 4, static_cast<int>(reaction));
@@ -1054,7 +1053,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
                : "INSERT INTO reactions (peer_id, message_id, author_id, reaction) VALUES (?, ?, ?, ?);";
 
     SQLiteStatement const op(db_, sql);
-    BindText(op.Get(), 1, peer_id.ToString());
+    BindText(op.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(op.Get(), 2, message_id);
     BindText(op.Get(), 3, author_id.ToString());
     sqlite3_bind_int(op.Get(), 4, static_cast<int>(reaction));
@@ -1117,7 +1116,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return std::nullopt;
   }
 
-  auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> override {
+  auto GetDownloadedAttachments(TopicID const& topic_id) -> std::vector<messaging::AttachmentRecord> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     std::vector<messaging::AttachmentRecord> results;
@@ -1128,7 +1127,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       WHERE a.peer_id = ? AND a.is_downloaded = 1 AND a.status = 2
       ORDER BY m.timestamp DESC;
     )SQL");
-    BindText(stmt.Get(), 1, peer_id.ToString());
+    BindText(stmt.Get(), 1, topic_id.ToString());
     while (sqlite3_step(stmt.Get()) == SQLITE_ROW) {
       messaging::Attachment att{
           .id = ColumnString(stmt.Get(), 0),
@@ -1149,7 +1148,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return results;
   }
 
-  auto GetAllAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
+  auto GetAllAttachments(TopicID const& topic_id) -> std::vector<messaging::Attachment> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     std::vector<messaging::Attachment> attachments;
@@ -1158,7 +1157,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       FROM message_attachments
       WHERE peer_id = ?;
     )SQL");
-    BindText(att_stmt.Get(), 1, peer_id.ToString());
+    BindText(att_stmt.Get(), 1, topic_id.ToString());
 
     while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
       attachments.push_back(
@@ -1178,15 +1177,14 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return attachments;
   }
 
-  auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
-      -> messaging::HistoryPage override {
+  auto GetHistoryPage(TopicID const& topic_id, size_t page_index, size_t page_size) -> messaging::HistoryPage override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     messaging::HistoryPage page;
 
     {
       SQLiteStatement const count_stmt(db_, "SELECT count(*) FROM messages WHERE peer_id = ?;");
-      BindText(count_stmt.Get(), 1, peer_id.ToString());
+      BindText(count_stmt.Get(), 1, topic_id.ToString());
       if (sqlite3_step(count_stmt.Get()) == SQLITE_ROW) {
         page.total_messages = sqlite3_column_int64(count_stmt.Get(), 0);
       }
@@ -1196,13 +1194,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id
       FROM messages WHERE peer_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?;
     )SQL");
-    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(statement.Get(), 2, page_size);
     sqlite3_bind_int64(statement.Get(), 3, page_index * page_size);
 
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
-      record.peer_id = peer_id;
+      record.topic_id = topic_id;
 
       if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
         // v6 update: select `file_name`
@@ -1211,7 +1209,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
           FROM message_attachments
           WHERE peer_id = ? AND message_id = ?;
         )SQL");
-        BindText(att_stmt.Get(), 1, peer_id.ToString());
+        BindText(att_stmt.Get(), 1, topic_id.ToString());
         sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
 
         while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
@@ -1235,7 +1233,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SQLiteStatement const react_stmt(db_, R"SQL(
         SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;
       )SQL");
-      BindText(react_stmt.Get(), 1, peer_id.ToString());
+      BindText(react_stmt.Get(), 1, topic_id.ToString());
       sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
       while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
         record.reactions.push_back(
@@ -1250,7 +1248,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetHistoryEntry(ContactID const& peer_id, uint64_t message_id)
+  auto GetHistoryEntry(TopicID const& topic_id, uint64_t message_id)
       -> std::optional<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
@@ -1259,7 +1257,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id
       FROM messages WHERE peer_id = ? AND id = ?;
     )SQL");
-    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(statement.Get(), 2, message_id);
 
     if (sqlite3_step(statement.Get()) != SQLITE_ROW) {
@@ -1267,7 +1265,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
 
     auto record = ParseHistoryEntry(statement.Get());
-    record.peer_id = peer_id;
+    record.topic_id = topic_id;
 
     if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
       SQLiteStatement const att_stmt(db_, R"SQL(
@@ -1275,7 +1273,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         FROM message_attachments
         WHERE peer_id = ? AND message_id = ?;
       )SQL");
-      BindText(att_stmt.Get(), 1, peer_id.ToString());
+      BindText(att_stmt.Get(), 1, topic_id.ToString());
       sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
       while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
         msg_entry->attachments.push_back(
@@ -1297,7 +1295,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         db_,
         "SELECT author_id, reaction FROM reactions WHERE peer_id=? AND message_id=?;"
     );
-    BindText(react_stmt.Get(), 1, peer_id.ToString());
+    BindText(react_stmt.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(react_stmt.Get(), 2, record.id);
     while (sqlite3_step(react_stmt.Get()) == SQLITE_ROW) {
       record.reactions.push_back(
@@ -1308,32 +1306,32 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return record;
   }
 
-  auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t const message_id)
+  auto GetFullMessageContent(TopicID const& topic_id, std::uint64_t const message_id)
       -> std::optional<std::string> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(db_, "SELECT full_content FROM large_messages WHERE peer_id=? AND message_id=?;");
-    BindText(s.Get(), 1, peer_id.ToString());
+    BindText(s.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(s.Get(), 2, message_id);
     if (sqlite3_step(s.Get()) == SQLITE_ROW) return ColumnString(s.Get(), 0);
     return std::nullopt;
   }
 
-  auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
-    if (peer_ids.empty()) return {};
+  auto GetChatSummaries(std::vector<TopicID> const& topic_ids) -> std::vector<messaging::ChatSummary> override {
+    if (topic_ids.empty()) return {};
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     std::vector<messaging::ChatSummary> summaries;
-    for (auto const& peer_id : peer_ids) {
+    for (auto const& topic_id : topic_ids) {
       messaging::ChatSummary summary;
-      summary.peer_id = peer_id;
+      summary.topic_id = topic_id;
       summary.unread_count = 0;
       {
         SQLiteStatement const s(
             db_,
             "SELECT COUNT(*) FROM messages WHERE peer_id=? AND direction=? AND status!=? AND kind=?;"
         );
-        BindText(s.Get(), 1, peer_id.ToString());
+        BindText(s.Get(), 1, topic_id.ToString());
         sqlite3_bind_int(s.Get(), 2, static_cast<int>(messaging::MessageDirection::received));
         sqlite3_bind_int(s.Get(), 3, static_cast<int>(messaging::MessageStatus::read));
         sqlite3_bind_int(s.Get(), 4, static_cast<int>(messaging::HistoryEntryKind::textMessage));
@@ -1346,10 +1344,10 @@ class SQLiteStorage final : public PersistentStorageImpl {
             "FROM messages WHERE "
             "peer_id=? ORDER BY timestamp DESC LIMIT 1;"
         );
-        BindText(s.Get(), 1, peer_id.ToString());
+        BindText(s.Get(), 1, topic_id.ToString());
         if (sqlite3_step(s.Get()) == SQLITE_ROW) {
           summary.last_message = ParseHistoryEntry(s.Get());
-          summary.last_message.peer_id = peer_id;
+          summary.last_message.topic_id = topic_id;
           summaries.push_back(summary);
         }
       }
@@ -1360,7 +1358,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return summaries;
   }
 
-  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus const status)
+  auto GetMessagesWithStatus(TopicID const& topic_id, messaging::MessageStatus const status)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
@@ -1369,12 +1367,12 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id
       FROM messages WHERE peer_id = ? AND status = ?;
     )SQL");
-    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 1, topic_id.ToString());
     sqlite3_bind_int(statement.Get(), 2, static_cast<int>(status));
 
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
-      record.peer_id = peer_id;
+      record.topic_id = topic_id;
 
       if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&record.data)) {
         // v6 update: select `file_name`
@@ -1383,7 +1381,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
           FROM message_attachments
           WHERE peer_id = ? AND message_id = ?;
         )SQL");
-        BindText(att_stmt.Get(), 1, peer_id.ToString());
+        BindText(att_stmt.Get(), 1, topic_id.ToString());
         sqlite3_bind_int64(att_stmt.Get(), 2, record.id);
 
         while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
@@ -1407,7 +1405,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return records;
   }
 
-  auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
+  auto GetPendingAttachments(TopicID const& topic_id) -> std::vector<messaging::Attachment> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     std::vector<messaging::Attachment> attachments;
@@ -1417,7 +1415,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       FROM message_attachments
       WHERE peer_id = ? AND (status = 0 OR status = 1) AND is_downloaded = 0;
     )SQL");
-    BindText(att_stmt.Get(), 1, peer_id.ToString());
+    BindText(att_stmt.Get(), 1, topic_id.ToString());
 
     while (sqlite3_step(att_stmt.Get()) == SQLITE_ROW) {
       attachments.push_back(
@@ -1438,7 +1436,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // --- Search ---
-  auto SearchMessages(ContactID const& peer_id, std::string const& query)
+  auto SearchMessages(TopicID const& topic_id, std::string const& query)
       -> std::vector<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
@@ -1466,14 +1464,14 @@ class SQLiteStorage final : public PersistentStorageImpl {
     )SQL"
     );
 
-    BindText(statement.Get(), 1, peer_id.ToString());
+    BindText(statement.Get(), 1, topic_id.ToString());
     BindText(statement.Get(), 2, pattern);
     BindText(statement.Get(), 3, pattern);
 
     std::vector<messaging::HistoryEntryRecord> results;
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
-      record.peer_id = peer_id;
+      record.topic_id = topic_id;
       results.push_back(std::move(record));
     }
     return results;
@@ -1509,7 +1507,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::vector<messaging::HistoryEntryRecord> results;
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
-      record.peer_id = ContactID(ColumnString(statement.Get(), 10));
+      record.topic_id = TopicID(ColumnString(statement.Get(), 10));
       results.push_back(std::move(record));
     }
     return results;

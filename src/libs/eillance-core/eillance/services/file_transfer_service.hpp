@@ -83,7 +83,7 @@ class FileTransferService {
   }
 
   void OnConnectionReady(ContactID const& peer_id) {
-    auto const pending_attachments = storage_->GetPendingAttachments(peer_id);
+    auto const pending_attachments = storage_->GetPendingAttachments(TopicID(peer_id));
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     for (auto const& attachment : pending_attachments) {
       if (attachment.status == messaging::AttachmentStatus::paused ||
@@ -283,7 +283,7 @@ class FileTransferService {
     auto const new_status = (!is_upload) ? messaging::AttachmentStatus::paused : messaging::AttachmentStatus::canceled;
 
     storage_->UpdateAttachmentStatus(attachment_id, new_status, is_upload);
-    EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, attachment_id, new_status});
+    EventQueue::Instance().Push(EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, new_status});
     TriggerNextTransfers();
   }
 
@@ -291,14 +291,14 @@ class FileTransferService {
     if (is_upload) {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, true);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::pending}
+          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::pending}
       );
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
       upload_queue_.push_back({peer_id, attachment_id, 0});
     } else {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, false);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::pending}
+          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::pending}
       );
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
       download_queue_.push_back({peer_id, attachment_id, 0});
@@ -337,12 +337,12 @@ class FileTransferService {
       SendCancel(peer_id, attachment_id);
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::canceled}
+          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::canceled}
       );
     } else {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::discarded}
+          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::discarded}
       );
     }
     TriggerNextTransfers();
@@ -369,7 +369,7 @@ class FileTransferService {
 
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::peerCanceled, false);
     EventQueue::Instance().Push(
-        EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::peerCanceled}
+        EventAttachmentStatusChanged{TopicID(peer_id), file_id, messaging::AttachmentStatus::peerCanceled}
     );
     TriggerNextTransfers();
   }
@@ -405,16 +405,20 @@ class FileTransferService {
         LGE << "Failed to rename temp file: " << error_code.message();
       } else {
         storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, false);
-        EventQueue::Instance().Push(EventAttachmentDownloaded{peer_id, file_id});
-        EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, 1.0F});
-        EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
+        EventQueue::Instance().Push(EventAttachmentDownloaded{TopicID(peer_id), file_id});
+        EventQueue::Instance().Push(EventTransferProgress{TopicID(peer_id), file_id, 1.0F});
+        EventQueue::Instance().Push(
+            EventAttachmentStatusChanged{TopicID(peer_id), file_id, messaging::AttachmentStatus::done}
+        );
       }
     } else {
       LGE << "Hash mismatch for " << file_id;
       std::filesystem::remove(temp_path);
       std::filesystem::remove(progress_path);
       storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
-      EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::failed});
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{TopicID(peer_id), file_id, messaging::AttachmentStatus::failed}
+      );
     }
     TriggerNextTransfers();
   }
@@ -533,7 +537,7 @@ class FileTransferService {
 
     storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::transferring, false);
     EventQueue::Instance().Push(
-        EventAttachmentStatusChanged{peer_id, attachment.id, messaging::AttachmentStatus::transferring}
+        EventAttachmentStatusChanged{TopicID(peer_id), attachment.id, messaging::AttachmentStatus::transferring}
     );
 
     if (request_missing) {
@@ -578,7 +582,7 @@ class FileTransferService {
       lock.unlock();
       storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::transferring, true);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment.id, messaging::AttachmentStatus::transferring}
+          EventAttachmentStatusChanged{TopicID(peer_id), attachment.id, messaging::AttachmentStatus::transferring}
       );
       lock.lock();
 
@@ -621,7 +625,9 @@ class FileTransferService {
       }
     }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::paused, true);
-    EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::paused});
+    EventQueue::Instance().Push(
+        EventAttachmentStatusChanged{TopicID(peer_id), file_id, messaging::AttachmentStatus::paused}
+    );
     TriggerNextTransfers();
   }
 
@@ -660,7 +666,7 @@ class FileTransferService {
 
       if (state.total_size > 0) {
         float const progress = static_cast<float>(bytes) / static_cast<float>(state.total_size);
-        EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, std::min(progress, 1.0F)});
+        EventQueue::Instance().Push(EventTransferProgress{TopicID(peer_id), file_id, std::min(progress, 1.0F)});
       }
 
       if (!state.is_pumping && !state.paused && !state.pending_chunks.empty()) {
@@ -911,7 +917,7 @@ class FileTransferService {
 
       if (report_progress) {
         float const progress = static_cast<float>(current_bytes) / static_cast<float>(total);
-        EventQueue::Instance().Push(EventTransferProgress{peer_id, file_id, std::min(progress, 1.0F)});
+        EventQueue::Instance().Push(EventTransferProgress{TopicID(peer_id), file_id, std::min(progress, 1.0F)});
       }
 
       if (send_ack) {
@@ -1003,7 +1009,9 @@ class FileTransferService {
       active_uploads_.erase(file_id);
     }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
-    EventQueue::Instance().Push(EventAttachmentStatusChanged{peer_id, file_id, messaging::AttachmentStatus::done});
+    EventQueue::Instance().Push(
+        EventAttachmentStatusChanged{TopicID(peer_id), file_id, messaging::AttachmentStatus::done}
+    );
   }
 
   auto

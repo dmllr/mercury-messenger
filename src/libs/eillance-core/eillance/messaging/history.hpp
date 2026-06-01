@@ -57,7 +57,7 @@ class MessageHistory {
         .status = initial_status,
         .is_truncated = false,
         .data = MessageEntry{params.content, params.attachments, params.reply_to_id},
-        .peer_id = params.peer_id,
+        .topic_id = params.topic_id,
     });
   }
 
@@ -85,7 +85,7 @@ class MessageHistory {
                 .call_direction = params.direction,
                 .call_status = params.status
             },
-        .peer_id = params.peer_id,
+        .topic_id = params.topic_id,
     });
   }
 
@@ -93,67 +93,67 @@ class MessageHistory {
     storage_->UpdateHistoryEntry(entry);
   }
 
-  void UpdateMessageStatus(ContactID const& peer_id, std::uint64_t const message_id, MessageStatus const new_status) {
-    storage_->UpdateMessageStatus(peer_id, message_id, new_status);
-    EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, new_status});
+  void UpdateMessageStatus(TopicID const& topic_id, std::uint64_t const message_id, MessageStatus const new_status) {
+    storage_->UpdateMessageStatus(topic_id, message_id, new_status);
+    EventQueue::Instance().Push(EventMessageStatusChanged{topic_id, message_id, new_status});
   }
 
-  void UpdateMessageContent(ContactID const& peer_id, std::uint64_t message_id, std::string const& content) {
-    storage_->UpdateMessageContent(peer_id, message_id, content);
+  void UpdateMessageContent(TopicID const& topic_id, std::uint64_t message_id, std::string const& content) {
+    storage_->UpdateMessageContent(topic_id, message_id, content);
   }
 
-  void MarkMessageDeleted(ContactID const& peer_id, std::uint64_t message_id) {
-    storage_->MarkMessageDeleted(peer_id, message_id);
+  void MarkMessageDeleted(TopicID const& topic_id, std::uint64_t message_id) {
+    storage_->MarkMessageDeleted(topic_id, message_id);
   }
 
   void
-  ToggleReaction(ContactID const& peer_id, std::uint64_t message_id, ContactID const& author_id, Reaction reaction) {
-    storage_->ToggleReaction(peer_id, message_id, author_id, reaction);
+  ToggleReaction(TopicID const& topic_id, std::uint64_t message_id, ContactID const& author_id, Reaction reaction) {
+    storage_->ToggleReaction(topic_id, message_id, author_id, reaction);
   }
 
-  [[nodiscard]] auto FindMessageIdByRemoteOrLocal(ContactID const& peer_id, uint64_t target_id) const
+  [[nodiscard]] auto FindMessageIdByRemoteOrLocal(TopicID const& topic_id, uint64_t target_id) const
       -> std::optional<uint64_t> {
-    return storage_->GetHistoryEntry(peer_id, target_id) ? std::make_optional(target_id) : std::nullopt;
+    return storage_->GetHistoryEntry(topic_id, target_id) ? std::make_optional(target_id) : std::nullopt;
   }
 
-  void MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
-    storage_->UpdateMessageStatuses(peer_id, message_ids, MessageStatus::read);
+  void MarkMessagesAsRead(TopicID const& topic_id, std::vector<uint64_t> const& message_ids) {
+    storage_->UpdateMessageStatuses(topic_id, message_ids, MessageStatus::read);
     for (auto const message_id : message_ids) {
-      EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, MessageStatus::read});
+      EventQueue::Instance().Push(EventMessageStatusChanged{topic_id, message_id, MessageStatus::read});
     }
   }
 
-  [[nodiscard]] auto GetHistoryEntry(ContactID const& peer_id, uint64_t const message_id) const
+  [[nodiscard]] auto GetHistoryEntry(TopicID const& topic_id, uint64_t const message_id) const
       -> std::optional<messaging::HistoryEntryRecord> {
-    return storage_->GetHistoryEntry(peer_id, message_id);
+    return storage_->GetHistoryEntry(topic_id, message_id);
   }
 
-  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t const page_index, size_t const page_size) const
+  [[nodiscard]] auto GetHistoryPage(TopicID const& topic_id, size_t const page_index, size_t const page_size) const
       -> HistoryPage {
-    return storage_->GetHistoryPage(peer_id, page_index, page_size);
+    return storage_->GetHistoryPage(topic_id, page_index, page_size);
   }
 
-  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
+  [[nodiscard]] auto GetFullMessageContent(TopicID const& topic_id, std::uint64_t message_id) const
       -> std::optional<std::string> {
-    return storage_->GetFullMessageContent(peer_id, message_id);
+    return storage_->GetFullMessageContent(topic_id, message_id);
   }
 
-  [[nodiscard]] auto GetChatSummaries(std::vector<std::string> const& peer_ids_str) const -> std::vector<ChatSummary> {
-    std::vector<ContactID> peer_ids;
-    peer_ids.reserve(peer_ids_str.size());
-    for (auto const& peer_id : peer_ids_str) {
-      peer_ids.emplace_back(peer_id);
+  [[nodiscard]] auto GetChatSummaries(std::vector<std::string> const& topic_ids_str) const -> std::vector<ChatSummary> {
+    std::vector<TopicID> topic_ids;
+    topic_ids.reserve(topic_ids_str.size());
+    for (auto const& topic_id : topic_ids_str) {
+      topic_ids.emplace_back(topic_id);
     }
-    return storage_->GetChatSummaries(peer_ids);
+    return storage_->GetChatSummaries(topic_ids);
   }
 
-  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const -> std::vector<ChatSummary> {
-    return storage_->GetChatSummaries(peer_ids);
+  [[nodiscard]] auto GetChatSummaries(std::vector<TopicID> const& topic_ids) const -> std::vector<ChatSummary> {
+    return storage_->GetChatSummaries(topic_ids);
   }
 
-  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
+  [[nodiscard]] auto SearchMessages(TopicID const& topic_id, std::string const& query) const
       -> std::vector<HistoryEntryRecord> {
-    return storage_->SearchMessages(peer_id, query);
+    return storage_->SearchMessages(topic_id, query);
   }
 
   [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<HistoryEntryRecord> {

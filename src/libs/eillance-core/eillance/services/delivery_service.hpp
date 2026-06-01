@@ -210,21 +210,21 @@ class DeliveryService {
       }
     }
 
-    auto const sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    auto const sending_msgs = storage_->GetMessagesWithStatus(TopicID(peer_id), messaging::MessageStatus::sending);
     if (std::ranges::any_of(sending_msgs, [](auto const& msg) {
           return msg.kind != messaging::HistoryEntryKind::systemMessage;
         })) {
       return true;
     }
 
-    auto const attachments = storage_->GetPendingAttachments(peer_id);
+    auto const attachments = storage_->GetPendingAttachments(TopicID(peer_id));
     return std::ranges::any_of(attachments, [](auto const& att) {
       return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
     });
   }
 
   [[nodiscard]] auto CheckIfUnreachable(ContactID const& peer_id) const -> bool {
-    auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    auto sending_msgs = storage_->GetMessagesWithStatus(TopicID(peer_id), messaging::MessageStatus::sending);
     std::erase_if(sending_msgs, [](auto const& msg) -> bool {
       return msg.kind == messaging::HistoryEntryKind::systemMessage;
     });

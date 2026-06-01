@@ -152,29 +152,29 @@ class PersistentStorage {
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const {
     pimpl_->UpdateHistoryEntry(entry);
   }
-  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) const {
-    pimpl_->UpdateMessageStatus(peer_id, message_id, new_status);
+  void UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) const {
+    pimpl_->UpdateMessageStatus(topic_id, message_id, new_status);
   }
   void UpdateMessageStatuses(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       std::vector<uint64_t> const& message_ids,
       messaging::MessageStatus new_status
   ) const {
-    pimpl_->UpdateMessageStatuses(peer_id, message_ids, new_status);
+    pimpl_->UpdateMessageStatuses(topic_id, message_ids, new_status);
   }
-  virtual void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) {
-    pimpl_->UpdateMessageContent(peer_id, message_id, new_content);
+  virtual void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) {
+    pimpl_->UpdateMessageContent(topic_id, message_id, new_content);
   };
-  virtual void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) {
-    pimpl_->MarkMessageDeleted(peer_id, message_id);
+  virtual void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) {
+    pimpl_->MarkMessageDeleted(topic_id, message_id);
   }
   virtual void ToggleReaction(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
   ) {
-    pimpl_->ToggleReaction(peer_id, message_id, author_id, reaction);
+    pimpl_->ToggleReaction(topic_id, message_id, author_id, reaction);
   }
   void UpdateAttachmentStatus(
       std::string const& attachment_id,
@@ -186,36 +186,36 @@ class PersistentStorage {
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const {
     return pimpl_->GetAttachment(attachment_id);
   }
-  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const {
-    return pimpl_->GetDownloadedAttachments(peer_id);
+  [[nodiscard]] auto GetDownloadedAttachments(TopicID const& topic_id) const {
+    return pimpl_->GetDownloadedAttachments(topic_id);
   }
-  [[nodiscard]] auto GetAllAttachments(ContactID const& peer_id) const {
-    return pimpl_->GetAllAttachments(peer_id);
+  [[nodiscard]] auto GetAllAttachments(TopicID const& topic_id) const {
+    return pimpl_->GetAllAttachments(topic_id);
   }
-  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size) const {
-    return pimpl_->GetHistoryPage(peer_id, page_index, page_size);
+  [[nodiscard]] auto GetHistoryPage(TopicID const& topic_id, size_t page_index, size_t page_size) const {
+    return pimpl_->GetHistoryPage(topic_id, page_index, page_size);
   }
-  [[nodiscard]] auto GetHistoryEntry(ContactID const& peer_id, uint64_t const message_id) const
+  [[nodiscard]] auto GetHistoryEntry(TopicID const& topic_id, uint64_t const message_id) const
       -> std::optional<messaging::HistoryEntryRecord> {
-    return pimpl_->GetHistoryEntry(peer_id, message_id);
+    return pimpl_->GetHistoryEntry(topic_id, message_id);
   }
 
-  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const {
-    return pimpl_->GetFullMessageContent(peer_id, message_id);
+  [[nodiscard]] auto GetFullMessageContent(TopicID const& topic_id, std::uint64_t message_id) const {
+    return pimpl_->GetFullMessageContent(topic_id, message_id);
   }
-  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const {
-    return pimpl_->GetChatSummaries(peer_ids);
+  [[nodiscard]] auto GetChatSummaries(std::vector<TopicID> const& topic_ids) const {
+    return pimpl_->GetChatSummaries(topic_ids);
   }
-  [[nodiscard]] auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status) const {
-    return pimpl_->GetMessagesWithStatus(peer_id, status);
+  [[nodiscard]] auto GetMessagesWithStatus(TopicID const& topic_id, messaging::MessageStatus status) const {
+    return pimpl_->GetMessagesWithStatus(topic_id, status);
   }
-  [[nodiscard]] auto GetPendingAttachments(ContactID const& peer_id) const {
-    return pimpl_->GetPendingAttachments(peer_id);
+  [[nodiscard]] auto GetPendingAttachments(TopicID const& topic_id) const {
+    return pimpl_->GetPendingAttachments(topic_id);
   }
 
   // --- Search ---
-  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const {
-    return pimpl_->SearchMessages(peer_id, query);
+  [[nodiscard]] auto SearchMessages(TopicID const& topic_id, std::string const& query) const {
+    return pimpl_->SearchMessages(topic_id, query);
   }
   [[nodiscard]] auto SearchAllMessages(std::string const& query) const {
     return pimpl_->SearchAllMessages(query);

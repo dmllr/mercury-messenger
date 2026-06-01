@@ -554,7 +554,7 @@ class MediaCallService {
 
       if (current_call_->peer_id == peer_id) {
         messaging::CallEntryParams const params{
-            .peer_id = peer_id,
+            .topic_id = TopicID(peer_id),
             .kind = current_call_->is_video ? messaging::HistoryEntryKind::videoCall
                                             : messaging::HistoryEntryKind::voiceCall,
             .direction =

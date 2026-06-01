@@ -14,7 +14,7 @@ Java_hela_eillance_viewmodels_ConversationViewModel_nativeCreate(JNIEnv* env, jo
     return 0;
   }
   char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  auto* vm = new eillance::view_model::ConversationViewModel(eillance::ContactID(chars), g_clientEngine->GetClient());
+  auto* vm = new eillance::view_model::ConversationViewModel(eillance::TopicID(chars), g_clientEngine->GetClient());
   env->ReleaseStringUTFChars(peer_id, chars);
 
   return reinterpret_cast<jlong>(vm);
@@ -368,7 +368,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
   char const* p_chars = env->GetStringUTFChars(peer_id, nullptr);
   char const* q_chars = env->GetStringUTFChars(query, nullptr);
 
-  eillance::ContactID const pid(p_chars);
+  eillance::TopicID const pid(p_chars);
   auto messages = g_clientEngine->GetClient()->SearchMessages(pid, q_chars);
 
   env->ReleaseStringUTFChars(peer_id, p_chars);

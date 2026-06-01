@@ -49,8 +49,8 @@ class ContactsViewModel {
     return impl_->GetContacts();
   }
 
-  [[nodiscard]] auto GetUnreadMessages(ContactID const& peer_id) const -> std::vector<messaging::HistoryEntryRecord> {
-    return impl_->client->GetUnreadMessages(peer_id);
+  [[nodiscard]] auto GetUnreadMessages(TopicID const& topic_id) const -> std::vector<messaging::HistoryEntryRecord> {
+    return impl_->client->GetUnreadMessages(topic_id);
   }
 
   // Actions
@@ -79,8 +79,8 @@ class ContactsViewModel {
   auto GenerateContactToken() -> std::vector<std::byte> {
     return impl_->client->GenerateContactToken();
   }
-  void MarkAllAsRead(ContactID const& peer_id) {
-    impl_->MarkAllAsRead(peer_id);
+  void MarkAllAsRead(TopicID const& topic_id) {
+    impl_->MarkAllAsRead(topic_id);
   }
 
   auto GetGroupMembers(std::string const& group_id) -> std::vector<identity::GroupMember> {
@@ -93,7 +93,10 @@ class ContactsViewModel {
     return impl_->client->RemoveGroupMember(GroupID(group_id), ContactID(contact_id));
   }
   void LeaveGroup(std::string const& group_id) {
-    impl_->client->LeaveGroup(GroupID(group_id));
+    impl_->LeaveGroup(GroupID(group_id));
+  }
+  void UnsubscribeChannel(std::string const& channel_id) {
+    impl_->UnsubscribeChannel(ChannelID(channel_id));
   }
 
  private:
@@ -134,6 +137,20 @@ class ContactsViewModel {
       }).detach();
     }
 
+    void LeaveGroup(GroupID const& group_id) {
+      std::thread([self = shared_from_this(), group_id]() {
+        self->client->LeaveGroup(group_id);
+        self->DoUpdateContactsList();
+      }).detach();
+    }
+
+    void UnsubscribeChannel(ChannelID const& channel_id) {
+      std::thread([self = shared_from_this(), channel_id]() {
+        self->client->UnsubscribeChannel(channel_id);
+        self->DoUpdateContactsList();
+      }).detach();
+    }
+
     void UnblockContact(ContactID const& peer_id) {
       std::thread([self = shared_from_this(), peer_id]() { self->client->UnblockContact(peer_id); }).detach();
     }
@@ -156,16 +173,16 @@ class ContactsViewModel {
       }).detach();
     }
 
-    void MarkAllAsRead(ContactID const& peer_id) {
-      std::thread([self = shared_from_this(), peer_id]() {
-        auto unread = self->client->GetUnreadMessages(peer_id);
+    void MarkAllAsRead(TopicID const& topic_id) {
+      std::thread([self = shared_from_this(), topic_id]() {
+        auto unread = self->client->GetUnreadMessages(topic_id);
         std::vector<std::uint64_t> ids;
         ids.reserve(unread.size());
         for (auto const& msg : unread) {
           ids.push_back(msg.id);
         }
         if (!ids.empty()) {
-          self->client->MarkMessagesAsRead(peer_id, ids);
+          self->client->MarkMessagesAsRead(topic_id, ids);
           self->DoUpdateContactsList();
         }
       }).detach();
@@ -180,8 +197,8 @@ class ContactsViewModel {
       {
         auto const contacts_from_manager = client->GetContacts();
         temp_contacts.reserve(contacts_from_manager.size());
-        std::vector<ContactID> contact_ids;
-        contact_ids.reserve(contacts_from_manager.size());
+        std::vector<TopicID> topic_ids;
+        topic_ids.reserve(contacts_from_manager.size());
 
         for (auto const& contact : contacts_from_manager) {
           std::string display_name;
@@ -192,7 +209,7 @@ class ContactsViewModel {
           }
 
           temp_contacts.push_back(
-              {.peer_id = contact.peer_id,
+              {.topic_id = TopicID(contact.peer_id),
                .display_name = display_name,
                .bio = contact.bio,
                .photo = contact.photo_base64,
@@ -206,12 +223,12 @@ class ContactsViewModel {
                .is_read_only = false,
                .owner_id = std::nullopt}
           );
-          contact_ids.push_back(contact.peer_id);
+          topic_ids.push_back(TopicID(contact.peer_id));
         }
 
         for (auto const& group : client->GetGroups()) {
           temp_contacts.push_back(
-              {.peer_id = group.id.AsContactID(),
+              {.topic_id = TopicID(group.id),
                .display_name = group.name,
                .bio = "Group Chat",
                .photo = std::nullopt,
@@ -225,7 +242,7 @@ class ContactsViewModel {
                .is_read_only = false,
                .owner_id = group.owner_id}
           );
-          contact_ids.push_back(group.id.AsContactID());
+          topic_ids.push_back(TopicID(group.id));
         }
 
         for (auto const& channel : client->GetChannels()) {
@@ -239,7 +256,7 @@ class ContactsViewModel {
             }
           }
           temp_contacts.push_back(
-              {.peer_id = channel.id.AsContactID(),
+              {.topic_id = TopicID(channel.id),
                .display_name = channel.name,
                .bio = "Channel",
                .photo = std::nullopt,
@@ -253,18 +270,18 @@ class ContactsViewModel {
                .is_read_only = is_read_only,
                .owner_id = channel.owner_id}
           );
-          contact_ids.push_back(channel.id.AsContactID());
+          topic_ids.push_back(TopicID(channel.id));
         }
 
-        auto const chat_summaries = client->GetChatSummaries(contact_ids);
-        std::unordered_map<ContactID, messaging::ChatSummary> chat_map;
+        auto const chat_summaries = client->GetChatSummaries(topic_ids);
+        std::unordered_map<TopicID, messaging::ChatSummary> chat_map;
         for (auto const& chat : chat_summaries) {
-          chat_map[chat.peer_id] = chat;
+          chat_map[chat.topic_id] = chat;
         }
 
         for (auto& contact : temp_contacts) {
-          if (chat_map.contains(contact.peer_id)) {
-            auto const& summary = chat_map.at(contact.peer_id);
+          if (chat_map.contains(contact.topic_id)) {
+            auto const& summary = chat_map.at(contact.topic_id);
             contact.unread_count = summary.unread_count;
             contact.last_activity_timestamp = summary.last_message.timestamp;
 
@@ -294,7 +311,7 @@ class ContactsViewModel {
       {
         std::lock_guard<std::mutex> const lock(mutex);
         for (auto& contact : contacts) {
-          if (contact.peer_id == peer_id) {
+          if (contact.topic_id == TopicID(peer_id)) {
             if (contact.connection_state != state) {
               contact.connection_state = state;
               changed = true;

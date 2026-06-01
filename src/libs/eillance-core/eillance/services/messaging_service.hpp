@@ -114,11 +114,12 @@ class MessagingService {
         std::lock_guard<std::mutex> const lock(sync_state_mutex_);
         is_syncing_[e.peer_id] = e.is_syncing;
         if (!e.is_syncing) {
-          if (pending_delivery_receipts_.contains(e.peer_id) && !pending_delivery_receipts_[e.peer_id].empty()) {
+          TopicID const topic_id(e.peer_id);
+          if (pending_delivery_receipts_.contains(topic_id) && !pending_delivery_receipts_[topic_id].empty()) {
             if (!delivery_receipts_debounce_active_[e.peer_id]) {
               delivery_receipts_debounce_active_[e.peer_id] = true;
-              bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, peer_id = e.peer_id]() {
-                FlushDeliveryReceipts(peer_id);
+              bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, topic_id]() {
+                FlushDeliveryReceipts(topic_id);
               });
             }
           }
@@ -135,7 +136,7 @@ class MessagingService {
 
       if ((evaluate_unread || evaluate_missed_calls) && !sm_->is_foreground) {
         bg_queue_.Dispatch([this, peer_id = e.peer_id, evaluate_unread, evaluate_missed_calls]() {
-          EvaluateNotifications(peer_id, evaluate_unread, evaluate_missed_calls);
+          EvaluateNotifications(TopicID(peer_id), evaluate_unread, evaluate_missed_calls);
         });
       }
     }));
@@ -153,14 +154,12 @@ class MessagingService {
       std::vector<messaging::AttachmentRequest> const& attachments = {},
       std::uint64_t reply_to_id = 0
   ) -> messaging::HistoryEntryRecord {
-    auto group = sm_->group_manager->GetGroup(topic_id.AsGroupID());
-    auto channel = sm_->channel_manager->GetChannel(topic_id.AsChannelID());
-    if (!group && !channel && !contact_manager_->GetContact(topic_id.AsContactID())) {
+    auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+    auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()));
+    if (!group && !channel && !contact_manager_->GetContact(ContactID(topic_id.Span()))) {
       LGE << "Cannot send message. Topic not found.";
       return {};
     }
-
-    ContactID const pseudo_peer_id = topic_id.AsContactID();
 
     std::filesystem::path const storage_root(storage_->GetPath());
     std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
@@ -250,7 +249,7 @@ class MessagingService {
     }
 
     auto entry = history_->AddTextEntry(
-        {.peer_id = pseudo_peer_id,
+        {.topic_id = topic_id,
          .content = message,
          .attachments = domain_attachments,
          .direction = messaging::MessageDirection::sent,
@@ -294,34 +293,34 @@ class MessagingService {
     sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, json_msg);
 
     for (auto const& att : domain_attachments) {
-      sm_->file_transfer->QueueUpload(pseudo_peer_id, att);
+      sm_->file_transfer->QueueUpload(ContactID(topic_id.Span()), att);
     }
 
-    EventQueue::Instance().Push(EventMessageUpdated{pseudo_peer_id, entry.id});
+    EventQueue::Instance().Push(EventMessageUpdated{topic_id, entry.id});
 
     return entry;
   }
 
-  void SendDeleteMessage(ContactID const& peer_id, std::uint64_t message_id) {
-    history_->MarkMessageDeleted(peer_id, message_id);
+  void SendDeleteMessage(TopicID const& topic_id, std::uint64_t message_id) {
+    history_->MarkMessageDeleted(topic_id, message_id);
 
     Json const action = {{"type", "message_delete"}, {"target_id", message_id}};
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::MessageDelete, action);
-    EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
+    sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::MessageDelete, action);
+    EventQueue::Instance().Push(EventMessageUpdated{topic_id, message_id});
   }
 
-  void SendEditMessage(ContactID const& peer_id, std::uint64_t message_id, std::string const& new_content) {
-    history_->UpdateMessageContent(peer_id, message_id, new_content);
+  void SendEditMessage(TopicID const& topic_id, std::uint64_t message_id, std::string const& new_content) {
+    history_->UpdateMessageContent(topic_id, message_id, new_content);
 
     Json const action = {{"type", "message_edit"}, {"target_id", message_id}, {"content", new_content}};
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::MessageEdit, action);
-    EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
+    sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::MessageEdit, action);
+    EventQueue::Instance().Push(EventMessageUpdated{topic_id, message_id});
   }
 
-  void SendReaction(ContactID const& peer_id, std::uint64_t message_id, messaging::Reaction reaction) {
-    history_->ToggleReaction(peer_id, message_id, sm_->account->GetId(), reaction);
+  void SendReaction(TopicID const& topic_id, std::uint64_t message_id, messaging::Reaction reaction) {
+    history_->ToggleReaction(topic_id, message_id, sm_->account->GetId(), reaction);
 
     Json const action = {
         {"type", "message_reaction"},
@@ -329,19 +328,19 @@ class MessagingService {
         {"reaction", static_cast<int>(reaction)}
     };
 
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Reaction, action);
-    EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
+    sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Reaction, action);
+    EventQueue::Instance().Push(EventMessageUpdated{topic_id, message_id});
   }
 
-  void SendSystemMessage(ContactID const& peer_id, std::string const& content, bool persist) {
+  void SendSystemMessage(TopicID const& topic_id, std::string const& content, bool persist) {
     auto const entry = history_->AddTextEntry(
-        {.peer_id = peer_id,
+        {.topic_id = topic_id,
          .content = content,
          .direction = messaging::MessageDirection::sent,
          .kind = messaging::HistoryEntryKind::systemMessage}
     );
 
-    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, entry});
 
     if (persist) {
       Json const action_payload = {
@@ -351,20 +350,20 @@ class MessagingService {
           {"is_system", true},
           {"payload", {{"c", content}, {"v", protocolVersion}}}
       };
-      sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, action_payload);
+      sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, action_payload);
     }
   }
 
   void CancelTransfer(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       std::string const& attachment_id,
       bool const is_upload,
       bool const notify_peer = true
   ) const {
-    sm_->file_transfer->CancelTransfer(peer_id, attachment_id, is_upload, notify_peer);
+    sm_->file_transfer->CancelTransfer(ContactID(topic_id.Span()), attachment_id, is_upload, notify_peer);
 
     if (is_upload) {
-      auto const sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+      auto const sending_msgs = storage_->GetMessagesWithStatus(topic_id, messaging::MessageStatus::sending);
       for (auto const& entry : sending_msgs) {
         if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
           continue;
@@ -384,20 +383,20 @@ class MessagingService {
           }
         }
         if (contains_attachment && !has_other_content) {
-          history_->UpdateMessageStatus(peer_id, entry.id, messaging::MessageStatus::none);
+          history_->UpdateMessageStatus(topic_id, entry.id, messaging::MessageStatus::none);
           break;
         }
       }
     }
   }
 
-  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
-    sm_->file_transfer->ResumeTransfer(peer_id, attachment_id, is_upload);
-    sm_->sync_engine->ProposeSync(TopicID(peer_id), peer_id);
+  void ResumeTransfer(TopicID const& topic_id, std::string const& attachment_id, bool const is_upload) {
+    sm_->file_transfer->ResumeTransfer(ContactID(topic_id.Span()), attachment_id, is_upload);
+    sm_->sync_engine->ProposeSync(topic_id, ContactID(topic_id.Span()));
   }
 
-  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
-    sm_->file_transfer->DiscardAttachment(peer_id, attachment_id);
+  void DiscardAttachment(TopicID const& topic_id, std::string const& attachment_id) {
+    sm_->file_transfer->DiscardAttachment(ContactID(topic_id.Span()), attachment_id);
     auto const attachment = storage_->GetAttachment(attachment_id);
     bool should_send_cancel = true;
     if (attachment) {
@@ -410,30 +409,30 @@ class MessagingService {
 
     if (should_send_cancel) {
       Json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
-      sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, cancel_msg);
+      sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, cancel_msg);
     }
   }
 
-  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const
+  [[nodiscard]] auto GetDownloadedAttachments(TopicID const& topic_id) const
       -> std::vector<messaging::AttachmentRecord> {
-    return storage_->GetDownloadedAttachments(peer_id);
+    return storage_->GetDownloadedAttachments(topic_id);
   }
 
-  void DeleteAttachmentLocal(ContactID const& peer_id, std::string const& attachment_id) const {
+  void DeleteAttachmentLocal(TopicID const& topic_id, std::string const& attachment_id) const {
     auto att = storage_->GetAttachment(attachment_id);
     if (att && att->is_downloaded) {
       std::error_code ec;
       std::filesystem::remove(att->file_path, ec);
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
       EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{peer_id, attachment_id, messaging::AttachmentStatus::discarded}
+          EventAttachmentStatusChanged{topic_id, attachment_id, messaging::AttachmentStatus::discarded}
       );
     }
   }
 
-  [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t const page_size) const
+  [[nodiscard]] auto GetHistoryPage(TopicID const& topic_id, size_t page_index, size_t const page_size) const
       -> messaging::HistoryPage {
-    auto page = history_->GetHistoryPage(peer_id, page_index, page_size);
+    auto page = history_->GetHistoryPage(topic_id, page_index, page_size);
     std::erase_if(page.messages, [](auto const& entry) {
       if (entry.status == messaging::MessageStatus::none && entry.kind != messaging::HistoryEntryKind::systemMessage &&
           entry.kind != messaging::HistoryEntryKind::voiceCall &&
@@ -481,18 +480,18 @@ class MessagingService {
     return page;
   }
 
-  [[nodiscard]] auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id) const
+  [[nodiscard]] auto GetFullMessageContent(TopicID const& topic_id, std::uint64_t message_id) const
       -> std::optional<std::string> {
-    return history_->GetFullMessageContent(peer_id, message_id);
+    return history_->GetFullMessageContent(topic_id, message_id);
   }
 
-  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const
+  [[nodiscard]] auto GetChatSummaries(std::vector<TopicID> const& topic_ids) const
       -> std::vector<messaging::ChatSummary> {
-    return history_->GetChatSummaries(peer_ids);
+    return history_->GetChatSummaries(topic_ids);
   }
 
-  [[nodiscard]] auto GetUnreadMessages(ContactID const& peer_id) const -> std::vector<messaging::HistoryEntryRecord> {
-    auto messages = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::delivered);
+  [[nodiscard]] auto GetUnreadMessages(TopicID const& topic_id) const -> std::vector<messaging::HistoryEntryRecord> {
+    auto messages = storage_->GetMessagesWithStatus(topic_id, messaging::MessageStatus::delivered);
     std::erase_if(messages, [](auto const& msg) -> bool {
       return msg.direction != messaging::MessageDirection::received;
     });
@@ -500,35 +499,34 @@ class MessagingService {
     return messages;
   }
 
-  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
+  [[nodiscard]] auto SearchMessages(TopicID const& topic_id, std::string const& query) const
       -> std::vector<messaging::HistoryEntryRecord> {
-    return history_->SearchMessages(peer_id, query);
+    return history_->SearchMessages(topic_id, query);
   }
 
   [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<messaging::HistoryEntryRecord> {
     return history_->SearchAllMessages(query);
   }
 
-  void MarkMessagesAsRead(ContactID const& peer_id, std::vector<std::uint64_t> const& message_ids) {
-    history_->MarkMessagesAsRead(peer_id, message_ids);
+  void MarkMessagesAsRead(TopicID const& topic_id, std::vector<std::uint64_t> const& message_ids) {
+    history_->MarkMessagesAsRead(topic_id, message_ids);
     if (message_ids.empty()) {
       return;
     }
     Json const msg = {{"type", "message_read"}, {"message_ids", message_ids}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, msg);
+    sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, msg);
   }
 
   // --- Read Model Projections ---
   void ProjectMessage(messaging::LedgerEntry const& entry, Json const& json, bool is_mine, bool is_synced = false) {
     TopicID const topic_id = entry.topic_id;
-    ContactID const pseudo_peer_id = topic_id.AsContactID();
 
-    auto group = sm_->group_manager->GetGroup(topic_id.AsGroupID());
-    auto channel = sm_->channel_manager->GetChannel(topic_id.AsChannelID());
-    if (!group && !channel && !contact_manager_->GetContact(pseudo_peer_id)) {
-      contact_manager_->AddContact(pseudo_peer_id);
-      contact_manager_->MarkAsConfirmed(pseudo_peer_id);
-      EventQueue::Instance().Push(EventContactRestored{pseudo_peer_id});
+    auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+    auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()));
+    if (!group && !channel && !contact_manager_->GetContact(ContactID(topic_id.Span()))) {
+      contact_manager_->AddContact(ContactID(topic_id.Span()));
+      contact_manager_->MarkAsConfirmed(ContactID(topic_id.Span()));
+      EventQueue::Instance().Push(EventContactRestored{ContactID(topic_id.Span())});
     }
 
     if (channel) {
@@ -557,7 +555,7 @@ class MessagingService {
         target_ids.push_back(json.value("message_id", 0ULL));
       }
       for (auto target_id : target_ids) {
-        history_->UpdateMessageStatus(pseudo_peer_id, target_id, messaging::MessageStatus::read);
+        history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::read);
       }
       return;
     }
@@ -586,19 +584,19 @@ class MessagingService {
       }
 
       for (auto const target_id : target_ids) {
-        if (auto current_entry = history_->GetHistoryEntry(pseudo_peer_id, target_id)) {
+        if (auto current_entry = history_->GetHistoryEntry(topic_id, target_id)) {
           if (current_entry->status == messaging::MessageStatus::read &&
               msg_status == messaging::MessageStatus::delivered) {
             continue;
           }
-          history_->UpdateMessageStatus(pseudo_peer_id, target_id, msg_status);
+          history_->UpdateMessageStatus(topic_id, target_id, msg_status);
         }
       }
       return;
     }
 
     if (type == "file_cancel") {
-      sm_->file_transfer->HandleCancel(pseudo_peer_id, json.value("file_id", ""));
+      sm_->file_transfer->HandleCancel(ContactID(topic_id.Span()), json.value("file_id", ""));
       return;
     }
 
@@ -655,7 +653,7 @@ class MessagingService {
     }
 
     auto db_entry = history_->AddTextEntry(
-        {.peer_id = pseudo_peer_id,
+        {.topic_id = topic_id,
          .content = content,
          .attachments = attachments,
          .direction = is_mine ? messaging::MessageDirection::sent : messaging::MessageDirection::received,
@@ -666,7 +664,7 @@ class MessagingService {
     );
 
     if (is_mine) {
-      history_->UpdateMessageStatus(pseudo_peer_id, message_id, messaging::MessageStatus::delivered);
+      history_->UpdateMessageStatus(topic_id, message_id, messaging::MessageStatus::delivered);
       db_entry.status = messaging::MessageStatus::delivered;
     }
 
@@ -678,59 +676,59 @@ class MessagingService {
       }
     }
 
-    EventQueue::Instance().Push(EventChatMessageReceived{pseudo_peer_id, db_entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, db_entry});
 
     if (!is_mine) {
-      QueueDeliveryReceipt(pseudo_peer_id, message_id);
+      QueueDeliveryReceipt(topic_id, message_id);
 
       if (!is_system) {
         bool should_evaluate_now = false;
         {
           std::lock_guard<std::mutex> const lock(sync_state_mutex_);
-          if (!is_syncing_[pseudo_peer_id]) {
+          if (!is_syncing_[ContactID(topic_id.Span())]) {
             should_evaluate_now = true;
           } else {
-            unread_evaluation_needed_[pseudo_peer_id] = true;
+            unread_evaluation_needed_[ContactID(topic_id.Span())] = true;
           }
         }
         if (should_evaluate_now && !sm_->is_foreground) {
-          bg_queue_.Dispatch([this, pseudo_peer_id]() { EvaluateNotifications(pseudo_peer_id, true, false); });
+          bg_queue_.Dispatch([this, topic_id]() { EvaluateNotifications(topic_id, true, false); });
         }
       }
     }
   }
 
   void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    ContactID const peer_id = entry.topic_id.AsContactID();
+    TopicID const topic_id = entry.topic_id;
     uint64_t const target_id = json.value("target_id", 0ULL);
     std::string const content = json.value("content", "");
-    if (history_->GetHistoryEntry(peer_id, target_id)) {
-      history_->UpdateMessageContent(peer_id, target_id, content);
-      EventQueue::Instance().Push(EventMessageUpdated{peer_id, target_id});
+    if (history_->GetHistoryEntry(topic_id, target_id)) {
+      history_->UpdateMessageContent(topic_id, target_id, content);
+      EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
   }
 
   void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    ContactID const peer_id = entry.topic_id.AsContactID();
+    TopicID const topic_id = entry.topic_id;
     uint64_t const target_id = json.value("target_id", 0ULL);
-    if (history_->GetHistoryEntry(peer_id, target_id)) {
-      history_->MarkMessageDeleted(peer_id, target_id);
-      EventQueue::Instance().Push(EventMessageUpdated{peer_id, target_id});
+    if (history_->GetHistoryEntry(topic_id, target_id)) {
+      history_->MarkMessageDeleted(topic_id, target_id);
+      EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
   }
 
   void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    ContactID const peer_id = entry.topic_id.AsContactID();
+    TopicID const topic_id = entry.topic_id;
     uint64_t const target_id = json.value("target_id", 0ULL);
     auto const reaction = static_cast<messaging::Reaction>(json.value("reaction", 0));
-    if (history_->GetHistoryEntry(peer_id, target_id)) {
-      history_->ToggleReaction(peer_id, target_id, entry.author_id, reaction);
-      EventQueue::Instance().Push(EventMessageUpdated{peer_id, target_id});
+    if (history_->GetHistoryEntry(topic_id, target_id)) {
+      history_->ToggleReaction(topic_id, target_id, entry.author_id, reaction);
+      EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
   }
 
   void ProjectCallLog(messaging::LedgerEntry const& entry, Json const& json, bool is_mine, bool is_synced = false) {
-    ContactID const peer_id = entry.topic_id.AsContactID();
+    TopicID const topic_id = entry.topic_id;
 
     auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
     if (ledger_ts < 10000000000ULL) {
@@ -742,7 +740,7 @@ class MessagingService {
     uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
 
     // Simple deduplication for recent call logs to prevent double-entry for answered calls
-    auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, 10);
+    auto [messages, total_messages] = history_->GetHistoryPage(topic_id, 0, 10);
     for (auto const& msg : messages) {
       if (msg.kind == messaging::HistoryEntryKind::voiceCall || msg.kind == messaging::HistoryEntryKind::videoCall) {
         if (abs(static_cast<std::int64_t>(msg.timestamp - msg_timestamp)) < 30000000ULL) {
@@ -752,7 +750,7 @@ class MessagingService {
     }
 
     messaging::CallEntryParams const params{
-        .peer_id = peer_id,
+        .topic_id = topic_id,
         .kind = json.value("is_video", false) ? messaging::HistoryEntryKind::videoCall
                                               : messaging::HistoryEntryKind::voiceCall,
         .direction = is_mine ? messaging::CallDirection::outgoing : messaging::CallDirection::incoming,
@@ -762,20 +760,20 @@ class MessagingService {
         .timestamp = msg_timestamp
     };
     auto const db_entry = history_->AddCallEntry(params);
-    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, db_entry});
 
     if (!is_mine && params.status == messaging::CallStatus::missed) {
       bool should_evaluate_now = false;
       {
         std::lock_guard<std::mutex> const lock(sync_state_mutex_);
-        if (!is_syncing_[peer_id]) {
+        if (!is_syncing_[ContactID(topic_id.Span())]) {
           should_evaluate_now = true;
         } else {
-          missed_call_evaluation_needed_[peer_id] = true;
+          missed_call_evaluation_needed_[ContactID(topic_id.Span())] = true;
         }
       }
       if (should_evaluate_now && !sm_->is_foreground) {
-        bg_queue_.Dispatch([this, peer_id]() { EvaluateNotifications(peer_id, false, true); });
+        bg_queue_.Dispatch([this, topic_id]() { EvaluateNotifications(topic_id, false, true); });
       }
     }
   }
@@ -789,34 +787,35 @@ class MessagingService {
           {"call_status", static_cast<int>(params.status)},
           {"timestamp", entry.timestamp}
       };
-      sm_->sync_engine->AppendAction(TopicID(params.peer_id), messaging::LedgerActionType::CallLog, payload);
+      sm_->sync_engine->AppendAction(params.topic_id, messaging::LedgerActionType::CallLog, payload);
     }
-    EventQueue::Instance().Push(EventChatMessageReceived{params.peer_id, entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{params.topic_id, entry});
   }
 
   void
-  AddSystemEntry(ContactID const& peer_id, std::string const& content, messaging::MessageDirection const direction) {
+  AddSystemEntry(TopicID const& topic_id, std::string const& content, messaging::MessageDirection const direction) {
     auto const entry = history_->AddTextEntry(
-        {.peer_id = peer_id,
+        {.topic_id = topic_id,
          .content = content,
          .direction = direction,
          .kind = messaging::HistoryEntryKind::systemMessage}
     );
-    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, entry});
   }
 
   void AddCallEntry(messaging::CallEntryParams const& params) {
     auto const entry = history_->AddCallEntry(params);
-    EventQueue::Instance().Push(EventChatMessageReceived{params.peer_id, entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{params.topic_id, entry});
   }
 
   void OnChatMessageReceived(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       Json const& payload,
       uint64_t message_id,
       bool is_system,
       std::vector<messaging::Attachment> const& attachments = {}
   ) {
+    ContactID peer_id(topic_id.Span());
     auto peer = transport_->GetPeer(peer_id);
     if (!peer || !peer->session_cipher->IsReady()) {
       return;
@@ -833,10 +832,10 @@ class MessagingService {
 
     {
       constexpr auto page_size = 50U;
-      auto [messages, total_messages] = history_->GetHistoryPage(peer_id, 0, page_size);
+      auto [messages, total_messages] = history_->GetHistoryPage(topic_id, 0, page_size);
       for (auto const& h_entry : messages) {
         if (h_entry.id == message_id) {
-          QueueDeliveryReceipt(peer_id, message_id);
+          QueueDeliveryReceipt(topic_id, message_id);
           return;
         }
       }
@@ -851,13 +850,13 @@ class MessagingService {
     } catch (std::exception const&) {
       Json const error_json = {{"action", "unsupported_format"}};
       auto entry = history_->AddTextEntry(
-          {.peer_id = peer_id,
+          {.topic_id = topic_id,
            .content = error_json.dump(),
            .direction = messaging::MessageDirection::received,
            .kind = messaging::HistoryEntryKind::systemMessage}
       );
-      QueueDeliveryReceipt(peer_id, message_id);
-      EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
+      QueueDeliveryReceipt(topic_id, message_id);
+      EventQueue::Instance().Push(EventChatMessageReceived{topic_id, entry});
       return;
     }
 
@@ -888,7 +887,7 @@ class MessagingService {
     }
 
     auto entry = history_->AddTextEntry(
-        {.peer_id = peer_id,
+        {.topic_id = topic_id,
          .content = content,
          .attachments = local_attachments,
          .direction = messaging::MessageDirection::received,
@@ -899,18 +898,18 @@ class MessagingService {
 
     if (!local_attachments.empty()) {
       for (auto const& att : local_attachments) {
-        sm_->file_transfer->QueueDownload(peer_id, att, entry.id);
+        sm_->file_transfer->QueueDownload(ContactID(topic_id.Span()), att, entry.id);
       }
     }
 
-    QueueDeliveryReceipt(peer_id, message_id);
+    QueueDeliveryReceipt(topic_id, message_id);
 
-    EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
+    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, entry});
     if (!is_system && !sm_->is_foreground) {
-      auto contact = contact_manager_->GetContact(peer_id);
+      auto contact = contact_manager_->GetContact(ContactID(topic_id.Span()));
       std::string const name =
-          contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
-      auto unread = GetUnreadMessages(peer_id);
+          contact && contact->display_name ? *contact->display_name : topic_id.ToString().substr(0, 8);
+      auto unread = GetUnreadMessages(topic_id);
       std::erase_if(unread, [](auto const& msg) -> bool {
         if (msg.kind == messaging::HistoryEntryKind::systemMessage) {
           return true;
@@ -921,21 +920,26 @@ class MessagingService {
         return false;
       });
       if (!unread.empty()) {
-        EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id, name, std::move(unread)});
+        EventQueue::Instance().Push(EventNotifyNewMessage{topic_id, entry.id, name, std::move(unread)});
       }
     }
   }
 
  private:
-  void EvaluateNotifications(ContactID const& peer_id, bool evaluate_unread, bool evaluate_missed_calls) {
+  void EvaluateNotifications(TopicID const& topic_id, bool evaluate_unread, bool evaluate_missed_calls) {
     if (sm_->is_foreground) return;
 
-    auto unread = GetUnreadMessages(peer_id);
+    auto unread = GetUnreadMessages(topic_id);
     if (unread.empty()) return;
 
-    auto contact = contact_manager_->GetContact(peer_id);
-    std::string const name =
-        contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+    std::string name = topic_id.ToString().substr(0, 8);
+    if (auto contact = contact_manager_->GetContact(ContactID(topic_id.Span()))) {
+      if (contact->display_name) name = *contact->display_name;
+    } else if (auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()))) {
+      name = group->name;
+    } else if (auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()))) {
+      name = channel->name;
+    }
 
     if (evaluate_missed_calls) {
       bool has_missed_call = false;
@@ -951,7 +955,7 @@ class MessagingService {
         }
       }
       if (has_missed_call) {
-        EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
+        EventQueue::Instance().Push(EventNotifyMissedCall{ContactID(topic_id.Span()), name});
       }
     }
 
@@ -967,7 +971,7 @@ class MessagingService {
 
       if (!text_unread.empty()) {
         auto latest_id = text_unread.back().id;
-        EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, latest_id, name, std::move(text_unread)});
+        EventQueue::Instance().Push(EventNotifyNewMessage{topic_id, latest_id, name, std::move(text_unread)});
       }
     }
   }
@@ -981,31 +985,31 @@ class MessagingService {
     return sstream.str();
   }
 
-  void FlushDeliveryReceipts(ContactID const& peer_id) {
+  void FlushDeliveryReceipts(TopicID const& topic_id) {
     std::vector<uint64_t> ids;
     {
       std::lock_guard<std::mutex> const lock(sync_state_mutex_);
-      if (is_syncing_[peer_id]) {
-        delivery_receipts_debounce_active_[peer_id] = false;
+      if (is_syncing_[ContactID(topic_id.Span())]) {
+        delivery_receipts_debounce_active_[ContactID(topic_id.Span())] = false;
         return;
       }
-      ids = std::move(pending_delivery_receipts_[peer_id]);
-      pending_delivery_receipts_.erase(peer_id);
-      delivery_receipts_debounce_active_[peer_id] = false;
+      ids = std::move(pending_delivery_receipts_[topic_id]);
+      pending_delivery_receipts_.erase(topic_id);
+      delivery_receipts_debounce_active_[ContactID(topic_id.Span())] = false;
     }
     if (ids.empty()) {
       return;
     }
     Json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", ids}};
-    sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
+    sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, receipt);
   }
 
-  void QueueDeliveryReceipt(ContactID const& peer_id, uint64_t message_id) {
+  void QueueDeliveryReceipt(TopicID const& topic_id, uint64_t message_id) {
     std::lock_guard<std::mutex> const lock(sync_state_mutex_);
-    pending_delivery_receipts_[peer_id].push_back(message_id);
-    if (!delivery_receipts_debounce_active_[peer_id]) {
-      delivery_receipts_debounce_active_[peer_id] = true;
-      bg_queue_.DispatchAfter(std::chrono::seconds(1), [this, peer_id]() { FlushDeliveryReceipts(peer_id); });
+    pending_delivery_receipts_[topic_id].push_back(message_id);
+    if (!delivery_receipts_debounce_active_[ContactID(topic_id.Span())]) {
+      delivery_receipts_debounce_active_[ContactID(topic_id.Span())] = true;
+      bg_queue_.DispatchAfter(std::chrono::seconds(1), [this, topic_id]() { FlushDeliveryReceipts(topic_id); });
     }
   }
 
@@ -1017,7 +1021,7 @@ class MessagingService {
 
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
-  std::unordered_map<ContactID, std::vector<uint64_t>> pending_delivery_receipts_;
+  std::unordered_map<TopicID, std::vector<uint64_t>> pending_delivery_receipts_;
   std::unordered_map<ContactID, bool> delivery_receipts_debounce_active_;
   std::unordered_map<ContactID, bool> is_syncing_;
   std::unordered_map<ContactID, bool> unread_evaluation_needed_;
