@@ -88,7 +88,8 @@ fun ChatHistory(
   onEditCommit: (Long, String) -> Unit,
   onEditCancel: () -> Unit,
   onSystemMessageClick: (HistoryEntry) -> Unit,
-  onMediaClick: (List<Attachment>, Int) -> Unit
+  onMediaClick: (List<Attachment>, Int) -> Unit,
+  resolveContactName: (String) -> String
 ) {
   val formatters = remember(locale) {
     Triple(
@@ -188,7 +189,8 @@ fun ChatHistory(
               onActionForward = { onActionForward(currentItem) },
               isEditing = editingMessageId == currentItem.id,
               onEditCommit = { newText -> onEditCommit(currentItem.id, newText) },
-              onEditCancel = onEditCancel
+              onEditCancel = onEditCancel,
+              resolveContactName = resolveContactName
             )
 
             HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(

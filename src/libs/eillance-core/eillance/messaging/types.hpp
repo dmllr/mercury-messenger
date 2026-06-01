@@ -174,10 +174,28 @@ struct CallEntryParams {
   std::optional<Time::Unit> timestamp = std::nullopt;
 };
 
-struct MessageEntry {
+struct MessageContent {
   std::string content;
   std::vector<Attachment> attachments{};
   std::uint64_t reply_to_id = 0;
+};
+
+struct PeerMessageStatus {
+  ContactID peer_id;
+  MessageStatus status = MessageStatus::none;
+};
+
+struct ChatMessageEntry {
+  MessageContent message;
+};
+
+struct GroupMessageEntry {
+  MessageContent message;
+  std::vector<PeerMessageStatus> peer_statuses{};
+};
+
+struct ChannelMessageEntry {
+  MessageContent message;
 };
 
 struct CallEntry {
@@ -186,7 +204,21 @@ struct CallEntry {
   CallStatus call_status;
 };
 
-using HistoryEntryData = std::variant<MessageEntry, CallEntry>;
+using HistoryEntryData = std::variant<ChatMessageEntry, GroupMessageEntry, ChannelMessageEntry, CallEntry>;
+
+inline auto GetMessageContent(HistoryEntryData& data) -> MessageContent* {
+  if (auto* c = std::get_if<ChatMessageEntry>(&data)) return &c->message;
+  if (auto* g = std::get_if<GroupMessageEntry>(&data)) return &g->message;
+  if (auto* ch = std::get_if<ChannelMessageEntry>(&data)) return &ch->message;
+  return nullptr;
+}
+
+inline auto GetMessageContent(HistoryEntryData const& data) -> MessageContent const* {
+  if (auto const* c = std::get_if<ChatMessageEntry>(&data)) return &c->message;
+  if (auto const* g = std::get_if<GroupMessageEntry>(&data)) return &g->message;
+  if (auto const* ch = std::get_if<ChannelMessageEntry>(&data)) return &ch->message;
+  return nullptr;
+}
 
 struct HistoryEntryRecord {
   std::uint64_t id{};

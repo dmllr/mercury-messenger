@@ -95,7 +95,8 @@ fun MessageBubble(
   isEditing: Boolean = false,
   onEditCommit: (String) -> Unit = {},
   onEditCancel: () -> Unit = {},
-  contactName: String = ""
+  contactName: String = "",
+  resolveContactName: (String) -> String = { it.take(8) }
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -192,7 +193,9 @@ fun MessageBubble(
         onForward = onActionForward,
         onReact = onActionReact,
         currentReactions = myReactions,
-        isFromMe = isFromMe
+        isFromMe = isFromMe,
+        peerStatuses = entry.peerStatuses,
+        resolveContactName = resolveContactName
       )
     }
 

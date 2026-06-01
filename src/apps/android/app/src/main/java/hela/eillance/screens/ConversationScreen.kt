@@ -267,7 +267,12 @@ fun ConversationScreen(
     targetMessageId?.let { msgId ->
       chatVM.loadUpToMessage(msgId)
       scrollToMessageId = msgId
-    }
+        }
+      }
+
+  val contactsList by contactsVM.contacts.collectAsState()
+  val resolveContactName: (String) -> String = remember(contactsList) {
+    { id -> contactsList.find { it.peerId == id }?.displayName ?: id.take(8) }
   }
 
   // Handle Shared Content
@@ -757,7 +762,8 @@ fun ConversationScreen(
             },
             onEditCancel = {
               editingMessageId = null
-            }
+            },
+            resolveContactName = resolveContactName
           )
 
           androidx.compose.animation.AnimatedVisibility(

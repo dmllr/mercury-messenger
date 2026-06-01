@@ -365,26 +365,24 @@ class MessagingService {
     if (is_upload) {
       auto const sending_msgs = storage_->GetMessagesWithStatus(topic_id, messaging::MessageStatus::sending);
       for (auto const& entry : sending_msgs) {
-        if (!std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-          continue;
-        }
-        auto const& message = std::get<messaging::MessageEntry>(entry.data);
-        bool contains_attachment = false;
-        bool has_other_content = !message.content.empty();
-        for (auto const& att : message.attachments) {
-          if (att.id == attachment_id) {
-            contains_attachment = true;
-          } else {
-            if (auto const stored = storage_->GetAttachment(att.id);
-                stored && stored->status != messaging::AttachmentStatus::canceled &&
-                stored->status != messaging::AttachmentStatus::discarded) {
-              has_other_content = true;
+        if (auto const* content = messaging::GetMessageContent(entry.data)) {
+          bool contains_attachment = false;
+          bool has_other_content = !content->content.empty();
+          for (auto const& att : content->attachments) {
+            if (att.id == attachment_id) {
+              contains_attachment = true;
+            } else {
+              if (auto const stored = storage_->GetAttachment(att.id);
+                  stored && stored->status != messaging::AttachmentStatus::canceled &&
+                  stored->status != messaging::AttachmentStatus::discarded) {
+                has_other_content = true;
+              }
             }
           }
-        }
-        if (contains_attachment && !has_other_content) {
-          history_->UpdateMessageStatus(topic_id, entry.id, messaging::MessageStatus::none);
-          break;
+          if (contains_attachment && !has_other_content) {
+            history_->UpdateMessageStatus(topic_id, entry.id, messaging::MessageStatus::none);
+            break;
+          }
         }
       }
     }
@@ -440,8 +438,8 @@ class MessagingService {
         return true;
       }
       if (entry.kind == messaging::HistoryEntryKind::systemMessage &&
-          std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        auto const& content = std::get<messaging::MessageEntry>(entry.data).content;
+          messaging::GetMessageContent(entry.data) != nullptr) {
+        auto const& content = messaging::GetMessageContent(entry.data)->content;
         if (content.find("\"action\":\"call_request\"") != std::string::npos ||
             content.find("\"action\":\"call_accept\"") != std::string::npos) {
           return true;
@@ -451,10 +449,9 @@ class MessagingService {
     });
 
     for (auto& entry : page.messages) {
-      if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-        auto& message = std::get<messaging::MessageEntry>(entry.data);
+      if (auto* content = messaging::GetMessageContent(entry.data)) {
         bool entry_modified = false;
-        for (auto& att : message.attachments) {
+        for (auto& att : content->attachments) {
           if (att.status == messaging::AttachmentStatus::canceled ||
               att.status == messaging::AttachmentStatus::peerCanceled ||
               att.status == messaging::AttachmentStatus::paused ||
@@ -545,26 +542,24 @@ class MessagingService {
 
     std::string const type = json.value("type", "");
 
-    if (type == "message_read") {
-      std::vector<uint64_t> target_ids;
-      if (json.contains("message_ids")) {
-        for (auto const& id_val : json["message_ids"]) {
-          target_ids.push_back(id_val.get<uint64_t>());
-        }
-      } else {
-        target_ids.push_back(json.value("message_id", 0ULL));
-      }
-      for (auto target_id : target_ids) {
-        history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::read);
-      }
-      return;
-    }
-
-    if (type == "message_receipt") {
+    if (type == "message_read" || type == "message_receipt") {
       if (is_mine) {
         return;
       }
-      std::string const status_str = json.value("status", "");
+      auto msg_status = messaging::MessageStatus::sending;
+      if (type == "message_read") {
+        msg_status = messaging::MessageStatus::read;
+      } else {
+        std::string const status_str = json.value("status", "");
+        if (status_str == "delivered") {
+          msg_status = messaging::MessageStatus::delivered;
+        } else if (status_str == "read") {
+          msg_status = messaging::MessageStatus::read;
+        } else {
+          return;
+        }
+      }
+
       std::vector<uint64_t> target_ids;
       if (json.contains("message_ids")) {
         for (auto const& id_val : json["message_ids"]) {
@@ -572,15 +567,6 @@ class MessagingService {
         }
       } else {
         target_ids.push_back(json.value("message_id", 0ULL));
-      }
-
-      auto msg_status = messaging::MessageStatus::sending;
-      if (status_str == "delivered") {
-        msg_status = messaging::MessageStatus::delivered;
-      } else if (status_str == "read") {
-        msg_status = messaging::MessageStatus::read;
-      } else {
-        return;
       }
 
       for (auto const target_id : target_ids) {
@@ -589,7 +575,45 @@ class MessagingService {
               msg_status == messaging::MessageStatus::delivered) {
             continue;
           }
-          history_->UpdateMessageStatus(topic_id, target_id, msg_status);
+
+          if (std::holds_alternative<messaging::GroupMessageEntry>(current_entry->data)) {
+            history_->UpdateMessagePeerStatus(topic_id, target_id, entry.author_id, msg_status);
+
+            bool all_read = true;
+            bool all_delivered = true;
+            auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+            if (group) {
+              auto updated_entry = history_->GetHistoryEntry(topic_id, target_id);
+              if (updated_entry) {
+                if (auto* upd_group_entry = std::get_if<messaging::GroupMessageEntry>(&updated_entry->data)) {
+                  for (auto const& member : group->members) {
+                    if (member.contact_id == sm_->account->GetId()) continue;
+                    messaging::MessageStatus member_status = messaging::MessageStatus::none;
+                    for (auto const& ps : upd_group_entry->peer_statuses) {
+                      if (ps.peer_id == member.contact_id) {
+                        member_status = ps.status;
+                        break;
+                      }
+                    }
+                    if (member_status != messaging::MessageStatus::read) {
+                      all_read = false;
+                    }
+                    if (member_status != messaging::MessageStatus::delivered &&
+                        member_status != messaging::MessageStatus::read) {
+                      all_delivered = false;
+                    }
+                  }
+                }
+              }
+            }
+            if (all_read) {
+              history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::read);
+            } else if (all_delivered && current_entry->status != messaging::MessageStatus::read) {
+              history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::delivered);
+            }
+          } else {
+            history_->UpdateMessageStatus(topic_id, target_id, msg_status);
+          }
         }
       }
       return;
