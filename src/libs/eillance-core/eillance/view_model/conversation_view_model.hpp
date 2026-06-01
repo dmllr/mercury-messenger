@@ -25,79 +25,79 @@ namespace eillance::view_model {
 
 class ConversationViewModel {
  public:
-  explicit ConversationViewModel(ContactID const& peer_id, std::shared_ptr<Client> client)
-      : impl_(std::make_shared<Impl>(peer_id, std::move(client))) {
+  explicit ConversationViewModel(TopicID const& topic_id, std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(topic_id, std::move(client))) {
     impl_->StartInitialLoad();
 
     auto& queue = EventQueue::Instance();
     auto impl = impl_;
     Subscribe<EventChatMessageReceived>(queue, [impl](EventChatMessageReceived const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
-        impl->OnMessageReceived(event.peer_id, event.message);
+      if (event.topic_id == impl->topic_id) {
+        impl->OnMessageReceived(event.topic_id, event.message);
       }
     });
     Subscribe<EventMessageStatusChanged>(queue, [impl](EventMessageStatusChanged const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
-        impl->OnMessageStatusChanged(event.peer_id, event.message_id, event.status);
+      if (event.topic_id == impl->topic_id) {
+        impl->OnMessageStatusChanged(event.topic_id, event.message_id, event.status);
       }
     });
     Subscribe<EventMessageUpdated>(queue, [impl](EventMessageUpdated const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (event.topic_id == impl->topic_id) {
         impl->OnMessageUpdated(event.message_id);
       }
     });
     Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) -> void {
-      if (impl->IsRelevantAttachmentEvent(event.peer_id, event.attachment_id)) {
+      if (impl->IsRelevantAttachmentEvent(event.topic_id, event.attachment_id)) {
         impl->OnAttachmentDownloaded(event.attachment_id);
       }
     });
     Subscribe<EventTransferProgress>(queue, [impl](EventTransferProgress const& event) -> void {
-      if (impl->IsRelevantAttachmentEvent(event.peer_id, event.attachment_id)) {
+      if (impl->IsRelevantAttachmentEvent(event.topic_id, event.attachment_id)) {
         impl->OnTransferProgress(event.attachment_id, event.progress);
       }
     });
     Subscribe<EventAttachmentStatusChanged>(queue, [impl](EventAttachmentStatusChanged const& event) -> void {
-      if (impl->IsRelevantAttachmentEvent(event.peer_id, event.attachment_id)) {
+      if (impl->IsRelevantAttachmentEvent(event.topic_id, event.attachment_id)) {
         impl->OnAttachmentStatusChanged(event.attachment_id, event.status);
       }
     });
     Subscribe<EventContactUnreachable>(queue, [impl](EventContactUnreachable const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (event.peer_id == ContactID(impl->topic_id.Span())) {
         std::lock_guard<std::mutex> const lock(impl->mutex);
         if (impl->state.is_unreachable != event.is_unreachable) {
           impl->state.is_unreachable = event.is_unreachable;
-          EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+          EventQueue::Instance().Push(EventConversationStateUpdated{impl->topic_id, impl->state});
         }
       }
     });
     Subscribe<EventContactUnwilling>(queue, [impl](EventContactUnwilling const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (event.peer_id == ContactID(impl->topic_id.Span())) {
         std::lock_guard<std::mutex> const lock(impl->mutex);
         if (impl->state.is_unwilling != event.is_unwilling) {
           impl->state.is_unwilling = event.is_unwilling;
-          EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+          EventQueue::Instance().Push(EventConversationStateUpdated{impl->topic_id, impl->state});
         }
       }
     });
     Subscribe<EventSyncStateChanged>(queue, [impl](EventSyncStateChanged const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (event.peer_id == ContactID(impl->topic_id.Span())) {
         std::lock_guard<std::mutex> const lock(impl->mutex);
         if (impl->state.is_syncing != event.is_syncing || impl->state.sync_progress != event.progress) {
           impl->state.is_syncing = event.is_syncing;
           impl->state.sync_progress = event.progress;
-          EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+          EventQueue::Instance().Push(EventConversationStateUpdated{impl->topic_id, impl->state});
         }
       }
     });
     Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (event.peer_id == ContactID(impl->topic_id.Span())) {
         if (event.state == transport::PeerConnectionState::disconnected ||
             event.state == transport::PeerConnectionState::closed ||
             event.state == transport::PeerConnectionState::failed) {
           std::lock_guard<std::mutex> const lock(impl->mutex);
           if (impl->state.is_syncing) {
             impl->state.is_syncing = false;
-            EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+            EventQueue::Instance().Push(EventConversationStateUpdated{impl->topic_id, impl->state});
           }
         }
       }
@@ -134,13 +134,13 @@ class ConversationViewModel {
     impl_->OnMessageShown(message_id);
   }
   void DeleteMessage(uint64_t message_id) const {
-    impl_->client->Messaging()->SendDeleteMessage(impl_->peer_id, message_id);
+    impl_->client->Messaging()->SendDeleteMessage(impl_->topic_id, message_id);
   }
   void EditMessage(uint64_t message_id, std::string const& content) const {
-    impl_->client->Messaging()->SendEditMessage(impl_->peer_id, message_id, content);
+    impl_->client->Messaging()->SendEditMessage(impl_->topic_id, message_id, content);
   }
   void ReactToMessage(uint64_t message_id, messaging::Reaction reaction) const {
-    impl_->client->Messaging()->SendReaction(impl_->peer_id, message_id, reaction);
+    impl_->client->Messaging()->SendReaction(impl_->topic_id, message_id, reaction);
   }
 
   void LoadOlderMessages() const {
@@ -160,36 +160,36 @@ class ConversationViewModel {
   }
 
   void CancelTransfer(std::string const& attachment_id, bool is_upload) const {
-    impl_->client->CancelTransfer(impl_->peer_id, attachment_id, is_upload);
+    impl_->client->CancelTransfer(impl_->topic_id, attachment_id, is_upload);
   }
 
   void RetrySync() const {
-    impl_->client->RetrySync(impl_->peer_id);
+    impl_->client->RetrySync(impl_->topic_id);
   }
 
   void ResumeTransfer(std::string const& attachment_id, bool is_upload) const {
-    impl_->client->ResumeTransfer(impl_->peer_id, attachment_id, is_upload);
+    impl_->client->ResumeTransfer(impl_->topic_id, attachment_id, is_upload);
   }
 
   void DiscardAttachment(std::string const& attachment_id) const {
-    impl_->client->DiscardAttachment(impl_->peer_id, attachment_id);
+    impl_->client->DiscardAttachment(impl_->topic_id, attachment_id);
   }
 
   [[nodiscard]] auto GetHistoryEntry(uint64_t message_id) const -> std::optional<messaging::HistoryEntryRecord> {
-    return impl_->client->GetHistoryEntry(impl_->peer_id, message_id);
+    return impl_->client->GetHistoryEntry(impl_->topic_id, message_id);
   }
 
   [[nodiscard]] auto GetDownloadedAttachments() const -> std::vector<messaging::AttachmentRecord> {
-    return impl_->client->GetDownloadedAttachments(impl_->peer_id);
+    return impl_->client->GetDownloadedAttachments(impl_->topic_id);
   }
 
   void DeleteAttachmentLocal(std::string const& attachment_id) const {
-    impl_->client->DeleteAttachmentLocal(impl_->peer_id, attachment_id);
+    impl_->client->DeleteAttachmentLocal(impl_->topic_id, attachment_id);
   }
 
  private:
   struct Impl : public std::enable_shared_from_this<Impl> {
-    ContactID const peer_id;
+    TopicID const topic_id;
     std::shared_ptr<Client> client;
 
     mutable std::mutex mutex;
@@ -207,15 +207,15 @@ class ConversationViewModel {
     inline static std::atomic<std::uint64_t> nextSystemMsgId{kMinSystemMessageId};
     static constexpr size_t kPageSize = 50;
 
-    Impl(ContactID peer_id, std::shared_ptr<Client> client)
-        : peer_id(peer_id),
+    Impl(TopicID topic_id, std::shared_ptr<Client> client)
+        : topic_id(topic_id),
           client(std::move(client)) {
-      state.peer_id = peer_id;
-      state.is_unreachable = this->client->IsUnreachable(peer_id);
+      state.topic_id = topic_id;
+      state.is_unreachable = this->client->IsUnreachable(topic_id);
     }
 
-    bool IsRelevantAttachmentEvent(ContactID const& event_peer_id, std::string const& attachment_id) const {
-      if (event_peer_id == peer_id) return true;
+    bool IsRelevantAttachmentEvent(TopicID const& event_topic_id, std::string const& attachment_id) const {
+      if (event_topic_id == topic_id) return true;
       std::lock_guard<std::mutex> const lock(mutex);
       if (pending_attachment_updates.contains(attachment_id)) return true;
       for (auto const& entry : state.history) {
@@ -236,14 +236,14 @@ class ConversationViewModel {
     void AddDraftAttachment(DraftAttachment const& draft) {
       std::lock_guard<std::mutex> const lock(mutex);
       state.drafts.push_back(draft);
-      EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+      EventQueue::Instance().Push(EventConversationDraftsUpdated{topic_id, state.drafts});
     }
 
     void RemoveDraftAttachment(int index) {
       std::lock_guard<std::mutex> const lock(mutex);
       if (index >= 0 && index < state.drafts.size()) {
         state.drafts.erase(state.drafts.begin() + index);
-        EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+        EventQueue::Instance().Push(EventConversationDraftsUpdated{topic_id, state.drafts});
       }
     }
 
@@ -251,7 +251,7 @@ class ConversationViewModel {
       std::lock_guard<std::mutex> const lock(mutex);
       if (index >= 0 && index < state.drafts.size()) {
         state.drafts[index].note = note;
-        EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+        EventQueue::Instance().Push(EventConversationDraftsUpdated{topic_id, state.drafts});
       }
     }
 
@@ -268,11 +268,11 @@ class ConversationViewModel {
           reqs.push_back({d.file_path, d.type, d.thumbnail_base64, d.mime_type, d.note, d.file_name});
         }
         state.drafts.clear();
-        EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+        EventQueue::Instance().Push(EventConversationDraftsUpdated{topic_id, state.drafts});
       }
 
       // Access MessagingService directly since facade might not have the overload yet
-      auto entry = client->SendChatMessage(TopicID(peer_id), content, reqs, reply_to_id);
+      auto entry = client->SendChatMessage(topic_id, content, reqs, reply_to_id);
 
       std::lock_guard<std::mutex> const lock(mutex);
 
@@ -288,12 +288,12 @@ class ConversationViewModel {
       }
 
       state.history.push_back(entry);
-      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
     void LoadOlderMessages() {
       std::lock_guard<std::mutex> const lock(mutex);
-      auto page = client->GetMessageHistoryPage(peer_id, chat_pages_loaded, kPageSize);
+      auto page = client->GetMessageHistoryPage(topic_id, chat_pages_loaded, kPageSize);
 
       if (!page.messages.empty()) {
         for (auto& message : std::ranges::reverse_view(page.messages)) {
@@ -301,10 +301,10 @@ class ConversationViewModel {
         }
         chat_pages_loaded++;
         state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
-        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+        EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
       } else if (state.has_older_messages) {
         state.has_older_messages = false;
-        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+        EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
       }
     }
 
@@ -329,7 +329,7 @@ class ConversationViewModel {
       }
 
       while (!found && state.has_older_messages) {
-        auto page = client->GetMessageHistoryPage(peer_id, chat_pages_loaded, kPageSize);
+        auto page = client->GetMessageHistoryPage(topic_id, chat_pages_loaded, kPageSize);
         if (page.messages.empty()) {
           state.has_older_messages = false;
           break;
@@ -344,11 +344,11 @@ class ConversationViewModel {
         state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
       }
 
-      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
     void LoadFullMessage(uint64_t message_id) {
-      auto full_content = client->GetFullMessageContent(peer_id, message_id);
+      auto full_content = client->GetFullMessageContent(topic_id, message_id);
       if (!full_content) return;
 
       std::lock_guard<std::mutex> const lock(mutex);
@@ -365,13 +365,13 @@ class ConversationViewModel {
         }
       }
       if (updated) {
-        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+        EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
       }
     }
 
     void MarkMessagesAsRead(std::vector<std::uint64_t> const& message_ids) {
       if (!message_ids.empty()) {
-        client->MarkMessagesAsRead(peer_id, message_ids);
+        client->MarkMessagesAsRead(topic_id, message_ids);
       }
     }
 
@@ -388,10 +388,10 @@ class ConversationViewModel {
            .is_truncated = false,
            .data = messaging::MessageEntry{message}}
       );
-      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
-    void OnMessageReceived(ContactID const&, messaging::HistoryEntryRecord const& message) {
+    void OnMessageReceived(TopicID const&, messaging::HistoryEntryRecord const& message) {
       std::lock_guard<std::mutex> const lock(mutex);
       auto msg_copy = message;
       if (std::holds_alternative<messaging::MessageEntry>(msg_copy.data)) {
@@ -404,16 +404,16 @@ class ConversationViewModel {
         }
       }
       state.history.push_back(msg_copy);
-      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
-    void OnMessageStatusChanged(ContactID const&, uint64_t const message_id, messaging::MessageStatus const status) {
+    void OnMessageStatusChanged(TopicID const&, uint64_t const message_id, messaging::MessageStatus const status) {
       std::lock_guard<std::mutex> const lock(mutex);
 
       // If status is None (0), it means the message was dismissed/deleted. Remove it from the list.
       if (status == messaging::MessageStatus::none) {
         std::erase_if(state.history, [message_id](auto const& e) { return e.id == message_id; });
-        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+        EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
         return;
       }
 
@@ -427,11 +427,11 @@ class ConversationViewModel {
           break;
         }
       }
-      if (changed) EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      if (changed) EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
     void OnMessageUpdated(uint64_t const message_id) {
-      auto const updated_entry = client->GetHistoryEntry(peer_id, message_id);
+      auto const updated_entry = client->GetHistoryEntry(topic_id, message_id);
       if (!updated_entry) {
         return;
       }
@@ -454,7 +454,7 @@ class ConversationViewModel {
           break;
         }
       }
-      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
     void OnAttachmentDownloaded(std::string const& attachment_id) {
@@ -474,7 +474,7 @@ class ConversationViewModel {
         }
       }
 
-      if (found) EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      if (found) EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
     void OnMessageShown(uint64_t message_id) {
@@ -493,7 +493,7 @@ class ConversationViewModel {
             read_debounce_active = false;
           }
           if (!ids.empty()) {
-            client->MarkMessagesAsRead(peer_id, ids);
+            client->MarkMessagesAsRead(topic_id, ids);
           }
         }).detach();
       }
@@ -516,7 +516,7 @@ class ConversationViewModel {
       }
 
       if (found) {
-        EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+        EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
 
         // If we found it, remove from pending updates just in case it was stuck there
         pending_attachment_updates.erase(attachment_id);
@@ -528,11 +528,11 @@ class ConversationViewModel {
     }
 
     void OnTransferProgress(std::string const& attachment_id, float const progress) const {
-      EventQueue::Instance().Push(EventTransferProgressUpdated{peer_id, attachment_id, progress});
+      EventQueue::Instance().Push(EventTransferProgressUpdated{topic_id, attachment_id, progress});
     }
 
     void LoadInitialHistory(std::shared_ptr<Impl> const&, int const generation) {
-      auto [messages, total_messages] = client->GetMessageHistoryPage(peer_id, 0, kPageSize);
+      auto [messages, total_messages] = client->GetMessageHistoryPage(topic_id, 0, kPageSize);
       std::lock_guard<std::mutex> const lock(mutex);
       if (generation != load_generation) return;
 
@@ -553,7 +553,7 @@ class ConversationViewModel {
         }
       }
 
-      EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+      EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
     void StartInitialLoad() {

@@ -429,10 +429,10 @@ class Client final {
     payload["members"] = members_array;
 
     sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
-    
+
     Json sys_msg = {{"action", "group_created"}, {"name", name}};
-    sm_->messaging->SendSystemMessage(TopicID(gid).AsContactID(), sys_msg.dump(), true);
-    
+    sm_->messaging->SendSystemMessage(TopicID(gid), sys_msg.dump(), true);
+
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
     return gid;
   }
@@ -550,62 +550,77 @@ class Client final {
   ) -> messaging::HistoryEntryRecord {
     return sm_->messaging->SendChatMessage(topic_id, msg, attachments, reply_to_id);
   }
-  void MarkMessagesAsRead(ContactID const& id, std::vector<std::uint64_t> const& mids) const {
+  void MarkMessagesAsRead(TopicID const& id, std::vector<std::uint64_t> const& mids) const {
     sm_->messaging->MarkMessagesAsRead(id, mids);
   }
-  [[nodiscard]] auto GetMessageHistoryPage(ContactID const& id, size_t const page_index, size_t const page_size) const
+  [[nodiscard]] auto GetMessageHistoryPage(TopicID const& id, size_t const page_index, size_t const page_size) const
       -> messaging::HistoryPage {
     return sm_->messaging->GetHistoryPage(id, page_index, page_size);
   }
-  [[nodiscard]] auto GetFullMessageContent(ContactID const& id, uint64_t const msg_id) const
+  [[nodiscard]] auto GetFullMessageContent(TopicID const& id, uint64_t const msg_id) const
       -> std::optional<std::string> {
     return sm_->messaging->GetFullMessageContent(id, msg_id);
   }
-  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& ids) const -> std::vector<messaging::ChatSummary> {
+  [[nodiscard]] auto GetChatSummaries(std::vector<TopicID> const& ids) const -> std::vector<messaging::ChatSummary> {
     return sm_->messaging->GetChatSummaries(ids);
   }
-  [[nodiscard]] auto GetUnreadMessages(ContactID const& id) const -> std::vector<messaging::HistoryEntryRecord> {
+  [[nodiscard]] auto GetUnreadMessages(TopicID const& id) const -> std::vector<messaging::HistoryEntryRecord> {
     return sm_->messaging->GetUnreadMessages(id);
   }
-  [[nodiscard]] auto SearchMessages(ContactID const& peer_id, std::string const& query) const
+  [[nodiscard]] auto SearchMessages(TopicID const& peer_id, std::string const& query) const
       -> std::vector<messaging::HistoryEntryRecord> {
     return sm_->messaging->SearchMessages(peer_id, query);
   }
   [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<messaging::HistoryEntryRecord> {
     return sm_->messaging->SearchAllMessages(query);
   }
-  [[nodiscard]] auto GetHistoryEntry(ContactID const& peer_id, uint64_t message_id) const
+  [[nodiscard]] auto GetHistoryEntry(TopicID const& peer_id, uint64_t message_id) const
       -> std::optional<messaging::HistoryEntryRecord> {
     return sm_->storage->GetHistoryEntry(peer_id, message_id);
   }
 
-  void CancelTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
-    sm_->messaging->CancelTransfer(peer_id, attachment_id, is_upload);
+  void CancelTransfer(TopicID const& topic_id, std::string const& attachment_id, bool is_upload) const {
+    sm_->messaging->CancelTransfer(topic_id, attachment_id, is_upload);
   }
-  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool is_upload) const {
-    sm_->messaging->ResumeTransfer(peer_id, attachment_id, is_upload);
+  void ResumeTransfer(TopicID const& topic_id, std::string const& attachment_id, bool is_upload) const {
+    sm_->messaging->ResumeTransfer(topic_id, attachment_id, is_upload);
   }
-  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) const {
-    sm_->messaging->DiscardAttachment(peer_id, attachment_id);
+  void DiscardAttachment(TopicID const& topic_id, std::string const& attachment_id) const {
+    sm_->messaging->DiscardAttachment(topic_id, attachment_id);
   }
   [[nodiscard]] auto GetAttachment(std::string const& attachment_id) const -> std::optional<messaging::Attachment> {
     return sm_->storage->GetAttachment(attachment_id);
   }
-  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const
+  [[nodiscard]] auto GetDownloadedAttachments(TopicID const& topic_id) const
       -> std::vector<messaging::AttachmentRecord> {
-    return sm_->messaging->GetDownloadedAttachments(peer_id);
+    return sm_->messaging->GetDownloadedAttachments(topic_id);
   }
 
-  void DeleteAttachmentLocal(ContactID const& peer_id, std::string const& attachment_id) const {
-    sm_->messaging->DeleteAttachmentLocal(peer_id, attachment_id);
+  void DeleteAttachmentLocal(TopicID const& topic_id, std::string const& attachment_id) const {
+    sm_->messaging->DeleteAttachmentLocal(topic_id, attachment_id);
   }
 
-  void RetrySync(ContactID const& peer_id) const {
-    sm_->delivery_service->ManualRetry(peer_id);
+  void RetrySync(TopicID const& topic_id) const {
+    auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+    if (group) {
+      for (auto const& m : group->members) {
+        sm_->delivery_service->ManualRetry(m.contact_id);
+      }
+    } else if (auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()))) {
+      for (auto const& m : channel->members) {
+        sm_->delivery_service->ManualRetry(m.contact_id);
+      }
+    } else {
+      sm_->delivery_service->ManualRetry(ContactID(topic_id.Span()));
+    }
   }
 
-  [[nodiscard]] auto IsUnreachable(ContactID const& peer_id) const -> bool {
-    return sm_->delivery_service->IsUnreachable(peer_id);
+  [[nodiscard]] auto IsUnreachable(TopicID const& topic_id) const -> bool {
+    auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+    if (group) {
+      return false;  // Not supported directly, wait for retry
+    }
+    return sm_->delivery_service->IsUnreachable(ContactID(topic_id.Span()));
   }
 
   void Connect(ContactID const& peer_id) const {

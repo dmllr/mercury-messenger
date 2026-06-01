@@ -342,7 +342,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  vm->MarkAllAsRead(eillance::ContactID(chars));
+  vm->MarkAllAsRead(eillance::TopicID(chars));
   env->ReleaseStringUTFChars(peer_id, chars);
 }
 
@@ -458,7 +458,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  auto messages = vm->GetUnreadMessages(eillance::ContactID(chars));
+  auto messages = vm->GetUnreadMessages(eillance::TopicID(chars));
   env->ReleaseStringUTFChars(peer_id, chars);
   return ConvertHistoryEntries(env, messages);
 }
@@ -490,7 +490,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
     auto* get_method = list_holder.GetMethod("get");
     auto* entry_java = env->CallObjectMethod(single_list, get_method, 0);
 
-    jstring peer_id = env->NewStringUTF(msg.peer_id.ToString().c_str());
+    jstring peer_id = env->NewStringUTF(msg.topic_id.ToString().c_str());
     jobject global_result = search_result_holder.NewObject(env, peer_id, entry_java);
 
     env->CallBooleanMethod(result_list, list_add_method, global_result);

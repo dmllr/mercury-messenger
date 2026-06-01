@@ -37,15 +37,6 @@ struct TopicID {
   [[nodiscard]] auto Span() const -> std::span<std::byte const> {
     return value_;
   }
-  [[nodiscard]] auto AsContactID() const -> ContactID {
-    return ContactID(value_);
-  }
-  [[nodiscard]] auto AsGroupID() const -> GroupID {
-    return GroupID(value_);
-  }
-  [[nodiscard]] auto AsChannelID() const -> ChannelID {
-    return ChannelID(value_);
-  }
 
   [[nodiscard]] auto ToString() const -> std::string {
     return ContactID(value_).ToString();
@@ -60,3 +51,15 @@ struct TopicID {
 };
 
 }  // namespace eillance
+
+template <>
+struct std::hash<eillance::TopicID> {
+  auto operator()(eillance::TopicID const& id) const noexcept -> size_t {
+    auto hash = 2166136261U;
+    for (auto byte : id.Span()) {
+      hash ^= static_cast<size_t>(byte);
+      hash *= 16777619U;
+    }
+    return hash;
+  }
+};

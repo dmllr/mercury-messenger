@@ -26,7 +26,7 @@ struct EventDataChannelOpen {
 struct EventFatalError {};
 
 struct EventChatMessageReceived {
-  ContactID peer_id;
+  TopicID topic_id;
   messaging::HistoryEntryRecord message;
 };
 
@@ -41,25 +41,25 @@ struct EventContactStatusChanged {
   identity::ContactStatus status;
 };
 struct EventMessageStatusChanged {
-  ContactID peer_id;
+  TopicID topic_id;
   std::uint64_t message_id;
   messaging::MessageStatus status;
 };
 struct EventMessageUpdated {
-  ContactID peer_id;
+  TopicID topic_id;
   std::uint64_t message_id;
 };
 struct EventAttachmentDownloaded {
-  ContactID peer_id;
+  TopicID topic_id;
   std::string attachment_id;
 };
 struct EventTransferProgress {
-  ContactID peer_id;
+  TopicID topic_id;
   std::string attachment_id;
   float progress;
 };
 struct EventAttachmentStatusChanged {
-  ContactID peer_id;
+  TopicID topic_id;
   std::string attachment_id;
   messaging::AttachmentStatus status;
 };
@@ -170,7 +170,7 @@ struct EventTurnEligibilityChanged {
 
 // Explicit Notification Triggers
 struct EventNotifyNewMessage {
-  ContactID peer_id;
+  TopicID topic_id;
   uint64_t message_id;
   std::string contact_name;
   std::vector<messaging::HistoryEntryRecord> unread_messages;

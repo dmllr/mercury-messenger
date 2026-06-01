@@ -34,7 +34,7 @@ struct MyProfile {
 };
 
 struct ViewContact {
-  ContactID peer_id;
+  TopicID topic_id;
   std::string display_name;
   std::optional<std::string> bio;
   std::optional<std::string> photo;
@@ -59,7 +59,7 @@ struct DraftAttachment {
 };
 
 struct ConversationState {
-  ContactID peer_id;
+  TopicID topic_id;
   std::deque<messaging::HistoryEntryRecord> history{};
   bool has_older_messages = false;
   std::vector<DraftAttachment> drafts{};
@@ -87,15 +87,15 @@ struct EventContactsStateUpdated {
   std::vector<ViewContact> contacts;
 };
 struct EventConversationStateUpdated {
-  ContactID peer_id;
+  TopicID topic_id;
   ConversationState state;
 };
 struct EventConversationDraftsUpdated {
-  ContactID peer_id;
+  TopicID topic_id;
   std::vector<DraftAttachment> drafts;
 };
 struct EventTransferProgressUpdated {
-  ContactID peer_id;
+  TopicID topic_id;
   std::string attachment_id;
   float progress;
 };
