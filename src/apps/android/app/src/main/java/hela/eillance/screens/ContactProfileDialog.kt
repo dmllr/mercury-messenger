@@ -138,7 +138,7 @@ private fun GroupProfileContent(
   val isOwner = contact.ownerId == myId
 
   if (showAddMemberDialog) {
-    val allConfirmed = contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup }
+    val allConfirmed = contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel }
     AddGroupMemberDialog(
       allContacts = allConfirmed,
       existingMembers = members,

@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Profile Updated"
 msgid "sys_unsupported"
 msgstr "Unsupported message format. Please update the app."
+msgid "sys_group_created"
+msgstr "Group chat created"
 msgid "sys_default"
 msgstr "System Message"
 
