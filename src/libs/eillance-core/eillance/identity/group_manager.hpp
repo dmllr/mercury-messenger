@@ -97,7 +97,7 @@ class GroupManager {
     std::string const type = json.value("type", "");
     if (type == "group_create") {
       Group g;
-      g.id = entry.topic_id.AsGroupID();
+      g.id = GroupID(entry.topic_id.Span());
       g.name = json.value("name", "");
       g.owner_id = ContactID(json.value("owner_id", ""));
       if (json.contains("members")) {
@@ -108,13 +108,13 @@ class GroupManager {
       CreateGroupLocal(g);
       EventQueue::Instance().Push(EventGroupsStateUpdated{});
     } else if (type == "group_member_add") {
-      auto g = GetGroup(entry.topic_id.AsGroupID());
+      auto g = GetGroup(GroupID(entry.topic_id.Span()));
       if (g && g->owner_id == entry.author_id) {
         AddMemberLocal(g->id, ContactID(json.value("contact_id", "")), json.value("role", 0));
         EventQueue::Instance().Push(EventGroupsStateUpdated{});
       }
     } else if (type == "group_member_remove") {
-      auto g = GetGroup(entry.topic_id.AsGroupID());
+      auto g = GetGroup(GroupID(entry.topic_id.Span()));
       ContactID target(json.value("contact_id", ""));
       if (g && (g->owner_id == entry.author_id || target == entry.author_id)) {
         RemoveMemberLocal(g->id, target);

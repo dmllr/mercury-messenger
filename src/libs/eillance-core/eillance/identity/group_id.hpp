@@ -49,10 +49,6 @@ struct GroupID {
     return hex;
   }
 
-  [[nodiscard]] auto AsContactID() const -> ContactID {
-    return ContactID(value_);
-  }
-
   [[nodiscard]] auto IsEmpty() const -> bool {
     return std::ranges::all_of(value_, [](std::byte byte) { return byte == std::byte{0}; });
   }

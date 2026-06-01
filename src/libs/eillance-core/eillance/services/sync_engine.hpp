@@ -280,7 +280,7 @@ class SyncEngine {
     entry.type = type;
     entry.payload = payload.dump();
 
-    ContactID const target_peer = topic_id.AsContactID();
+    ContactID const target_peer = ContactID(topic_id.Span());
 
     std::unique_lock<std::mutex> lock(ledger_mutex_);
     auto latest = storage_->GetLatestLedgerEntry(topic_id);
@@ -301,7 +301,7 @@ class SyncEngine {
 
     EventQueue::Instance().Push(EventLedgerAppended{entry, false});
 
-    auto group = storage_->GetGroup(topic_id.AsGroupID());
+    auto group = storage_->GetGroup(GroupID(topic_id.Span()));
     if (group) {
       for (auto const& member : group->members) {
         if (member.contact_id != my_id_) {
@@ -314,7 +314,7 @@ class SyncEngine {
           }
         }
       }
-    } else if (auto channel = storage_->GetChannel(topic_id.AsChannelID())) {
+    } else if (auto channel = storage_->GetChannel(ChannelID(topic_id.Span()))) {
       if (channel->owner_id == my_id_) {
         for (auto const& member : channel->members) {
           if (member.contact_id != my_id_) {
@@ -680,7 +680,7 @@ class SyncEngine {
         }
 
         if (!actually_new.empty()) {
-          auto group = storage_->GetGroup(topic_id.AsGroupID());
+          auto group = storage_->GetGroup(GroupID(topic_id.Span()));
           if (group) {
             for (auto const& member : group->members) {
               if (member.contact_id != my_id_ && member.contact_id != peer_id) {
@@ -688,7 +688,7 @@ class SyncEngine {
                 EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
               }
             }
-          } else if (auto channel = storage_->GetChannel(topic_id.AsChannelID());
+          } else if (auto channel = storage_->GetChannel(ChannelID(topic_id.Span()));
                      channel && channel->owner_id == my_id_) {
             for (auto const& member : channel->members) {
               if (member.contact_id != my_id_ && member.contact_id != peer_id) {

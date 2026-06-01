@@ -30,7 +30,7 @@ void InitEventBridge(JavaVM* jvm) {
       auto& contact_holder = class_refs.Class("hela/eillance/ndkio/Contact");
 
       for (auto const& contact_cpp : e.contacts) {
-        jstring peer_id = env->NewStringUTF(contact_cpp.peer_id.ToString().c_str());
+        jstring peer_id = env->NewStringUTF(contact_cpp.topic_id.ToString().c_str());
         jstring name = env->NewStringUTF(contact_cpp.display_name.c_str());
         jstring bio = contact_cpp.bio ? env->NewStringUTF(contact_cpp.bio->c_str()) : nullptr;
         jstring photo = contact_cpp.photo ? env->NewStringUTF(contact_cpp.photo->c_str()) : nullptr;
@@ -204,7 +204,7 @@ void InitEventBridge(JavaVM* jvm) {
           static_cast<jboolean>(e.state.is_syncing),
           e.state.sync_progress
       );
-      jstring j_peer_id = env->NewStringUTF(e.peer_id.ToString().c_str());
+      jstring j_peer_id = env->NewStringUTF(e.topic_id.ToString().c_str());
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onHistoryUpdated"), j_peer_id, page_java);
       env->DeleteLocalRef(history_list);
@@ -240,7 +240,7 @@ void InitEventBridge(JavaVM* jvm) {
             env->DeleteLocalRef(draft_java);
           }
 
-          jstring j_peer_id = env->NewStringUTF(e.peer_id.ToString().c_str());
+          jstring j_peer_id = env->NewStringUTF(e.topic_id.ToString().c_str());
           auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
           env->CallStaticVoidMethod(
               bus_holder.Class(),
@@ -259,7 +259,7 @@ void InitEventBridge(JavaVM* jvm) {
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
-      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      jstring j_peer = env->NewStringUTF(e.topic_id.ToString().c_str());
       jstring j_att = env->NewStringUTF(e.attachment_id.c_str());
       env->CallStaticVoidMethod(
           bus_holder.Class(),
@@ -489,7 +489,7 @@ void InitEventBridge(JavaVM* jvm) {
     }
 
     auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
-    jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+    jstring j_peer = env->NewStringUTF(e.topic_id.ToString().c_str());
     jstring j_name = env->NewStringUTF(e.contact_name.c_str());
     env->CallStaticVoidMethod(
         bus_holder.Class(),
