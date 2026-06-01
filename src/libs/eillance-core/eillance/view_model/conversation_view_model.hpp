@@ -47,17 +47,17 @@ class ConversationViewModel {
       }
     });
     Subscribe<EventAttachmentDownloaded>(queue, [impl](EventAttachmentDownloaded const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (impl->IsRelevantAttachmentEvent(event.peer_id, event.attachment_id)) {
         impl->OnAttachmentDownloaded(event.attachment_id);
       }
     });
     Subscribe<EventTransferProgress>(queue, [impl](EventTransferProgress const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (impl->IsRelevantAttachmentEvent(event.peer_id, event.attachment_id)) {
         impl->OnTransferProgress(event.attachment_id, event.progress);
       }
     });
     Subscribe<EventAttachmentStatusChanged>(queue, [impl](EventAttachmentStatusChanged const& event) -> void {
-      if (event.peer_id == impl->peer_id) {
+      if (impl->IsRelevantAttachmentEvent(event.peer_id, event.attachment_id)) {
         impl->OnAttachmentStatusChanged(event.attachment_id, event.status);
       }
     });
@@ -212,6 +212,20 @@ class ConversationViewModel {
           client(std::move(client)) {
       state.peer_id = peer_id;
       state.is_unreachable = this->client->IsUnreachable(peer_id);
+    }
+
+    bool IsRelevantAttachmentEvent(ContactID const& event_peer_id, std::string const& attachment_id) const {
+      if (event_peer_id == peer_id) return true;
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (pending_attachment_updates.contains(attachment_id)) return true;
+      for (auto const& entry : state.history) {
+        if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+          for (auto const& att : std::get<messaging::MessageEntry>(entry.data).attachments) {
+            if (att.id == attachment_id) return true;
+          }
+        }
+      }
+      return false;
     }
 
     auto GetState() const -> ConversationState {

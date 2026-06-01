@@ -303,25 +303,15 @@ class SyncEngine {
 
     auto group = storage_->GetGroup(topic_id.AsGroupID());
     if (group) {
-      if (group->owner_id == my_id_) {
-        for (auto const& member : group->members) {
-          if (member.contact_id != my_id_) {
-            storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
-            if (auto peer = transport_->GetPeer(member.contact_id);
-                peer && peer->data_channel_is_open && peer->crcp_verified) {
-              ProposeSync(topic_id, member.contact_id);
-            } else {
-              EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
-            }
+      for (auto const& member : group->members) {
+        if (member.contact_id != my_id_) {
+          storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+          if (auto peer = transport_->GetPeer(member.contact_id);
+              peer && peer->data_channel_is_open && peer->crcp_verified) {
+            ProposeSync(topic_id, member.contact_id);
+          } else {
+            EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
           }
-        }
-      } else {
-        storage_->AddSyncRequest({topic_id, group->owner_id, Timestamp::Now(), Timestamp{0}});
-        if (auto peer = transport_->GetPeer(group->owner_id);
-            peer && peer->data_channel_is_open && peer->crcp_verified) {
-          ProposeSync(topic_id, group->owner_id);
-        } else {
-          EventQueue::Instance().Push(EventConnectionRequested{group->owner_id});
         }
       }
     } else if (auto channel = storage_->GetChannel(topic_id.AsChannelID())) {
@@ -691,7 +681,7 @@ class SyncEngine {
 
         if (!actually_new.empty()) {
           auto group = storage_->GetGroup(topic_id.AsGroupID());
-          if (group && group->owner_id == my_id_) {
+          if (group) {
             for (auto const& member : group->members) {
               if (member.contact_id != my_id_ && member.contact_id != peer_id) {
                 storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
