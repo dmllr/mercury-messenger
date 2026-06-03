@@ -89,7 +89,9 @@ fun ChatHistory(
   onEditCancel: () -> Unit,
   onSystemMessageClick: (HistoryEntry) -> Unit,
   onMediaClick: (List<Attachment>, Int) -> Unit,
-  resolveContactName: (String) -> String
+  resolveContactName: (String) -> String,
+  resolveContactPhoto: (String) -> String?,
+  isGroupChat: Boolean
 ) {
   val formatters = remember(locale) {
     Triple(
@@ -190,7 +192,9 @@ fun ChatHistory(
               isEditing = editingMessageId == currentItem.id,
               onEditCommit = { newText -> onEditCommit(currentItem.id, newText) },
               onEditCancel = onEditCancel,
-              resolveContactName = resolveContactName
+              resolveContactName = resolveContactName,
+              resolveContactPhoto = resolveContactPhoto,
+              isGroupChat = isGroupChat
             )
 
             HistoryEntryKind.VoiceCall, HistoryEntryKind.VideoCall -> CallLogBubble(
@@ -243,6 +247,7 @@ private fun shouldGroupMessages(current: HistoryEntry, other: HistoryEntry?): Bo
   if (current.kind != HistoryEntryKind.TextMessage) return false
   if (current.direction != other.direction) return false
   if (current.status != other.status) return false
+  if (current.authorId != other.authorId) return false
 
   val diff = abs(current.timestamp - other.timestamp)
   return diff <= GROUPING_THRESHOLD_US
@@ -379,7 +384,8 @@ private fun FastScroller(
                 val trackHeight = safeMaxHeight - thumbHeight
                 if (trackHeight > 0f) {
                   dragProgress = (dragProgress + (dragAmount / trackHeight)).coerceIn(0f, 1f)
-                  val targetIndex = ((1f - dragProgress) * history.lastIndex).roundToInt().coerceIn(0, history.lastIndex)
+                  val targetIndex =
+                    ((1f - dragProgress) * history.lastIndex).roundToInt().coerceIn(0, history.lastIndex)
                   coroutineScope.launch { listState.scrollToItem(targetIndex) }
                 }
               }

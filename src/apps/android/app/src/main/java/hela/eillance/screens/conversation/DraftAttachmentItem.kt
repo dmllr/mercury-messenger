@@ -61,7 +61,9 @@ fun DraftAttachmentItem(
             try {
               val bytes = android.util.Base64.decode(draft.thumbnailBase64, android.util.Base64.DEFAULT)
               android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-            } catch (e: Exception) { null }
+            } catch (e: Exception) {
+              null
+            }
           }
           if (thumbBitmap != null) {
             Image(
@@ -71,7 +73,12 @@ fun DraftAttachmentItem(
               modifier = Modifier.fillMaxSize()
             )
           } else {
-            AsyncImage(model = File(draft.path), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+              model = File(draft.path),
+              contentDescription = null,
+              contentScale = ContentScale.Crop,
+              modifier = Modifier.fillMaxSize()
+            )
           }
         } else {
           val icon = getDraftIcon(draft.mimeType)

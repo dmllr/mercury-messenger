@@ -69,6 +69,7 @@ class MessageHistory {
         .is_truncated = false,
         .data = data,
         .topic_id = params.topic_id,
+        .author_id = params.author_id.IsEmpty() ? ContactID(params.topic_id.Span()) : params.author_id,
     });
   }
 
@@ -97,6 +98,7 @@ class MessageHistory {
                 .call_status = params.status
             },
         .topic_id = params.topic_id,
+        .author_id = params.author_id.IsEmpty() ? ContactID(params.topic_id.Span()) : params.author_id,
     });
   }
 

@@ -32,7 +32,6 @@ import hela.eillance.screens.CallScreen
 import hela.eillance.screens.ConnectionSettingsScreen
 import hela.eillance.screens.ContactProfileDialog
 import hela.eillance.screens.ContactsScreen
-import hela.eillance.screens.ConversationScreen
 import hela.eillance.screens.HelpScreen
 import hela.eillance.screens.IdentityScreen
 import hela.eillance.screens.IncomingCallScreen
@@ -135,7 +134,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val navigateToScanner by viewModel.navigateToScanner.collectAsState()
   val navigateToContacts by viewModel.navigateToContacts.collectAsState()
   val isCoreUnresponsive by viewModel.isCoreUnresponsive.collectAsState()
-  
+
   val context = LocalContext.current
 
   // -- Global State Observations --
@@ -348,27 +347,73 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           }
         }
 
-        ConversationScreen(
-          chatVM = chatVM,
-          contactsVM = contactsVM,
-          settingsVM = settingsVM,
-          callVM = callVM,
-          targetMessageId = messageId,
-          mainViewModel = viewModel,
-          peerId = peerId,
-          contact = contact,
-          historyPage = historyPage,
-          myId = myProfile.myId,
-          callState = callState,
-          connectionState = connectionState,
-          onBack = { navController.safePopBackStack() },
-          onNavigateToCall = { /* No-op, handled by global state */ },
-          onShowContactProfile = { contactsVM.onShowContactProfile(it) },
-          onNavigateToMedia = { navController.navigate(Route.ConversationMedia.createRoute(peerId)) },
-          onMediaClick = { attachments, index ->
-            navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
-          }
-        )
+        if (contact?.isGroup == true) {
+          hela.eillance.screens.GroupConversationScreen(
+            chatVM = chatVM,
+            contactsVM = contactsVM,
+            settingsVM = settingsVM,
+            callVM = callVM,
+            targetMessageId = messageId,
+            mainViewModel = viewModel,
+            peerId = peerId,
+            contact = contact,
+            historyPage = historyPage,
+            myId = myProfile.myId,
+            callState = callState,
+            connectionState = connectionState,
+            onBack = { navController.safePopBackStack() },
+            onNavigateToCall = { /* No-op */ },
+            onShowContactProfile = { contactsVM.onShowContactProfile(it) },
+            onNavigateToMedia = { navController.navigate(Route.ConversationMedia.createRoute(peerId)) },
+            onMediaClick = { attachments, index ->
+              navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
+            }
+          )
+        } else if (contact?.isChannel == true) {
+          hela.eillance.screens.ChannelConversationScreen(
+            chatVM = chatVM,
+            contactsVM = contactsVM,
+            settingsVM = settingsVM,
+            callVM = callVM,
+            targetMessageId = messageId,
+            mainViewModel = viewModel,
+            peerId = peerId,
+            contact = contact,
+            historyPage = historyPage,
+            myId = myProfile.myId,
+            callState = callState,
+            connectionState = connectionState,
+            onBack = { navController.safePopBackStack() },
+            onNavigateToCall = { /* No-op */ },
+            onShowContactProfile = { contactsVM.onShowContactProfile(it) },
+            onNavigateToMedia = { navController.navigate(Route.ConversationMedia.createRoute(peerId)) },
+            onMediaClick = { attachments, index ->
+              navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
+            }
+          )
+        } else {
+          hela.eillance.screens.OneOnOneConversationScreen(
+            chatVM = chatVM,
+            contactsVM = contactsVM,
+            settingsVM = settingsVM,
+            callVM = callVM,
+            targetMessageId = messageId,
+            mainViewModel = viewModel,
+            peerId = peerId,
+            contact = contact,
+            historyPage = historyPage,
+            myId = myProfile.myId,
+            callState = callState,
+            connectionState = connectionState,
+            onBack = { navController.safePopBackStack() },
+            onNavigateToCall = { /* No-op */ },
+            onShowContactProfile = { contactsVM.onShowContactProfile(it) },
+            onNavigateToMedia = { navController.navigate(Route.ConversationMedia.createRoute(peerId)) },
+            onMediaClick = { attachments, index ->
+              navController.navigate(Route.FullScreenMedia.createRoute(peerId, attachments, index))
+            }
+          )
+        }
       }
 
       composable(

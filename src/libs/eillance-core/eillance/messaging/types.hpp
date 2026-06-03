@@ -162,6 +162,7 @@ struct TextEntryParams {
   std::uint64_t id = 0;
   std::uint64_t reply_to_id = 0;
   std::optional<Time::Unit> timestamp = std::nullopt;
+  ContactID author_id{};
 };
 
 struct CallEntryParams {
@@ -172,6 +173,7 @@ struct CallEntryParams {
   std::uint32_t duration_seconds = 0;
   std::uint64_t id = 0;
   std::optional<Time::Unit> timestamp = std::nullopt;
+  ContactID author_id{};
 };
 
 struct MessageContent {
@@ -232,6 +234,7 @@ struct HistoryEntryRecord {
   HistoryEntryData data;
   TopicID topic_id;
   std::vector<ReactionEntry> reactions{};
+  ContactID author_id{};
 };
 
 struct ChatSummary {

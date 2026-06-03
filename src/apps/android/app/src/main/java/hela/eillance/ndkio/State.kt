@@ -131,7 +131,8 @@ data class HistoryEntry(
   val attachments: List<Attachment> = emptyList(),
   val reactions: List<ReactionEntry> = emptyList(),
   private val replyToIdValue: Long = 0L,
-  val peerStatuses: List<PeerMessageStatus> = emptyList()
+  val peerStatuses: List<PeerMessageStatus> = emptyList(),
+  val authorId: String = ""
 ) {
   val kind: HistoryEntryKind get() = HistoryEntryKind.fromInt(kindValue)
   val direction: MessageDirection get() = MessageDirection.fromInt(directionValue)
@@ -151,7 +152,9 @@ data class DraftAttachment(
   val name: String,
   val thumbnailBase64: String,
   val note: String
-) { val type: AttachmentType get() = AttachmentType.fromInt(typeValue) }
+) {
+  val type: AttachmentType get() = AttachmentType.fromInt(typeValue)
+}
 
 data class HistoryPage(
   val messages: List<HistoryEntry> = emptyList(),

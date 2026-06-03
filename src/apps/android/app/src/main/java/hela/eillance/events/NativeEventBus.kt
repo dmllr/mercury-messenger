@@ -2,9 +2,9 @@ package hela.eillance.events
 
 import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
-import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.DraftAttachment
 import hela.eillance.ndkio.HistoryEntry
+import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.viewmodels.NetworkStats
