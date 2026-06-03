@@ -17,9 +17,11 @@ import hela.eillance.camera.R
 @Composable
 fun ChannelReadOnlyBar() {
   Surface(modifier = Modifier.fillMaxWidth(), tonalElevation = 3.dp) {
-    Box(modifier = Modifier
-      .padding(16.dp)
-      .navigationBarsPadding(), contentAlignment = Alignment.Center) {
+    Box(
+      modifier = Modifier
+        .padding(16.dp)
+        .navigationBarsPadding(), contentAlignment = Alignment.Center
+    ) {
       Text(
         text = stringResource(id = R.string.channel_read_only),
         style = MaterialTheme.typography.bodyMedium,
