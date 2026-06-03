@@ -55,9 +55,11 @@ fun CreateGroupDialog(
         Spacer(modifier = Modifier.height(16.dp))
         Text(stringResource(id = R.string.group_add_members))
         Spacer(modifier = Modifier.height(8.dp))
-        LazyColumn(modifier = Modifier
-          .weight(1f, fill = false)
-          .heightIn(max = 250.dp)) {
+        LazyColumn(
+          modifier = Modifier
+            .weight(1f, fill = false)
+            .heightIn(max = 250.dp)
+        ) {
           items(contacts) { contact ->
             val isSelected = selectedContactIds.contains(contact.peerId)
             Row(
