@@ -431,6 +431,8 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
       }
     }
 
+    jstring j_author_id = env->NewStringUTF(entry_cpp.author_id.ToString().c_str());
+
     jobject entry_java = entry_holder.NewObject(
         env,
         static_cast<jlong>(entry_cpp.id),
@@ -448,7 +450,8 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
         j_attachments,
         j_reactions,
         j_reply_to_id,
-        j_peer_statuses
+        j_peer_statuses,
+        j_author_id
     );
 
     env->CallBooleanMethod(history_list, list_add_method, entry_java);
@@ -459,6 +462,7 @@ ConvertHistoryEntries(JNIEnv* env, std::vector<eillance::messaging::HistoryEntry
     env->DeleteLocalRef(j_reactions);
     env->DeleteLocalRef(j_peer_statuses);
     env->DeleteLocalRef(entry_java);
+    env->DeleteLocalRef(j_author_id);
   }
   return history_list;
 }

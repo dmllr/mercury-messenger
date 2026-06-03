@@ -55,12 +55,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import hela.eillance.camera.R
+import hela.eillance.ndkio.DraftAttachment
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.theme.extendedColors
-import hela.eillance.ndkio.DraftAttachment
 import java.io.File
-import androidx.core.net.toUri
 
 private enum class CameraAction { Photo, Video }
 

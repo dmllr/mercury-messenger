@@ -52,7 +52,7 @@ fun GlobalStatusBanner(
 
   LaunchedEffect(connectionState) {
     val isIssueState = connectionState != ServiceConnectionState.Online &&
-                       connectionState != ServiceConnectionState.Unknown
+        connectionState != ServiceConnectionState.Unknown
     if (isIssueState) {
       if (!showConnectionIssue) {
         kotlinx.coroutines.delay(1000) // 1 second grace period to prevent UI flicker on fast reconnects

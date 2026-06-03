@@ -827,8 +827,9 @@ class SQLiteStorage final : public PersistentStorageImpl {
         status,
         is_truncated,
         content,
-        reply_to_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        reply_to_id,
+        author_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     )SQL");
 
     BindText(statement.Get(), 1, entry.topic_id.ToString());
@@ -862,6 +863,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       BindText(statement.Get(), 8, j.dump());
       sqlite3_bind_int64(statement.Get(), 9, 0);
     }
+    BindText(statement.Get(), 10, entry.author_id.ToString());
 
     if (sqlite3_step(statement.Get()) != SQLITE_DONE) {
       LGE << "Failed to insert message entry: " << sqlite3_errmsg(db_);
@@ -1229,7 +1231,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
 
     SQLiteStatement const statement(db_, R"SQL(
-      SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id
+      SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id, author_id
       FROM messages WHERE peer_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?;
     )SQL");
     BindText(statement.Get(), 1, topic_id.ToString());
@@ -1253,7 +1255,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
 
     SQLiteStatement const statement(db_, R"SQL(
-      SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id
+      SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id, author_id
       FROM messages WHERE peer_id = ? AND id = ?;
     )SQL");
     BindText(statement.Get(), 1, topic_id.ToString());
@@ -1303,7 +1305,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
       {
         SQLiteStatement const s(
             db_,
-            "SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id "
+            "SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id, "
+            "author_id "
             "FROM messages WHERE "
             "peer_id=? ORDER BY timestamp DESC LIMIT 1;"
         );
@@ -1338,7 +1341,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
     std::vector<messaging::HistoryEntryRecord> records;
     SQLiteStatement const statement(db_, R"SQL(
-      SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id
+      SELECT id, kind, timestamp, direction, status, is_truncated, content, is_edited, is_deleted, reply_to_id, author_id
       FROM messages WHERE peer_id = ? AND status = ?;
     )SQL");
     BindText(statement.Get(), 1, topic_id.ToString());
@@ -1398,7 +1401,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         R"SQL(
       SELECT m.id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated,
              CASE WHEN m.is_truncated = 1 THEN lm.full_content ELSE m.content END,
-             m.is_edited, m.is_deleted, m.reply_to_id
+             m.is_edited, m.is_deleted, m.reply_to_id, m.author_id
       FROM messages m
       LEFT JOIN large_messages lm ON m.peer_id = lm.peer_id AND m.id = lm.message_id
       WHERE m.peer_id = ?
@@ -1449,7 +1452,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         R"SQL(
       SELECT m.id, m.kind, m.timestamp, m.direction, m.status, m.is_truncated,
              CASE WHEN m.is_truncated = 1 THEN lm.full_content ELSE m.content END,
-             m.is_edited, m.is_deleted, m.reply_to_id, m.peer_id
+             m.is_edited, m.is_deleted, m.reply_to_id, m.author_id, m.peer_id
       FROM messages m
       LEFT JOIN large_messages lm ON m.peer_id = lm.peer_id AND m.id = lm.message_id
       WHERE (m.kind = 0 OR m.kind = 3)
@@ -1471,7 +1474,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     while (sqlite3_step(statement.Get()) == SQLITE_ROW) {
       auto record = ParseHistoryEntry(statement.Get());
-      record.topic_id = TopicID(ColumnString(statement.Get(), 10));
+      record.topic_id = TopicID(ColumnString(statement.Get(), 11));
 
       std::string ts = record.topic_id.ToString();
       if (!group_cache.contains(ts)) {
@@ -1587,6 +1590,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 13) migrations::MigrateToV0013(db_);
     if (user_version < 14) migrations::MigrateToV0014(db_);
     if (user_version < 15) migrations::MigrateToV0015(db_);
+    if (user_version < 16) migrations::MigrateToV0016(db_);
     // NOLINTEND(*-braces-around-statements)
   }
 
@@ -1600,6 +1604,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
         .is_truncated = (sqlite3_column_int(stmt, 5) == 1),
         .is_edited = (sqlite3_column_int(stmt, 7) == 1),
         .is_deleted = (sqlite3_column_int(stmt, 8) == 1),
+        .author_id = ContactID(ColumnString(stmt, 10)),
     };
 
     switch (record.kind) {

@@ -156,18 +156,23 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   fun createChannel(name: String, description: String): String? {
     return if (nativePtr != 0L) nativeCreateChannel(nativePtr, name, description) else null
   }
+
   fun subscribeToChannel(channelId: String, ownerId: String) {
     if (nativePtr != 0L) nativeSubscribeToChannel(nativePtr, channelId, ownerId)
   }
+
   fun unsubscribeChannel(channelId: String) {
     if (nativePtr != 0L) nativeUnsubscribeChannel(nativePtr, channelId)
   }
+
   fun getChannelMembers(channelId: String): List<hela.eillance.ndkio.GroupMember> {
     return if (nativePtr != 0L) nativeGetChannelMembers(nativePtr, channelId).toList() else emptyList()
   }
+
   fun addChannelMember(channelId: String, contactId: String): Boolean {
     return if (nativePtr != 0L) nativeAddChannelMember(nativePtr, channelId, contactId) else false
   }
+
   fun removeChannelMember(channelId: String, contactId: String): Boolean {
     return if (nativePtr != 0L) nativeRemoveChannelMember(nativePtr, channelId, contactId) else false
   }
@@ -227,7 +232,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeGetUnreadMessages(ptr: Long, peerId: String): List<HistoryEntry>
   private external fun nativeMarkAllAsRead(ptr: Long, peerId: String)
   private external fun nativeSearchAllMessages(ptr: Long, query: String): List<GlobalSearchResult>
-  
+
   private external fun nativeGetGroupMembers(ptr: Long, groupId: String): Array<hela.eillance.ndkio.GroupMember>
   private external fun nativeAddGroupMember(ptr: Long, groupId: String, contactId: String): Boolean
   private external fun nativeRemoveGroupMember(ptr: Long, groupId: String, contactId: String): Boolean

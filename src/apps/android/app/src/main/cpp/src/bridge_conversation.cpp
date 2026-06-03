@@ -341,6 +341,8 @@ static jobject ConvertSingleHistoryEntry(JNIEnv* env, eillance::messaging::Histo
     }
   }
 
+  jstring j_author_id = env->NewStringUTF(entry_cpp.author_id.ToString().c_str());
+
   jobject entry_java = entry_holder.NewObject(
       env,
       static_cast<jlong>(entry_cpp.id),
@@ -358,13 +360,15 @@ static jobject ConvertSingleHistoryEntry(JNIEnv* env, eillance::messaging::Histo
       j_attachments,
       j_reactions,
       j_reply_to_id,
-      j_peer_statuses
+      j_peer_statuses,
+      j_author_id
   );
 
   if (content) env->DeleteLocalRef(content);
   env->DeleteLocalRef(j_attachments);
   env->DeleteLocalRef(j_reactions);
   env->DeleteLocalRef(j_peer_statuses);
+  env->DeleteLocalRef(j_author_id);
 
   return entry_java;
 }

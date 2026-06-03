@@ -176,6 +176,8 @@ void InitEventBridge(JavaVM* jvm) {
           }
         }
 
+        jstring j_author_id = env->NewStringUTF(entry_cpp.author_id.ToString().c_str());
+
         jobject entry_java = entry_holder.NewObject(
             env,
             static_cast<jlong>(entry_cpp.id),
@@ -193,7 +195,8 @@ void InitEventBridge(JavaVM* jvm) {
             j_attachments,
             j_reactions,
             j_reply_to_id,
-            j_peer_statuses
+            j_peer_statuses,
+            j_author_id
         );
         env->CallBooleanMethod(history_list, list_add_method, entry_java);
         if (content) env->DeleteLocalRef(content);
@@ -201,6 +204,7 @@ void InitEventBridge(JavaVM* jvm) {
         env->DeleteLocalRef(j_reactions);
         env->DeleteLocalRef(j_peer_statuses);
         env->DeleteLocalRef(entry_java);
+        env->DeleteLocalRef(j_author_id);
       }
       auto& page_holder = class_refs.Class("hela/eillance/ndkio/HistoryPage");
       jobject page_java = page_holder.NewObject(
@@ -483,6 +487,8 @@ void InitEventBridge(JavaVM* jvm) {
         }
       }
 
+      jstring j_author_id = env->NewStringUTF(entry_cpp.author_id.ToString().c_str());
+
       jobject entry_java = entry_holder.NewObject(
           env,
           static_cast<jlong>(entry_cpp.id),
@@ -500,7 +506,8 @@ void InitEventBridge(JavaVM* jvm) {
           j_attachments,
           j_reactions,
           j_reply_to_id,
-          j_peer_statuses
+          j_peer_statuses,
+          j_author_id
       );
       env->CallBooleanMethod(history_list, list_add_method, entry_java);
       if (content) env->DeleteLocalRef(content);
@@ -508,6 +515,7 @@ void InitEventBridge(JavaVM* jvm) {
       env->DeleteLocalRef(j_reactions);
       env->DeleteLocalRef(j_peer_statuses);
       env->DeleteLocalRef(entry_java);
+      env->DeleteLocalRef(j_author_id);
     }
 
     auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");

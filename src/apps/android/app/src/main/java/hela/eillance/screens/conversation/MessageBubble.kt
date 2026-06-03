@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,13 +44,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.components.MediaBubbleContent
+import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.MessageDirection
@@ -58,6 +63,7 @@ import hela.eillance.theme.extendedColors
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -96,7 +102,9 @@ fun MessageBubble(
   onEditCommit: (String) -> Unit = {},
   onEditCancel: () -> Unit = {},
   contactName: String = "",
-  resolveContactName: (String) -> String = { it.take(8) }
+  resolveContactName: (String) -> String = { it.take(8) },
+  resolveContactPhoto: (String) -> String? = { null },
+  isGroupChat: Boolean = false
 ) {
   val isFromMe = entry.direction == MessageDirection.Sent
   val alignment = if (isFromMe) Alignment.CenterEnd else Alignment.CenterStart
@@ -141,7 +149,7 @@ fun MessageBubble(
 
   val topPadding = if (isGroupHead) 8.dp else 0.dp
 
-  Box(
+  Row(
     modifier = Modifier
       .fillMaxWidth()
       .padding(
@@ -149,267 +157,305 @@ fun MessageBubble(
         end = if (isFromMe) 8.dp else 48.dp,
         top = topPadding
       ),
-    contentAlignment = alignment
+    horizontalArrangement = if (isFromMe) Arrangement.End else Arrangement.Start,
+    verticalAlignment = Alignment.Top
   ) {
-    if (offsetX.value < -20f) {
-      Icon(
-        Icons.AutoMirrored.Filled.Reply,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier
-          .align(Alignment.CenterEnd)
-          .padding(end = 16.dp)
-          .scale((offsetX.value / -150f).coerceIn(0f, 1f))
-          .alpha((offsetX.value / -100f).coerceIn(0f, 1f))
-      )
+    if (!isFromMe && isGroupChat) {
+      if (isGroupHead) {
+        UserAvatar(
+          photoBase64 = resolveContactPhoto(entry.authorId),
+          modifier = Modifier.size(28.dp)
+        )
+      } else {
+        Spacer(Modifier.width(28.dp))
+      }
+      Spacer(Modifier.width(8.dp))
     }
 
-    if (offsetX.value > 20f) {
-      Icon(
-        Icons.AutoMirrored.Filled.ArrowForward,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier
-          .align(Alignment.CenterStart)
-          .padding(start = 16.dp)
-          .scale((offsetX.value / 150f).coerceIn(0f, 1f))
-          .alpha((offsetX.value / 100f).coerceIn(0f, 1f))
-      )
-    }
+    Box(contentAlignment = alignment) {
+      if (offsetX.value < -20f) {
+        Icon(
+          Icons.AutoMirrored.Filled.Reply,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .padding(end = 16.dp)
+            .scale((offsetX.value / -150f).coerceIn(0f, 1f))
+            .alpha((offsetX.value / -100f).coerceIn(0f, 1f))
+        )
+      }
 
-    // Menu Popup Logic
-    if (isMenuVisible) {
-      val myReactions = entry.reactions
-        .filter { it.authorId == myId }
-        .mapNotNull { it.reaction }
-        .toSet()
+      if (offsetX.value > 20f) {
+        Icon(
+          Icons.AutoMirrored.Filled.ArrowForward,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier
+            .align(Alignment.CenterStart)
+            .padding(start = 16.dp)
+            .scale((offsetX.value / 150f).coerceIn(0f, 1f))
+            .alpha((offsetX.value / 100f).coerceIn(0f, 1f))
+        )
+      }
 
-      MessageActionMenu(
-        onDismiss = onDismissMenu,
-        onCopy = { entry.content?.let { onActionCopy(it) } ?: onDismissMenu() },
-        onDelete = onActionDelete,
-        onEdit = if (isFromMe && !entry.content.isNullOrBlank()) onActionEdit else null,
-        onShare = onActionShare,
-        onForward = onActionForward,
-        onReact = onActionReact,
-        currentReactions = myReactions,
-        isFromMe = isFromMe,
-        peerStatuses = entry.peerStatuses,
-        resolveContactName = resolveContactName
-      )
-    }
+      // Menu Popup Logic
+      if (isMenuVisible) {
+        val myReactions = entry.reactions
+          .filter { it.authorId == myId }
+          .mapNotNull { it.reaction }
+          .toSet()
 
-    val bubbleContent = @Composable {
-      Column(
-        modifier = Modifier
-          .offset { IntOffset(offsetX.value.roundToInt(), 0) }
-          .pointerInput(Unit) {
-            detectHorizontalDragGestures(
-              onDragEnd = {
-                if (offsetX.value < -130f) {
-                  onSwipeToReply()
-                } else if (offsetX.value > 130f) {
-                  onSwipeToForward()
-                }
-                coroutineScope.launch { offsetX.animateTo(0f) }
-              },
-              onDragCancel = {
-                coroutineScope.launch { offsetX.animateTo(0f) }
-              },
-              onHorizontalDrag = { _, dragAmount ->
-                val newOffset = (offsetX.value + dragAmount).coerceIn(-200f, 200f)
-                coroutineScope.launch { offsetX.snapTo(newOffset) }
-              }
-            )
-          }
-          .then(
-            if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, bubbleShape)
-            else Modifier
-          )
-          .clip(bubbleShape)
-          .background(colors.first)
-          .then(
-            if (isSelected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-            else Modifier
-          )
-          .combinedClickable(
-            onClick = {
-              if (selectionMode) onToggleSelection()
-              else onMessageClick()
-            },
-            onLongClick = {
-              if (!selectionMode) onToggleSelection()
-            }
-          )
-          .padding(horizontal = 4.dp, vertical = 4.dp),
-        horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
-      ) {
-        if (repliedMessage != null) {
-          val repliedName = if (repliedMessage.direction == MessageDirection.Sent) {
-            stringResource(R.string.me)
-          } else {
-            contactName
-          }
-          ReplyPreview(
-            name = repliedName,
-            text = repliedMessage.content.orEmpty(),
-            hasAttachments = repliedMessage.attachments.isNotEmpty(),
-            modifier = Modifier
-              .padding(bottom = 4.dp)
-              .clip(RoundedCornerShape(8.dp))
-              .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-              .clickable { onReplyClick(repliedMessage.id) },
-            barColor = colors.second.copy(alpha = 0.8f),
-            nameColor = colors.second,
-            textColor = colors.second.copy(alpha = 0.8f)
-          )
-        }
+        MessageActionMenu(
+          onDismiss = onDismissMenu,
+          onCopy = { entry.content?.let { onActionCopy(it) } ?: onDismissMenu() },
+          onDelete = onActionDelete,
+          onEdit = if (isFromMe && !entry.content.isNullOrBlank()) onActionEdit else null,
+          onShare = onActionShare,
+          onForward = onActionForward,
+          onReact = onActionReact,
+          currentReactions = myReactions,
+          isFromMe = isFromMe,
+          peerStatuses = entry.peerStatuses,
+          resolveContactName = resolveContactName
+        )
+      }
 
-        // Render Attachments
-        if (entry.attachments.isNotEmpty()) {
-          MediaBubbleContent(
-            attachments = entry.attachments,
-            transferProgress = transferProgress,
-            isFromMe = isFromMe,
-            selectionMode = selectionMode,
-            onMediaClick = { clickedAttachment ->
-              val index = entry.attachments.indexOf(clickedAttachment)
-              onMediaClick(entry.attachments, if (index != -1) index else 0)
-            },
-            onLongClick = { onToggleSelection() },
-            onCancel = onCancelTransfer,
-            onResume = onResumeTransfer,
-            onDiscard = onDiscardTransfer
-          )
-
-          if (!entry.content.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-          }
-        }
-
-        // Render Text or Editor
-        if (isEditing && !entry.content.isNullOrBlank()) {
-          MessageEditor(
-            initialContent = entry.content,
-            onCommit = onEditCommit,
-            onCancel = onEditCancel,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
-          )
-        } else if (!entry.content.isNullOrBlank()) {
-          val styledContent = remember(entry.content) {
-            buildMessageContent(entry.content!!)
-          }
-
-          Text(
-            text = styledContent,
-            color = colors.second,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-          )
-          if (entry.isTruncated) {
-            TextButton(
-              onClick = { if (!selectionMode) onShowMore(entry.id) else onToggleSelection() },
-              contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
-            ) {
-              Text(stringResource(id = R.string.action_show_more))
-            }
-          }
-        }
-
-        // Edit Label & Reactions (Hide if editing)
-        if (!isEditing && (entry.isEdited || entry.reactions.isNotEmpty())) {
-          Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            if (entry.isEdited) {
-              Text(
-                text = stringResource(R.string.message_edited),
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.second.copy(alpha = 0.6f),
-                modifier = Modifier.padding(end = 6.dp)
-              )
-            }
-            if (entry.reactions.isNotEmpty()) {
-              // Group reactions by type for display
-              val reactionStr = entry.reactions
-                .mapNotNull { it.reaction?.symbol }
-                .distinct()
-                .joinToString(" ")
-
-              if (reactionStr.isNotEmpty()) {
-                Text(
-                  text = reactionStr,
-                  style = MaterialTheme.typography.labelSmall,
-                  color = colors.second
-                )
-                if (entry.reactions.size > 1) {
-                  Text(
-                    text = " ${entry.reactions.size}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.second.copy(alpha = 0.7f)
-                  )
-                }
-              }
-            }
-          }
-        }
-
-        if (isGroupTail && !isEditing) {
-          Row(
-            modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text(
-              text = formatTimestamp(entry.timestamp, zoneId, formatters),
-              style = MaterialTheme.typography.labelSmall,
-              color = colors.second.copy(alpha = 0.6f)
-            )
-            if (isFromMe) {
-              Icon(
-                imageVector = when (entry.status) {
-                  MessageStatus.Read -> Icons.Filled.DoneAll
-                  MessageStatus.Delivered -> Icons.Filled.Done
-                  MessageStatus.Sending -> Icons.Filled.Schedule
-                  else -> Icons.Filled.Schedule
+      val bubbleContent = @Composable {
+        Column(
+          modifier = Modifier
+            .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+            .pointerInput(Unit) {
+              detectHorizontalDragGestures(
+                onDragEnd = {
+                  if (offsetX.value < -130f) {
+                    onSwipeToReply()
+                  } else if (offsetX.value > 130f) {
+                    onSwipeToForward()
+                  }
+                  coroutineScope.launch { offsetX.animateTo(0f) }
                 },
-                contentDescription = stringResource(
-                  id = R.string.message_status_description,
-                  entry.status
-                ),
-                modifier = Modifier
-                  .size(16.dp)
-                  .padding(start = 4.dp),
-                tint = if (entry.status == MessageStatus.Read) {
-                  MaterialTheme.extendedColors.success
-                } else {
-                  colors.second.copy(alpha = 0.6f)
+                onDragCancel = {
+                  coroutineScope.launch { offsetX.animateTo(0f) }
+                },
+                onHorizontalDrag = { _, dragAmount ->
+                  val newOffset = (offsetX.value + dragAmount).coerceIn(-200f, 200f)
+                  coroutineScope.launch { offsetX.snapTo(newOffset) }
                 }
               )
+            }
+            .then(
+              if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, bubbleShape)
+              else Modifier
+            )
+            .clip(bubbleShape)
+            .background(colors.first)
+            .then(
+              if (isSelected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+              else Modifier
+            )
+            .combinedClickable(
+              onClick = {
+                if (selectionMode) onToggleSelection()
+                else onMessageClick()
+              },
+              onLongClick = {
+                if (!selectionMode) onToggleSelection()
+              }
+            )
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+          horizontalAlignment = if (isFromMe) Alignment.End else Alignment.Start
+        ) {
+          if (!isFromMe && isGroupChat && isGroupHead) {
+            val authorName = resolveContactName(entry.authorId)
+            if (authorName.isNotBlank()) {
+              val authorColor = remember(entry.authorId) {
+                val colorsList = listOf(
+                  0xFFE53935, 0xFFD81B60, 0xFF8E24AA, 0xFF5E35B1,
+                  0xFF3949AB, 0xFF1E88E5, 0xFF039BE5, 0xFF00ACC1,
+                  0xFF00897B, 0xFF43A047, 0xFFF4511E, 0xFFFF6D00
+                )
+                val hash = entry.authorId.hashCode()
+                Color(colorsList[abs(hash) % colorsList.size])
+              }
+
+              Text(
+                text = authorName,
+                style = MaterialTheme.typography.labelLarge,
+                color = authorColor,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+              )
+            }
+          }
+
+          if (repliedMessage != null) {
+            val repliedName = if (repliedMessage.direction == MessageDirection.Sent) {
+              stringResource(R.string.me)
+            } else {
+              resolveContactName(repliedMessage.authorId).ifEmpty { contactName }
+            }
+            ReplyPreview(
+              name = repliedName,
+              text = repliedMessage.content.orEmpty(),
+              hasAttachments = repliedMessage.attachments.isNotEmpty(),
+              modifier = Modifier
+                .padding(bottom = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                .clickable { onReplyClick(repliedMessage.id) },
+              barColor = colors.second.copy(alpha = 0.8f),
+              nameColor = colors.second,
+              textColor = colors.second.copy(alpha = 0.8f)
+            )
+          }
+
+          // Render Attachments
+          if (entry.attachments.isNotEmpty()) {
+            MediaBubbleContent(
+              attachments = entry.attachments,
+              transferProgress = transferProgress,
+              isFromMe = isFromMe,
+              selectionMode = selectionMode,
+              onMediaClick = { clickedAttachment ->
+                val index = entry.attachments.indexOf(clickedAttachment)
+                onMediaClick(entry.attachments, if (index != -1) index else 0)
+              },
+              onLongClick = { onToggleSelection() },
+              onCancel = onCancelTransfer,
+              onResume = onResumeTransfer,
+              onDiscard = onDiscardTransfer
+            )
+
+            if (!entry.content.isNullOrBlank()) {
+              Spacer(modifier = Modifier.height(8.dp))
+            }
+          }
+
+          // Render Text or Editor
+          if (isEditing && !entry.content.isNullOrBlank()) {
+            MessageEditor(
+              initialContent = entry.content,
+              onCommit = onEditCommit,
+              onCancel = onEditCancel,
+              modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
+            )
+          } else if (!entry.content.isNullOrBlank()) {
+            val styledContent = remember(entry.content) {
+              buildMessageContent(entry.content ?: "")
+            }
+
+            Text(
+              text = styledContent,
+              color = colors.second,
+              style = MaterialTheme.typography.bodyLarge,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            )
+            if (entry.isTruncated) {
+              TextButton(
+                onClick = { if (!selectionMode) onShowMore(entry.id) else onToggleSelection() },
+                contentPadding = PaddingValues(top = 8.dp, bottom = 0.dp)
+              ) {
+                Text(stringResource(id = R.string.action_show_more))
+              }
+            }
+          }
+
+          // Edit Label & Reactions (Hide if editing)
+          if (!isEditing && (entry.isEdited || entry.reactions.isNotEmpty())) {
+            Row(
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              if (entry.isEdited) {
+                Text(
+                  text = stringResource(R.string.message_edited),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = colors.second.copy(alpha = 0.6f),
+                  modifier = Modifier.padding(end = 6.dp)
+                )
+              }
+              if (entry.reactions.isNotEmpty()) {
+                // Group reactions by type for display
+                val reactionStr = entry.reactions
+                  .mapNotNull { it.reaction?.symbol }
+                  .distinct()
+                  .joinToString(" ")
+
+                if (reactionStr.isNotEmpty()) {
+                  Text(
+                    text = reactionStr,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.second
+                  )
+                  if (entry.reactions.size > 1) {
+                    Text(
+                      text = " ${entry.reactions.size}",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = colors.second.copy(alpha = 0.7f)
+                    )
+                  }
+                }
+              }
+            }
+          }
+
+          if (isGroupTail && !isEditing) {
+            Row(
+              modifier = Modifier.padding(top = 4.dp, end = 4.dp, bottom = 4.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(
+                text = formatTimestamp(entry.timestamp, zoneId, formatters),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.second.copy(alpha = 0.6f)
+              )
+              if (isFromMe) {
+                Icon(
+                  imageVector = when (entry.status) {
+                    MessageStatus.Read -> Icons.Filled.DoneAll
+                    MessageStatus.Delivered -> Icons.Filled.Done
+                    MessageStatus.Sending -> Icons.Filled.Schedule
+                    else -> Icons.Filled.Schedule
+                  },
+                  contentDescription = stringResource(
+                    id = R.string.message_status_description,
+                    entry.status
+                  ),
+                  modifier = Modifier
+                    .size(16.dp)
+                    .padding(start = 4.dp),
+                  tint = if (entry.status == MessageStatus.Read) {
+                    MaterialTheme.extendedColors.success
+                  } else {
+                    colors.second.copy(alpha = 0.6f)
+                  }
+                )
+              }
             }
           }
         }
       }
-    }
 
-    if (!isFromMe) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        bubbleContent()
-        AnimatedVisibility(
-          visible = isUnread,
-          enter = scaleIn() + fadeIn(),
-          exit = scaleOut() + fadeOut()
-        ) {
-          Box(
-            modifier = Modifier
-              .padding(start = 8.dp)
-              .size(4.dp)
-              .background(MaterialTheme.colorScheme.primary, CircleShape)
-          )
+      if (!isFromMe) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          bubbleContent()
+          AnimatedVisibility(
+            visible = isUnread,
+            enter = scaleIn() + fadeIn(),
+            exit = scaleOut() + fadeOut()
+          ) {
+            Box(
+              modifier = Modifier
+                .padding(start = 8.dp)
+                .size(4.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape)
+            )
+          }
         }
+      } else {
+        bubbleContent()
       }
-    } else {
-      bubbleContent()
     }
   }
 }
