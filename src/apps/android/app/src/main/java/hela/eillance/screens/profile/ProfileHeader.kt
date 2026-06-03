@@ -156,7 +156,10 @@ fun ProfileHeader(
     Surface(
       color = statusColor.copy(alpha = 0.1f),
       shape = MaterialTheme.shapes.small,
-      modifier = Modifier.padding(bottom = 16.dp).clip(MaterialTheme.shapes.small).clickable { expandedNerdStats = !expandedNerdStats }
+      modifier = Modifier
+        .padding(bottom = 16.dp)
+        .clip(MaterialTheme.shapes.small)
+        .clickable { expandedNerdStats = !expandedNerdStats }
     ) {
       Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -170,7 +173,10 @@ fun ProfileHeader(
             Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
             if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrls.isNotEmpty()) {
               Text(
-                text = stringResource(id = R.string.status_bootstrap_url, bootstrapNodeUrls.lines().firstOrNull() ?: ""),
+                text = stringResource(
+                  id = R.string.status_bootstrap_url,
+                  bootstrapNodeUrls.lines().firstOrNull() ?: ""
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = statusColor
               )
@@ -181,18 +187,38 @@ fun ProfileHeader(
           Spacer(Modifier.height(8.dp))
           androidx.compose.material3.HorizontalDivider(color = statusColor.copy(alpha = 0.3f))
           Spacer(Modifier.height(8.dp))
-          Text(stringResource(R.string.nerd_stats_title), style = MaterialTheme.typography.labelMedium, color = statusColor)
+          Text(
+            stringResource(R.string.nerd_stats_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = statusColor
+          )
           Spacer(Modifier.height(4.dp))
-          Text(stringResource(R.string.stats_bootstrap_nodes, networkStats.bootstrapNodesAlive), style = MaterialTheme.typography.bodySmall, color = statusColor)
-          Text(stringResource(R.string.stats_connected_nodes, networkStats.connectedPeers), style = MaterialTheme.typography.bodySmall, color = statusColor)
-          Text(stringResource(R.string.stats_dht_peers, networkStats.dhtPeers), style = MaterialTheme.typography.bodySmall, color = statusColor)
+          Text(
+            stringResource(R.string.stats_bootstrap_nodes, networkStats.bootstrapNodesAlive),
+            style = MaterialTheme.typography.bodySmall,
+            color = statusColor
+          )
+          Text(
+            stringResource(R.string.stats_connected_nodes, networkStats.connectedPeers),
+            style = MaterialTheme.typography.bodySmall,
+            color = statusColor
+          )
+          Text(
+            stringResource(R.string.stats_dht_peers, networkStats.dhtPeers),
+            style = MaterialTheme.typography.bodySmall,
+            color = statusColor
+          )
 
           val roleStr = when (networkStats.deviceRole) {
             "turn_server" -> stringResource(R.string.role_turn_server)
             "relay_node" -> stringResource(R.string.role_relay_node)
             else -> stringResource(R.string.role_simple_node)
           }
-          Text(stringResource(R.string.stats_device_role, roleStr), style = MaterialTheme.typography.bodySmall, color = statusColor)
+          Text(
+            stringResource(R.string.stats_device_role, roleStr),
+            style = MaterialTheme.typography.bodySmall,
+            color = statusColor
+          )
         }
       }
     }

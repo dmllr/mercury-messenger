@@ -19,25 +19,19 @@ import androidx.lifecycle.viewModelScope
 import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentInfo
-import hela.eillance.ndkio.AttachmentRequest
 import hela.eillance.ndkio.AttachmentStatus
 import hela.eillance.ndkio.AttachmentType
+import hela.eillance.ndkio.DraftAttachment
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.Reaction
-import hela.eillance.ndkio.DraftAttachment
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.security.MessageDigest
 
 class ConversationViewModel(
   application: Application,
@@ -91,21 +85,21 @@ class ConversationViewModel(
       NativeEventBus.transferProgress.collect { (pid, attId, progress) ->
         if (pid == peerId) {
           onTransferProgress(attId, progress)
+        }
       }
     }
-  }
-  viewModelScope.launch {
-    NativeEventBus.peerVersionMismatch.collect { (pid, weAreOutdated) ->
-      if (pid == peerId) {
-        if (weAreOutdated) {
-          _weNeedUpdate.value = true
-        } else {
-          _peerNeedsUpdate.value = true
+    viewModelScope.launch {
+      NativeEventBus.peerVersionMismatch.collect { (pid, weAreOutdated) ->
+        if (pid == peerId) {
+          if (weAreOutdated) {
+            _weNeedUpdate.value = true
+          } else {
+            _peerNeedsUpdate.value = true
+          }
         }
       }
     }
   }
-}
 
   override fun onCleared() {
     if (nativePtr != 0L) {
@@ -365,7 +359,15 @@ class ConversationViewModel(
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String, replyToId: Long)
 
-  private external fun nativeAddDraftAttachment(ptr: Long, path: String, type: Int, mime: String, name: String, thumb: String)
+  private external fun nativeAddDraftAttachment(
+    ptr: Long,
+    path: String,
+    type: Int,
+    mime: String,
+    name: String,
+    thumb: String
+  )
+
   private external fun nativeRemoveDraftAttachment(ptr: Long, index: Int)
   private external fun nativeUpdateDraftNote(ptr: Long, index: Int, note: String)
   private external fun nativeOnMessageShown(ptr: Long, messageId: Long)

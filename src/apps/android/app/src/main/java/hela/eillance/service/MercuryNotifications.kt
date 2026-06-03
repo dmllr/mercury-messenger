@@ -217,7 +217,10 @@ class MercuryNotifications(private val service: MessengerService) {
       .setAutoCancel(true)
       .setContentIntent(pendingIntent)
 
-    notificationManager.notify(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 10000, builder.build())
+    notificationManager.notify(
+      MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 10000,
+      builder.build()
+    )
   }
 
   fun showMissedCallNotification(peerId: String, displayName: String) {
@@ -239,7 +242,10 @@ class MercuryNotifications(private val service: MessengerService) {
       .setAutoCancel(true)
       .setContentIntent(pendingIntent)
 
-    notificationManager.notify(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 20000, builder.build())
+    notificationManager.notify(
+      MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 20000,
+      builder.build()
+    )
   }
 
   fun updateForegroundServiceNotification(

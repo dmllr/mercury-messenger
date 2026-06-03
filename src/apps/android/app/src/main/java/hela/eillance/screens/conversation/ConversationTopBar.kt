@@ -73,7 +73,8 @@ fun ConversationDefaultTopBar(
   onStartVoiceCall: () -> Unit,
   onStartVideoCall: () -> Unit,
   onMediaClick: () -> Unit,
-  onSearchClick: () -> Unit
+  onSearchClick: () -> Unit,
+  showCallButtons: Boolean = true
 ) {
   TopAppBar(
     title = {
@@ -108,7 +109,7 @@ fun ConversationDefaultTopBar(
       IconButton(onClick = onSearchClick) {
         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
       }
-      if (contact?.isGroup != true) {
+      if (showCallButtons && contact?.isGroup != true) {
         IconButton(onClick = onStartVoiceCall) {
           Icon(
             Icons.Default.Call,

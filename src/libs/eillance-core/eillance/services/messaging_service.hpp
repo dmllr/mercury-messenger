@@ -254,7 +254,8 @@ class MessagingService {
          .attachments = domain_attachments,
          .direction = messaging::MessageDirection::sent,
          .kind = messaging::HistoryEntryKind::textMessage,
-         .reply_to_id = reply_to_id}
+         .reply_to_id = reply_to_id,
+         .author_id = sm_->account->GetId()}
     );
 
     Json payload_json;
@@ -684,7 +685,8 @@ class MessagingService {
          .kind = kind,
          .id = message_id,
          .reply_to_id = reply_to_id,
-         .timestamp = msg_timestamp}
+         .timestamp = msg_timestamp,
+         .author_id = entry.author_id}
     );
 
     if (is_mine) {
@@ -781,7 +783,8 @@ class MessagingService {
         .status = static_cast<messaging::CallStatus>(json.value("call_status", 0)),
         .duration_seconds = json.value("duration_seconds", 0U),
         .id = json.value("message_id", 0ULL),
-        .timestamp = msg_timestamp
+        .timestamp = msg_timestamp,
+        .author_id = entry.author_id
     };
     auto const db_entry = history_->AddCallEntry(params);
     EventQueue::Instance().Push(EventChatMessageReceived{topic_id, db_entry});
@@ -822,7 +825,8 @@ class MessagingService {
         {.topic_id = topic_id,
          .content = content,
          .direction = direction,
-         .kind = messaging::HistoryEntryKind::systemMessage}
+         .kind = messaging::HistoryEntryKind::systemMessage,
+         .author_id = sm_->account->GetId()}
     );
     EventQueue::Instance().Push(EventChatMessageReceived{topic_id, entry});
   }

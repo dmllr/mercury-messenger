@@ -11,9 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioSource
@@ -22,8 +22,6 @@ import org.webrtc.Camera1Enumerator
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraEnumerator
 import org.webrtc.DataChannel
-import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -39,7 +37,6 @@ import org.webrtc.VideoCapturer
 import org.webrtc.VideoSink
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
-import org.webrtc.audio.JavaAudioDeviceModule
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.resume
 
@@ -90,6 +87,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
     context: Int,
     state: Int
   )
+
   private external fun nativeOnSendMediaNegotiationMessage(nativePointer: Long, message: String)
 
   init {
@@ -362,23 +360,23 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           videoCapturer = enumerator.createCapturer(deviceName, null)
           val source = peerConnectionFactory!!.createVideoSource(videoCapturer!!.isScreencast)
           videoSource = source
-            surfaceTextureHelper =
-              SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
-            videoCapturer!!.initialize(surfaceTextureHelper, context, source.capturerObserver)
-            
-            localVideoTrack = peerConnectionFactory!!.createVideoTrack("ARDAMSv0", source)
-            localVideoTrack?.setEnabled(false) // CRITICAL: Start disabled
-            localSink?.let { localVideoTrack?.addSink(it) }
-            
-            try {
-              videoCapturer!!.startCapture(640, 480, 30)
-              isCapturing = true
-            } catch (_: Exception) {
-              isCapturing = false
-            }
+          surfaceTextureHelper =
+            SurfaceTextureHelper.create("CaptureThread", eglBase.eglBaseContext)
+          videoCapturer!!.initialize(surfaceTextureHelper, context, source.capturerObserver)
+
+          localVideoTrack = peerConnectionFactory!!.createVideoTrack("ARDAMSv0", source)
+          localVideoTrack?.setEnabled(false) // CRITICAL: Start disabled
+          localSink?.let { localVideoTrack?.addSink(it) }
+
+          try {
+            videoCapturer!!.startCapture(640, 480, 30)
+            isCapturing = true
+          } catch (_: Exception) {
+            isCapturing = false
           }
         }
-      } catch (_: Exception) {
+      }
+    } catch (_: Exception) {
     }
   }
 
@@ -422,7 +420,8 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
       try {
         capturerToDispose?.stopCapture()
-      } catch (e: Exception) {}
+      } catch (e: Exception) {
+      }
 
       try {
         videoTrackToDispose?.dispose()

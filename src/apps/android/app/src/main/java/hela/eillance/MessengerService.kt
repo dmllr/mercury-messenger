@@ -16,16 +16,15 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.Keep
 import hela.eillance.camera.R
+import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.ndkio.ServiceConnectionState
 import hela.eillance.service.CallHandler
 import hela.eillance.service.MercuryNotifications
 import hela.eillance.service.TelecomIntegration
-import hela.eillance.events.NativeEventBus
-import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.telecom.MercuryConnection
-import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcMediaTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,9 +38,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.json.JSONObject
 import org.webrtc.VideoSink
-import kotlin.collections.filter
 
 class MessengerService : Service() {
 
@@ -125,6 +122,7 @@ class MessengerService : Service() {
           isCharging = true
           evaluateTurnEligibility()
         }
+
         Intent.ACTION_POWER_DISCONNECTED -> {
           isCharging = false
           evaluateTurnEligibility()
@@ -153,7 +151,8 @@ class MessengerService : Service() {
 
     val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     val plugged = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
-    isCharging = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
+    isCharging =
+      plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
 
     cm.registerDefaultNetworkCallback(networkCallback)
     val filter = IntentFilter().apply {
@@ -188,14 +187,24 @@ class MessengerService : Service() {
       launch {
         NativeEventBus.callState.collect { state ->
           val isActive = state.isInCall || state.isRinging
-          updateForegroundServiceNotification(isActive, state.peerId, NativeEventBus.connectionState.value, state.callType == HistoryEntryKind.VideoCall)
+          updateForegroundServiceNotification(
+            isActive,
+            state.peerId,
+            NativeEventBus.connectionState.value,
+            state.callType == HistoryEntryKind.VideoCall
+          )
         }
       }
       launch {
         NativeEventBus.connectionState.collect { state ->
           val callState = NativeEventBus.callState.value
           val isActive = callState.isInCall || callState.isRinging
-          updateForegroundServiceNotification(isActive, callState.peerId.ifEmpty { null }, state, callState.callType == HistoryEntryKind.VideoCall)
+          updateForegroundServiceNotification(
+            isActive,
+            callState.peerId.ifEmpty { null },
+            state,
+            callState.callType == HistoryEntryKind.VideoCall
+          )
         }
       }
       launch {
@@ -215,7 +224,14 @@ class MessengerService : Service() {
         }
       }
       launch { NativeEventBus.cmdProcessIncomingTelecom.collect { callHandler.processIncomingTelecomCall(it) } }
-      launch { NativeEventBus.cmdProcessOutgoingTelecom.collect { callHandler.processOutgoingTelecomCall(it.first, it.second) } }
+      launch {
+        NativeEventBus.cmdProcessOutgoingTelecom.collect {
+          callHandler.processOutgoingTelecomCall(
+            it.first,
+            it.second
+          )
+        }
+      }
       launch { NativeEventBus.cmdDisconnectTelecom.collect { callHandler.disconnectTelecomCall(it) } }
       launch { NativeEventBus.cmdSetTelecomActive.collect { callHandler.setTelecomCallActive(it) } }
       launch { NativeEventBus.cmdSetAudioMode.collect { callHandler.setAudioMode(it) } }
@@ -274,9 +290,11 @@ class MessengerService : Service() {
       ACTION_APP_FOREGROUND -> {
         if (_isEngineReady.value) nativeOnAppForeground()
       }
+
       ACTION_APP_BACKGROUND -> {
         if (_isEngineReady.value) nativeOnAppBackground()
       }
+
       ACTION_REJECT_CALL -> rejectCall()
       ACTION_ACCEPT_CALL -> acceptCall()
       ACTION_HANGUP -> hangup()

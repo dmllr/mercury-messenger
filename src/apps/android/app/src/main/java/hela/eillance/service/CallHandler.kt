@@ -12,7 +12,6 @@ import hela.eillance.MessengerActivity
 import hela.eillance.MessengerService
 import hela.eillance.ndkio.CallState
 import hela.eillance.telecom.MercuryConnection
-import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcMediaTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch

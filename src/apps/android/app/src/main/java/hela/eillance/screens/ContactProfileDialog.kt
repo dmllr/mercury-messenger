@@ -5,25 +5,24 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -138,7 +137,8 @@ private fun GroupProfileContent(
   val isOwner = contact.ownerId == myId
 
   if (showAddMemberDialog) {
-    val allConfirmed = contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel }
+    val allConfirmed =
+      contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel }
     AddGroupMemberDialog(
       allContacts = allConfirmed,
       existingMembers = members,
@@ -170,7 +170,11 @@ private fun GroupProfileContent(
     HorizontalDivider()
     Spacer(modifier = Modifier.height(16.dp))
 
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
       Text(stringResource(id = R.string.group_participants), style = MaterialTheme.typography.titleMedium)
       if (isOwner) {
         TextButton(onClick = { showAddMemberDialog = true }) {
@@ -179,12 +183,15 @@ private fun GroupProfileContent(
       }
     }
 
-    LazyColumn(modifier = Modifier
-      .fillMaxWidth()
-      .weight(1f, fill = false)) {
+    LazyColumn(
+      modifier = Modifier
+        .fillMaxWidth()
+        .weight(1f, fill = false)
+    ) {
       items(members) { member ->
         val memberContact = contactsVM.contacts.value.find { it.peerId == member.peerId }
-        val displayName = if (member.peerId == myId) stringResource(R.string.me) else memberContact?.displayName ?: member.peerId.take(8)
+        val displayName = if (member.peerId == myId) stringResource(R.string.me) else memberContact?.displayName
+          ?: member.peerId.take(8)
 
         Row(
           modifier = Modifier
@@ -196,7 +203,11 @@ private fun GroupProfileContent(
           Column {
             Text(displayName, style = MaterialTheme.typography.bodyLarge)
             if (member.role == 1) {
-              Text(stringResource(id = R.string.group_owner), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+              Text(
+                stringResource(id = R.string.group_owner),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+              )
             }
           }
 
@@ -244,7 +255,8 @@ private fun ChannelProfileContent(
   val isOwner = contact.ownerId == myId || !contact.isReadOnly
 
   if (showAddMemberDialog) {
-    val allConfirmed = contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel }
+    val allConfirmed =
+      contactsVM.contacts.value.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel }
     AddGroupMemberDialog(
       allContacts = allConfirmed,
       existingMembers = members,
@@ -278,7 +290,11 @@ private fun ChannelProfileContent(
     HorizontalDivider()
     Spacer(modifier = Modifier.height(16.dp))
 
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
       Text(stringResource(id = R.string.channel_subscribers), style = MaterialTheme.typography.titleMedium)
       if (isOwner) {
         TextButton(onClick = { showAddMemberDialog = true }) {
@@ -287,20 +303,29 @@ private fun ChannelProfileContent(
       }
     }
 
-    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+    LazyColumn(modifier = Modifier
+      .fillMaxWidth()
+      .weight(1f, fill = false)) {
       items(members) { member ->
         val memberContact = contactsVM.contacts.value.find { it.peerId == member.peerId }
-        val displayName = if (member.peerId == myId) stringResource(R.string.me) else memberContact?.displayName ?: member.peerId.take(8)
+        val displayName = if (member.peerId == myId) stringResource(R.string.me) else memberContact?.displayName
+          ?: member.peerId.take(8)
 
         Row(
-          modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
           Column {
             Text(displayName, style = MaterialTheme.typography.bodyLarge)
             if (member.role == 1) {
-              Text(stringResource(id = R.string.group_owner), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+              Text(
+                stringResource(id = R.string.group_owner),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+              )
             }
           }
           if (isOwner && member.peerId != myId) {
@@ -314,7 +339,11 @@ private fun ChannelProfileContent(
     }
 
     Spacer(modifier = Modifier.height(16.dp))
-    OutlinedButton(onClick = { contactsVM.unsubscribeChannel(contact.peerId); onDismissRequest() }, modifier = Modifier.fillMaxWidth(), colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+    OutlinedButton(
+      onClick = { contactsVM.unsubscribeChannel(contact.peerId); onDismissRequest() },
+      modifier = Modifier.fillMaxWidth(),
+      colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+    ) {
       Text(stringResource(id = R.string.channel_unsubscribe))
     }
   }

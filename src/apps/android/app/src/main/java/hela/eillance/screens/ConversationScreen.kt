@@ -116,9 +116,8 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConversationScreen(
+fun OneOnOneConversationScreen(
   chatVM: ConversationViewModel,
   contactsVM: ContactsViewModel,
   settingsVM: SettingsViewModel,
@@ -136,6 +135,142 @@ fun ConversationScreen(
   onShowContactProfile: (String) -> Unit,
   onNavigateToMedia: () -> Unit,
   onMediaClick: (List<Attachment>, Int) -> Unit
+) {
+  BaseConversationScreen(
+    chatVM = chatVM,
+    contactsVM = contactsVM,
+    settingsVM = settingsVM,
+    callVM = callVM,
+    targetMessageId = targetMessageId,
+    mainViewModel = mainViewModel,
+    peerId = peerId,
+    contact = contact,
+    myId = myId,
+    historyPage = historyPage,
+    callState = callState,
+    connectionState = connectionState,
+    onBack = onBack,
+    onNavigateToCall = onNavigateToCall,
+    onShowContactProfile = onShowContactProfile,
+    onNavigateToMedia = onNavigateToMedia,
+    onMediaClick = onMediaClick,
+    showConnectionStatus = true,
+    isGroupChat = false,
+    showCallButtons = true
+  )
+}
+
+@Composable
+fun GroupConversationScreen(
+  chatVM: ConversationViewModel,
+  contactsVM: ContactsViewModel,
+  settingsVM: SettingsViewModel,
+  callVM: CallViewModel,
+  targetMessageId: Long?,
+  mainViewModel: MainViewModel,
+  peerId: String,
+  contact: Contact?,
+  myId: String,
+  historyPage: HistoryPage,
+  callState: CallState,
+  connectionState: ServiceConnectionState,
+  onBack: () -> Unit,
+  onNavigateToCall: (String) -> Unit,
+  onShowContactProfile: (String) -> Unit,
+  onNavigateToMedia: () -> Unit,
+  onMediaClick: (List<Attachment>, Int) -> Unit
+) {
+  BaseConversationScreen(
+    chatVM = chatVM,
+    contactsVM = contactsVM,
+    settingsVM = settingsVM,
+    callVM = callVM,
+    targetMessageId = targetMessageId,
+    mainViewModel = mainViewModel,
+    peerId = peerId,
+    contact = contact,
+    myId = myId,
+    historyPage = historyPage,
+    callState = callState,
+    connectionState = connectionState,
+    onBack = onBack,
+    onNavigateToCall = onNavigateToCall,
+    onShowContactProfile = onShowContactProfile,
+    onNavigateToMedia = onNavigateToMedia,
+    onMediaClick = onMediaClick,
+    showConnectionStatus = false,
+    isGroupChat = true,
+    showCallButtons = false
+  )
+}
+
+@Composable
+fun ChannelConversationScreen(
+  chatVM: ConversationViewModel,
+  contactsVM: ContactsViewModel,
+  settingsVM: SettingsViewModel,
+  callVM: CallViewModel,
+  targetMessageId: Long?,
+  mainViewModel: MainViewModel,
+  peerId: String,
+  contact: Contact?,
+  myId: String,
+  historyPage: HistoryPage,
+  callState: CallState,
+  connectionState: ServiceConnectionState,
+  onBack: () -> Unit,
+  onNavigateToCall: (String) -> Unit,
+  onShowContactProfile: (String) -> Unit,
+  onNavigateToMedia: () -> Unit,
+  onMediaClick: (List<Attachment>, Int) -> Unit
+) {
+  BaseConversationScreen(
+    chatVM = chatVM,
+    contactsVM = contactsVM,
+    settingsVM = settingsVM,
+    callVM = callVM,
+    targetMessageId = targetMessageId,
+    mainViewModel = mainViewModel,
+    peerId = peerId,
+    contact = contact,
+    myId = myId,
+    historyPage = historyPage,
+    callState = callState,
+    connectionState = connectionState,
+    onBack = onBack,
+    onNavigateToCall = onNavigateToCall,
+    onShowContactProfile = onShowContactProfile,
+    onNavigateToMedia = onNavigateToMedia,
+    onMediaClick = onMediaClick,
+    showConnectionStatus = true,
+    isGroupChat = false,
+    showCallButtons = false
+  )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BaseConversationScreen(
+  chatVM: ConversationViewModel,
+  contactsVM: ContactsViewModel,
+  settingsVM: SettingsViewModel,
+  callVM: CallViewModel,
+  targetMessageId: Long?,
+  mainViewModel: MainViewModel,
+  peerId: String,
+  contact: Contact?,
+  myId: String,
+  historyPage: HistoryPage,
+  callState: CallState,
+  connectionState: ServiceConnectionState,
+  onBack: () -> Unit,
+  onNavigateToCall: (String) -> Unit,
+  onShowContactProfile: (String) -> Unit,
+  onNavigateToMedia: () -> Unit,
+  onMediaClick: (List<Attachment>, Int) -> Unit,
+  showConnectionStatus: Boolean,
+  isGroupChat: Boolean,
+  showCallButtons: Boolean
 ) {
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
@@ -267,12 +402,16 @@ fun ConversationScreen(
     targetMessageId?.let { msgId ->
       chatVM.loadUpToMessage(msgId)
       scrollToMessageId = msgId
-        }
-      }
+    }
+  }
 
   val contactsList by contactsVM.contacts.collectAsState()
   val resolveContactName: (String) -> String = remember(contactsList) {
     { id -> contactsList.find { it.peerId == id }?.displayName ?: id.take(8) }
+  }
+
+  val resolveContactPhoto: (String) -> String? = remember(contactsList) {
+    { id -> contactsList.find { it.peerId == id }?.photo }
   }
 
   // Handle Shared Content
@@ -504,7 +643,8 @@ fun ConversationScreen(
             }
           },
           onMediaClick = onNavigateToMedia,
-          onSearchClick = { isSearchActive = true }
+          onSearchClick = { isSearchActive = true },
+          showCallButtons = showCallButtons
         )
       }
     }
@@ -589,22 +729,22 @@ fun ConversationScreen(
           bannerState = bannerState,
           onResetCore = { mainViewModel.resetCore() },
           onCheckPermissions = { mainViewModel.checkAllPermissions() },
-      onIgnoreBattery = { mainViewModel.ignoreBatteryOptimization() },
-      onIgnoreCalls = { mainViewModel.ignoreCallPermissions() }
-    )
+          onIgnoreBattery = { mainViewModel.ignoreBatteryOptimization() },
+          onIgnoreCalls = { mainViewModel.ignoreCallPermissions() }
+        )
 
-    if (weNeedUpdate) {
-      StatusSnackbar(
-        text = stringResource(R.string.version_we_need_update),
-        isError = true
-      )
-    } else if (peerNeedsUpdate) {
-      StatusSnackbar(
-        text = stringResource(R.string.version_peer_needs_update),
+        if (weNeedUpdate) {
+          StatusSnackbar(
+            text = stringResource(R.string.version_we_need_update),
+            isError = true
+          )
+        } else if (peerNeedsUpdate) {
+          StatusSnackbar(
+            text = stringResource(R.string.version_peer_needs_update),
             isError = true
           )
         }
-        
+
         if (historyPage.isUnreachable) {
           StatusSnackbar(
             text = stringResource(R.string.contact_unreachable),
@@ -621,8 +761,10 @@ fun ConversationScreen(
           )
         }
 
-        contact?.let {
-          ConnectionStatusBar(contact = it)
+        if (showConnectionStatus) {
+          contact?.let {
+            ConnectionStatusBar(contact = it)
+          }
         }
 
         Box(
@@ -763,7 +905,9 @@ fun ConversationScreen(
             onEditCancel = {
               editingMessageId = null
             },
-            resolveContactName = resolveContactName
+            resolveContactName = resolveContactName,
+            resolveContactPhoto = resolveContactPhoto,
+            isGroupChat = isGroupChat
           )
 
           androidx.compose.animation.AnimatedVisibility(
@@ -817,31 +961,32 @@ fun ConversationScreen(
               hela.eillance.screens.conversation.ChannelReadOnlyBar()
             } else {
               MessageInputArea(
-              inputValue = messageText,
-              onInputValueChange = chatVM::updateMessageText,
-              draftAttachments = draftAttachments,
-              isFocused = isInputFocused,
-              onFocusChange = { focused ->
-                isInputFocused = focused
-                if (focused && activeMessageActionId != null) {
-                  activeMessageActionId = null
-                  lastMenuDismissTime = System.currentTimeMillis()
-                }
-              },
-              replyingToMessage = replyingToMessage,
-              replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.displayName ?: peerId.take(8)),
-              onCancelReply = { replyingToMessage = null },
-              onSendMessage = { text ->
-                chatVM.sendMessage(text, replyingToMessage?.id)
-                replyingToMessage = null
-                coroutineScope.launch {
-                  listState.animateScrollToItem(0)
-                }
-              },
-              onAddDrafts = chatVM::addDraftAttachments,
-              onRemoveDraft = chatVM::removeDraft,
-              onUpdateNote = chatVM::updateDraftNote
-            )
+                inputValue = messageText,
+                onInputValueChange = chatVM::updateMessageText,
+                draftAttachments = draftAttachments,
+                isFocused = isInputFocused,
+                onFocusChange = { focused ->
+                  isInputFocused = focused
+                  if (focused && activeMessageActionId != null) {
+                    activeMessageActionId = null
+                    lastMenuDismissTime = System.currentTimeMillis()
+                  }
+                },
+                replyingToMessage = replyingToMessage,
+                replyingToName = if (replyingToMessage?.direction == MessageDirection.Sent) stringResource(R.string.me) else (contact?.displayName
+                  ?: peerId.take(8)),
+                onCancelReply = { replyingToMessage = null },
+                onSendMessage = { text ->
+                  chatVM.sendMessage(text, replyingToMessage?.id)
+                  replyingToMessage = null
+                  coroutineScope.launch {
+                    listState.animateScrollToItem(0)
+                  }
+                },
+                onAddDrafts = chatVM::addDraftAttachments,
+                onRemoveDraft = chatVM::removeDraft,
+                onUpdateNote = chatVM::updateDraftNote
+              )
             }
           }
         }

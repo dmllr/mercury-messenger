@@ -110,7 +110,11 @@ private val licenses = listOf(
   LicenseItem("AndroidX & Jetpack Compose", "Apache 2.0", apache2Text),
   LicenseItem("Google WebRTC", "BSD 3-Clause", bsd3Text),
   LicenseItem("OpenCV", "Apache 2.0", apache2Text),
-  LicenseItem("Rust libp2p Ecosystem", "MIT / Apache 2.0", "Dual-licensed under MIT and Apache 2.0.\n\n$apache2Text\n\n$mitText"),
+  LicenseItem(
+    "Rust libp2p Ecosystem",
+    "MIT / Apache 2.0",
+    "Dual-licensed under MIT and Apache 2.0.\n\n$apache2Text\n\n$mitText"
+  ),
   LicenseItem("Tokio Ecosystem", "MIT", mitText),
   LicenseItem("BoringSSL", "OpenSSL / ISC", "Licensed under the OpenSSL License and ISC License."),
   LicenseItem("Coil", "Apache 2.0", apache2Text),
