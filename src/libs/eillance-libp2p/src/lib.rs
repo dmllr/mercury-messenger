@@ -5,6 +5,7 @@ mod behaviour;
 mod event_loop;
 mod ffi;
 mod node;
+mod swarm_events;
 mod turn_server;
 mod types;
 
