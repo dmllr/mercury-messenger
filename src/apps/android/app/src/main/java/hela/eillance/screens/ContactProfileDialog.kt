@@ -303,9 +303,11 @@ private fun ChannelProfileContent(
       }
     }
 
-    LazyColumn(modifier = Modifier
-      .fillMaxWidth()
-      .weight(1f, fill = false)) {
+    LazyColumn(
+      modifier = Modifier
+        .fillMaxWidth()
+        .weight(1f, fill = false)
+    ) {
       items(members) { member ->
         val memberContact = contactsVM.contacts.value.find { it.peerId == member.peerId }
         val displayName = if (member.peerId == myId) stringResource(R.string.me) else memberContact?.displayName
