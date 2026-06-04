@@ -37,6 +37,11 @@ typedef void (*eillance_libp2p_on_network_stats_cb)(
     int dht_peers,
     char const* device_role
 );
+typedef void (*eillance_libp2p_on_providers_discovered_cb)(
+    void* context,
+    char const* key_hex,
+    char const* providers_csv
+);
 
 auto eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes, eillance_libp2p_node_role role) -> void*;
 void eillance_libp2p_node_start(void* node);
@@ -52,7 +57,8 @@ void eillance_libp2p_node_set_callbacks(
     eillance_libp2p_log_cb on_log,
     eillance_libp2p_on_turn_relays_discovered_cb on_turn_relays_discovered,
     eillance_libp2p_on_turn_auth_result_cb on_turn_auth_result,
-    eillance_libp2p_on_network_stats_cb on_network_stats
+    eillance_libp2p_on_network_stats_cb on_network_stats,
+    eillance_libp2p_on_providers_discovered_cb on_providers_discovered
 );
 
 void eillance_libp2p_node_disconnect(void* node, char const* peer_id_hex);
@@ -66,6 +72,9 @@ void eillance_libp2p_node_listen(void* node, char const* multiaddr);
 void eillance_libp2p_node_discover_turn_relays(void* node);
 void eillance_libp2p_node_auth_turn_relay(void* node, char const* peer_id_hex);
 void eillance_libp2p_node_set_turn_eligibility(void* node, bool eligible);
+
+void eillance_libp2p_node_start_providing(void* node, char const* key_hex);
+void eillance_libp2p_node_get_providers(void* node, char const* key_hex);
 
 // NOLINTEND(*-identifier-naming)
 
