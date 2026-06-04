@@ -82,11 +82,24 @@ class ProfileService {
   }
 
   void ProjectProfileUpdate(messaging::LedgerEntry const& entry, Json const& json, bool const is_mine) {
+    std::string const type = json.value("type", "");
     if (is_mine) {
+      if (type == "profile_info") {
+        identity::ProfileUpdate p_update;
+        if (json.contains("display_name") && !json["display_name"].is_null()) {
+          p_update.display_name = json["display_name"].get<std::string>();
+        }
+        if (json.contains("bio") && !json["bio"].is_null()) {
+          p_update.bio = json["bio"].get<std::string>();
+        }
+        if (json.contains("photo") && !json["photo"].is_null()) {
+          p_update.photo_base64 = json["photo"].get<std::string>();
+        }
+        sm_->account->UpdateMyProfile(p_update);
+      }
       return;
     }
 
-    std::string const type = json.value("type", "");
     ContactID const peer = entry.author_id;
 
     if (type == "profile_info") {

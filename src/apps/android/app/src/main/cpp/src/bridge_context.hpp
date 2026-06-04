@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <shared_mutex>
 
 #include <jni.h>
 
@@ -8,4 +9,6 @@
 
 // Global shared context for JNI bridges
 extern JavaVM* g_javaVm;
-extern std::unique_ptr<eillance::ClientEngine> g_clientEngine;
+
+auto GetSafeEngine() -> std::shared_ptr<eillance::ClientEngine>;
+void SetSafeEngine(std::shared_ptr<eillance::ClientEngine> engine);

@@ -44,9 +44,13 @@ class MediaCallService {
         storage_(sm->storage),
         data_transport_(sm->data_transport),
         media_transport_(sm->media_transport) {
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-      this->OnDataChannelOpen(e.peer_id);
-    }));
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
+          if (e.state == transport::PeerConnectionState::connected) {
+            this->OnDataConnected(e.peer_id);
+          }
+        })
+    );
 
     event_unsubs_.push_back(
         EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>([this](auto const& e) {
@@ -82,6 +86,16 @@ class MediaCallService {
     };
   }
 
+  [[nodiscard]] auto GetActiveNetworkIdForCall(ContactID const& peer_id) const -> std::optional<ContactID> {
+    std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    if (current_call_ && current_call_->peer_id == peer_id) {
+      if (!current_call_->active_network_id.IsEmpty()) {
+        return current_call_->active_network_id;
+      }
+    }
+    return std::nullopt;
+  }
+
   // --- User Actions ---
 
   void StartVoiceCall(ContactID const& peer_id) {
@@ -99,7 +113,6 @@ class MediaCallService {
       return;
     }
 
-    media_transport_->StartLocalMedia(current_call_->is_video);
     SetCallState(CallState::active);
 
     Json const msg = {{"type", "call_accept"}, {"call_id", current_call_->call_id.ToString()}};
@@ -109,6 +122,8 @@ class MediaCallService {
     }
 
     EventQueue::Instance().Push(EventCallAccepted{peer_id});
+
+    StartMediaConnection(peer_id, current_call_->is_video, false);
   }
 
   void RejectCall(ContactID const& peer_id) {
@@ -116,6 +131,10 @@ class MediaCallService {
     if (!current_call_) {
       return;
     }
+
+    LGI << "Call " << current_call_->call_id.ToString() << " rejected locally for peer " << peer_id;
+    Json const hangup_msg = {{"type", "hangup"}, {"call_id", current_call_->call_id.ToString()}};
+    std::ignore = data_transport_->SendJson(peer_id, hangup_msg);
 
     Json const msg = {{"type", "call_reject"}, {"call_id", current_call_->call_id.ToString()}};
     if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
@@ -146,7 +165,12 @@ class MediaCallService {
 
   // --- Signals from Peer ---
 
-  void OnCallRequest(ContactID const& peer_id, std::string const& call_id, messaging::HistoryEntryKind const kind) {
+  void OnCallRequest(
+      ContactID const& peer_id,
+      ContactID const& network_id,
+      std::string const& call_id,
+      messaging::HistoryEntryKind const kind
+  ) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (current_call_) {
@@ -173,6 +197,7 @@ class MediaCallService {
     current_call_ = CallSession{
         .call_id = CallID(call_id),
         .peer_id = peer_id,
+        .active_network_id = network_id,
         .is_outgoing = false,
         .is_video = is_video,
         .state = CallState::ringing
@@ -181,12 +206,6 @@ class MediaCallService {
     TriggerIncomingRing(peer_id);
 
     data_transport_->DiscoverTurnRelays();
-    call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video]() {
-      std::lock_guard<std::recursive_mutex> const lock(mutex_);
-      if (current_call_ && current_call_->peer_id == peer_id) {
-        StartMediaConnection(peer_id, is_video, false);
-      }
-    });
   }
 
   void OnCallRinging(ContactID const& peer_id, std::string const& call_id) {
@@ -200,15 +219,25 @@ class MediaCallService {
     EventQueue::Instance().Push(EventCallRinging{peer_id});
   }
 
-  void OnCallAccepted(ContactID const& peer_id, std::string const& call_id) {
+  void OnCallAccepted(ContactID const& peer_id, ContactID const& network_id, std::string const& call_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (!ValidateCallId(peer_id, call_id)) {
       return;
     }
 
+    current_call_->active_network_id = network_id;
     SetCallState(CallState::active);
     EventQueue::Instance().Push(EventCmdStopSound{});
     EventQueue::Instance().Push(EventCallAccepted{peer_id});
+
+    StartMediaConnection(peer_id, current_call_->is_video, true);
+
+    Json const cancel_msg = {
+        {"type", "call_answered_elsewhere"},
+        {"call_id", call_id},
+        {"accepted_device", network_id.ToString()}
+    };
+    std::ignore = data_transport_->SendJson(peer_id, cancel_msg);
   }
 
   void OnCallReject(ContactID const& peer_id, std::string const& call_id) {
@@ -218,6 +247,10 @@ class MediaCallService {
     }
 
     LGI << "Call " << call_id << " rejected by peer " << peer_id;
+
+    Json const hangup_msg = {{"type", "hangup"}, {"call_id", call_id}};
+    std::ignore = data_transport_->SendJson(peer_id, hangup_msg);
+
     TeardownCallInternal(peer_id, messaging::CallStatus::rejected);
     EventQueue::Instance().Push(EventCallTerminated{peer_id});
   }
@@ -231,6 +264,19 @@ class MediaCallService {
     LGI << "Call " << call_id << " hung up by peer " << peer_id;
     TeardownCallInternal(peer_id);
     EventQueue::Instance().Push(EventCallTerminated{peer_id});
+  }
+
+  void
+  OnCallAnsweredElsewhere(ContactID const& peer_id, std::string const& call_id, std::string const& accepted_device) {
+    std::lock_guard<std::recursive_mutex> const lock(mutex_);
+    if (!ValidateCallId(peer_id, call_id)) return;
+
+    auto my_device_id = ContactID(sm_->account->GetDevicePublicKey());
+    if (my_device_id.ToString() != accepted_device) {
+      LGI << "Call answered on another device. Stopping local ring.";
+      TeardownCallInternal(peer_id, messaging::CallStatus::answered);
+      EventQueue::Instance().Push(EventCallTerminated{peer_id});
+    }
   }
 
   // --- Media Signaling ---
@@ -296,10 +342,10 @@ class MediaCallService {
     }
   }
 
-  void OnDataChannelOpen(ContactID const& peer_id) {
+  void OnDataConnected(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (current_call_ && current_call_->peer_id == peer_id && current_call_->state == CallState::waitingForData) {
-      LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
+      LGI << "Data channel connected for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
       SetCallState(CallState::negotiating);
       SendCallRequest(peer_id);
 
@@ -337,8 +383,10 @@ class MediaCallService {
             LGI << "[WebRTC] ICE Gathering complete. Sending " << type << " to " << peer_id.ToString();
             LGD << "[WebRTC] Generated Local SDP:\n" << *sdp;
             Json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+            ContactID target_id =
+                current_call_->active_network_id.IsEmpty() ? peer_id : current_call_->active_network_id;
             if (peer->data_channel_is_open) {
-              std::ignore = data_transport_->SendJson(peer_id, msg);
+              std::ignore = data_transport_->SendJson(target_id, msg);
             }
             peer->pending_offer_sdp = "";  // Mark as sent
           }
@@ -383,6 +431,7 @@ class MediaCallService {
   struct CallSession {
     CallID call_id;
     ContactID peer_id;
+    ContactID active_network_id;
     bool is_outgoing;
     bool is_video;
     CallState state = CallState::idle;
@@ -439,6 +488,7 @@ class MediaCallService {
     current_call_ = CallSession{
         .call_id = GenerateCallId(peer_id),
         .peer_id = peer_id,
+        .active_network_id = ContactID(),
         .is_outgoing = true,
         .is_video = is_video,
         .state = CallState::waitingForData
@@ -462,12 +512,6 @@ class MediaCallService {
     SendCallRequest(peer_id);
 
     data_transport_->DiscoverTurnRelays();
-    call_queue_.DispatchAfter(std::chrono::milliseconds(1500), [this, peer_id, is_video]() -> void {
-      std::lock_guard<std::recursive_mutex> const dispatch_lock(mutex_);
-      if (current_call_ && current_call_->peer_id == peer_id) {
-        StartMediaConnection(peer_id, is_video, true);
-      }
-    });
   }
 
   void StartMediaConnection(ContactID const& peer_id, bool const is_video, bool const is_initiator) {
@@ -522,8 +566,10 @@ class MediaCallService {
             LGI << "[WebRTC] Forced sending " << type << " to " << peer_id.ToString() << " after ICE timeout.";
             LGD << "[WebRTC] Generated Local SDP:\n" << *sdp;
             Json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+            ContactID target_id =
+                current_call_->active_network_id.IsEmpty() ? peer_id : current_call_->active_network_id;
             if (peer->data_channel_is_open) {
-              std::ignore = data_transport_->SendJson(peer_id, msg);
+              std::ignore = data_transport_->SendJson(target_id, msg);
             }
             peer->pending_offer_sdp = "";  // Mark as sent
           }

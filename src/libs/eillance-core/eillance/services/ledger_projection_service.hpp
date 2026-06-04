@@ -70,7 +70,6 @@ class LedgerProjectionService {
           sm_->group_manager->ProjectGroupState(entry, json, is_mine);
           break;
         case messaging::LedgerActionType::ChannelState: {
-          if (is_mine) break;
           std::string const type = json.value("type", "");
           if (type == "channel_create") {
             identity::Channel c;

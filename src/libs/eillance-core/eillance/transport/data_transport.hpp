@@ -22,6 +22,7 @@ class DataTransport {
 
     // Config
     virtual void SetId(ContactID const& id) = 0;
+    virtual void SetDeviceId(ContactID const& id) = 0;
     virtual void SetSecretKey(std::span<std::byte const> key) {
       (void)key;
     }
@@ -38,6 +39,8 @@ class DataTransport {
     [[nodiscard]] virtual auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> = 0;
     [[nodiscard]] virtual auto GetPeers() const -> std::unordered_map<ContactID, std::shared_ptr<Peer>> = 0;
     [[nodiscard]] virtual auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState = 0;
+    [[nodiscard]] virtual auto GetMasterId(ContactID const& network_id) const -> ContactID = 0;
+    virtual void LinkDeviceToMaster(ContactID const& network_id, ContactID const& master_id) = 0;
 
     // Actions
     virtual void Connect(ContactID const& peer_id) = 0;  // Create PeerConnection + DataChannel
@@ -62,6 +65,9 @@ class DataTransport {
 
   void SetId(ContactID const& id) const {
     self_->SetId(id);
+  }
+  void SetDeviceId(ContactID const& id) const {
+    self_->SetDeviceId(id);
   }
   void SetSecretKey(std::span<std::byte const> key) const {
     self_->SetSecretKey(key);
@@ -94,6 +100,12 @@ class DataTransport {
   }
   [[nodiscard]] auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState {
     return self_->GetConnectionState(peer_id);
+  }
+  [[nodiscard]] auto GetMasterId(ContactID const& network_id) const -> ContactID {
+    return self_->GetMasterId(network_id);
+  }
+  void LinkDeviceToMaster(ContactID const& network_id, ContactID const& master_id) const {
+    self_->LinkDeviceToMaster(network_id, master_id);
   }
 
   void Connect(ContactID const& peer_id) const {

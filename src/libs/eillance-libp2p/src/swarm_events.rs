@@ -299,6 +299,10 @@ fn handle_identify(
       } else {
         state.has_bootstrapped = true;
         crate::node_log!(callbacks, 3, "Kademlia bootstrap initiated");
+        for key_bytes in &state.providing_keys {
+          let key = libp2p::kad::RecordKey::new(key_bytes);
+          let _ = swarm.behaviour_mut().kademlia.start_providing(key);
+        }
       }
     }
     if state.pending_dials.contains(&peer_id) {

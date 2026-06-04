@@ -154,6 +154,10 @@ struct EventSendQueuedMessages {
   ContactID peer_id;
 };
 
+struct EventSelfDeviceConnected {
+  ContactID device_id;
+};
+
 // Application Lifecycle
 struct EventAppForegrounded {};
 struct EventAppBackgrounded {};
