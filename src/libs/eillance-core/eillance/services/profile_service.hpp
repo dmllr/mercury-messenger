@@ -87,7 +87,7 @@ class ProfileService {
     }
 
     std::string const type = json.value("type", "");
-    ContactID const peer = ContactID(entry.topic_id.Span());
+    ContactID const peer = entry.author_id;
 
     if (type == "profile_info") {
       OnProfileUpdate(peer, json);
