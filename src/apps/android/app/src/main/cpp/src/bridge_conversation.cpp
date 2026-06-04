@@ -11,11 +11,12 @@
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_ConversationViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/, jstring peer_id) {
-  if (!g_clientEngine) {
+  auto engine = GetSafeEngine();
+  if (!engine) {
     return 0;
   }
   char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-  auto* vm = new eillance::view_model::ConversationViewModel(eillance::TopicID(chars), g_clientEngine->GetClient());
+  auto* vm = new eillance::view_model::ConversationViewModel(eillance::TopicID(chars), engine->GetClient());
   env->ReleaseStringUTFChars(peer_id, chars);
 
   return reinterpret_cast<jlong>(vm);
@@ -229,12 +230,13 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
     jlong ptr,
     jstring attachment_id
 ) {
-  if (!g_clientEngine) {
+  auto engine = GetSafeEngine();
+  if (!engine) {
     return nullptr;
   }
 
   char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
-  auto attachment_opt = g_clientEngine->GetClient()->GetAttachment(chars);
+  auto attachment_opt = engine->GetClient()->GetAttachment(chars);
   env->ReleaseStringUTFChars(attachment_id, chars);
 
   if (!attachment_opt) return nullptr;
@@ -272,13 +274,14 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
     jstring peer_id,
     jstring query
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
 
   char const* p_chars = env->GetStringUTFChars(peer_id, nullptr);
   char const* q_chars = env->GetStringUTFChars(query, nullptr);
 
   eillance::TopicID const pid(p_chars);
-  auto messages = g_clientEngine->GetClient()->SearchMessages(pid, q_chars);
+  auto messages = engine->GetClient()->SearchMessages(pid, q_chars);
 
   env->ReleaseStringUTFChars(peer_id, p_chars);
   env->ReleaseStringUTFChars(query, q_chars);
@@ -291,7 +294,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
     jlong ptr,
     jlong msg_id
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   auto entry_opt = vm->GetHistoryEntry(msg_id);
   if (!entry_opt) return nullptr;
@@ -303,7 +307,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ConversationV
     jobject /*instance*/,
     jlong ptr
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   auto records = vm->GetDownloadedAttachments();
 
@@ -358,7 +363,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
     jlong ptr,
     jstring attachment_id
 ) {
-  if (!g_clientEngine) return;
+  auto engine = GetSafeEngine();
+  if (!engine) return;
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(attachment_id, nullptr);
   vm->DeleteAttachmentLocal(chars);

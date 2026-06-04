@@ -36,7 +36,7 @@ pub fn build_behaviour(
   if is_bootstrap {
     kad_config.set_provider_publication_interval(Some(Duration::from_secs(45 * 60)));
   } else {
-    kad_config.set_provider_publication_interval(None);
+    kad_config.set_provider_publication_interval(Some(Duration::from_secs(10 * 60)));
   }
 
   kad_config.set_replication_factor(std::num::NonZeroUsize::new(4).unwrap());

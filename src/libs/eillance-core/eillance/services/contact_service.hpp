@@ -42,30 +42,35 @@ class ContactService {
       manager_->ReloadContacts();
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-      if (auto contact = manager_->GetContact(e.peer_id)) {
-        if (contact->status == identity::ContactStatus::pendingApproval ||
-            contact->status == identity::ContactStatus::confirmed) {
-          auto signature = sm_->account->Sign(e.peer_id.Span());
-          Json content = {
-              {"type", contact->status == identity::ContactStatus::pendingApproval ? "crcp_request" : "crcp_confirm"},
-              {"signature", crypto::ToHex(signature)},
-              {"profile", BuildMyProfileJson()}
-          };
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
+          if (e.state != transport::PeerConnectionState::connected) return;
+          if (e.peer_id == sm_->account->GetId()) return;
+          if (auto contact = manager_->GetContact(e.peer_id)) {
+            if (contact->status == identity::ContactStatus::pendingApproval ||
+                contact->status == identity::ContactStatus::confirmed) {
+              auto signature = sm_->account->Sign(e.peer_id.Span());
+              Json content = {
+                  {"type",
+                   contact->status == identity::ContactStatus::pendingApproval ? "crcp_request" : "crcp_confirm"},
+                  {"signature", crypto::ToHex(signature)},
+                  {"profile", BuildMyProfileJson()}
+              };
 
-          if (contact->status == identity::ContactStatus::pendingApproval) {
-            std::lock_guard<std::mutex> const t_lock(tokens_mutex_);
-            if (auto it = pending_tokens_.find(e.peer_id); it != pending_tokens_.end()) {
-              content["token"] = crypto::ToHex(it->second);
+              if (contact->status == identity::ContactStatus::pendingApproval) {
+                std::lock_guard<std::mutex> const t_lock(tokens_mutex_);
+                if (auto it = pending_tokens_.find(e.peer_id); it != pending_tokens_.end()) {
+                  content["token"] = crypto::ToHex(it->second);
+                }
+              }
+
+              if (auto peer = transport_->GetPeer(e.peer_id); peer && peer->data_channel_is_open) {
+                std::ignore = transport_->SendJson(e.peer_id, content);
+              }
             }
           }
-
-          if (auto peer = transport_->GetPeer(e.peer_id); peer && peer->data_channel_is_open) {
-            std::ignore = transport_->SendJson(e.peer_id, content);
-          }
-        }
-      }
-    }));
+        })
+    );
   }
 
   ~ContactService() {
@@ -93,6 +98,9 @@ class ContactService {
     }
 
     if (manager_->AddContact(peer_id) || (existing && existing->status == identity::ContactStatus::pendingApproval)) {
+      sm_->sync_engine
+          ->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ContactState, {{"type", "contact_add"}});
+
       auto const signature = sm_->account->Sign(peer_id.Span());
       Json content = {
           {"type", "crcp_request"},
@@ -138,6 +146,9 @@ class ContactService {
         return;
       }
       newly_confirmed = true;
+      sm_->sync_engine
+          ->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ContactState, {{"type", "contact_confirm"}});
+
       sm_->messaging->AddSystemEntry(
           TopicID(peer_id),
           Json{{"action", "contact_confirm"}}.dump(),
@@ -171,6 +182,9 @@ class ContactService {
       std::lock_guard<std::mutex> const lock(tokens_mutex_);
       pending_tokens_.erase(peer_id);
     }
+    sm_->sync_engine
+        ->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ContactState, {{"type", "contact_blocked"}});
+
     if (notify_peer) {
       Json const msg = {{"type", "crcp_reject"}};
       if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
@@ -186,15 +200,34 @@ class ContactService {
 
   void DeleteContact(ContactID const& peer_id) {
     BlockContact(peer_id, false);
+    sm_->sync_engine
+        ->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ContactState, {{"type", "contact_deleted"}});
     manager_->DeleteContact(peer_id);
   }
 
   void ProjectContactState(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+    std::string const type = json.value("type", "");
+    ContactID const peer = is_mine ? ContactID(entry.topic_id.Span()) : entry.author_id;
+
+    if (peer == sm_->account->GetId()) return;
+
     if (is_mine) {
+      if (type == "contact_add") {
+        manager_->AddContact(peer);
+        EventQueue::Instance().Push(EventContactStatusChanged{peer, identity::ContactStatus::pendingApproval});
+      } else if (type == "contact_confirm") {
+        manager_->AddContact(peer);
+        manager_->MarkAsConfirmed(peer);
+        EventQueue::Instance().Push(EventContactStatusChanged{peer, identity::ContactStatus::confirmed});
+      } else if (type == "contact_blocked") {
+        manager_->BlockContact(peer);
+        EventQueue::Instance().Push(EventContactStatusChanged{peer, identity::ContactStatus::rejected});
+      } else if (type == "contact_deleted") {
+        manager_->DeleteContact(peer);
+        EventQueue::Instance().Push(EventContactRemoved{peer});
+      }
       return;
     }
-    std::string const type = json.value("type", "");
-    ContactID const peer = entry.author_id;
 
     if (type == "contact_add_request") {
       auto existing = manager_->GetContact(peer);
@@ -240,6 +273,8 @@ class ContactService {
   }
 
   void ProcessCrcpMessage(ContactID const& peer_id, Json const& json) {
+    if (peer_id == sm_->account->GetId()) return;
+
     std::string const type = json.value("type", "");
 
     if (type == "crcp_request") {

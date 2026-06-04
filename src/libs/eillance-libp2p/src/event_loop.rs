@@ -42,6 +42,7 @@ pub struct EventLoopState {
   pub turn_server_handle: Option<crate::turn_server::TurnServerHandle>,
   pub tick_counter: u64,
   pub has_bootstrapped: bool,
+  pub providing_keys: HashSet<Vec<u8>>,
 }
 
 impl EventLoopState {
@@ -62,6 +63,7 @@ impl EventLoopState {
       turn_server_handle: None,
       tick_counter: 0,
       has_bootstrapped: false,
+      providing_keys: HashSet::new(),
     }
   }
 
@@ -400,6 +402,7 @@ fn handle_command(
       }
     }
     Command::StartProviding(key_bytes) => {
+      state.providing_keys.insert(key_bytes.clone());
       let key = libp2p::kad::RecordKey::new(&key_bytes);
       if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(key) {
         crate::node_log!(callbacks, 2, "Failed to start providing custom DHT key: {:?}", e);
