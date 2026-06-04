@@ -43,7 +43,8 @@ class Libp2pNode final {
         OnLogCallback,
         OnTurnRelaysDiscoveredCallback,
         OnTurnAuthResultCallback,
-        OnNetworkStatsCallback
+        OnNetworkStatsCallback,
+        OnProvidersDiscoveredCallback
     );
   }
 
@@ -64,7 +65,8 @@ class Libp2pNode final {
         on_message_(std::move(other.on_message_)),
         on_turn_relays_discovered_(std::move(other.on_turn_relays_discovered_)),
         on_turn_auth_result_(std::move(other.on_turn_auth_result_)),
-        on_network_stats_(std::move(other.on_network_stats_)) {
+        on_network_stats_(std::move(other.on_network_stats_)),
+        on_providers_discovered_(std::move(other.on_providers_discovered_)) {
     if (node_ != nullptr) {
       eillance_libp2p_node_set_callbacks(
           node_,
@@ -75,7 +77,8 @@ class Libp2pNode final {
           OnLogCallback,
           OnTurnRelaysDiscoveredCallback,
           OnTurnAuthResultCallback,
-          OnNetworkStatsCallback
+          OnNetworkStatsCallback,
+          OnProvidersDiscoveredCallback
       );
     }
   }
@@ -93,6 +96,7 @@ class Libp2pNode final {
       on_turn_relays_discovered_ = std::move(other.on_turn_relays_discovered_);
       on_turn_auth_result_ = std::move(other.on_turn_auth_result_);
       on_network_stats_ = std::move(other.on_network_stats_);
+      on_providers_discovered_ = std::move(other.on_providers_discovered_);
 
       if (node_ != nullptr) {
         eillance_libp2p_node_set_callbacks(
@@ -104,7 +108,8 @@ class Libp2pNode final {
             OnLogCallback,
             OnTurnRelaysDiscoveredCallback,
             OnTurnAuthResultCallback,
-            OnNetworkStatsCallback
+            OnNetworkStatsCallback,
+            OnProvidersDiscoveredCallback
         );
       }
     }
@@ -185,6 +190,16 @@ class Libp2pNode final {
     eillance_libp2p_node_set_turn_eligibility(node_, eligible);
   }
 
+  void StartProviding(std::string const& key_hex) const {
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_start_providing(node_, key_hex.c_str());
+  }
+
+  void GetProviders(std::string const& key_hex) const {
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_get_providers(node_, key_hex.c_str());
+  }
+
   void SetOnConnected(std::function<void(ContactID const&, bool)> cb) {
     on_connected_ = std::move(cb);
   }
@@ -206,6 +221,9 @@ class Libp2pNode final {
   void SetOnNetworkStats(std::function<void(int, int, int, std::string const&)> cb) {
     on_network_stats_ = std::move(cb);
   }
+  void SetOnProvidersDiscovered(std::function<void(std::string const&, std::vector<ContactID> const&)> cb) {
+    on_providers_discovered_ = std::move(cb);
+  }
 
  private:
   void* node_;
@@ -217,6 +235,7 @@ class Libp2pNode final {
   std::function<void(ContactID const&, bool, std::string const&, uint16_t, std::string const&, std::string const&)>
       on_turn_auth_result_;
   std::function<void(int, int, int, std::string const&)> on_network_stats_;
+  std::function<void(std::string const&, std::vector<ContactID> const&)> on_providers_discovered_;
 
   static void OnPeerConnectedCallback(void* context, char const* peer_id_hex, bool is_circuit) {
     auto* self = static_cast<Libp2pNode*>(context);
@@ -310,6 +329,23 @@ class Libp2pNode final {
     auto* self = static_cast<Libp2pNode*>(context);
     if (self->on_network_stats_ && device_role != nullptr) {
       self->on_network_stats_(connected_peers, bootstrap_nodes_alive, dht_peers, device_role);
+    }
+  }
+
+  static void OnProvidersDiscoveredCallback(void* context, char const* key_hex, char const* providers_csv) {
+    auto* self = static_cast<Libp2pNode*>(context);
+    if (self->on_providers_discovered_ && key_hex != nullptr && providers_csv != nullptr) {
+      std::vector<ContactID> providers;
+      std::string csv(providers_csv);
+      size_t start = 0;
+      size_t end = csv.find(',');
+      while (end != std::string::npos) {
+        if (end > start) providers.emplace_back(csv.substr(start, end - start));
+        start = end + 1;
+        end = csv.find(',', start);
+      }
+      if (start < csv.length()) providers.emplace_back(csv.substr(start));
+      self->on_providers_discovered_(std::string(key_hex), providers);
     }
   }
 };

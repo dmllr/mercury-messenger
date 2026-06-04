@@ -85,6 +85,7 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
   on_turn_relays_discovered: *const c_void,
   on_turn_auth_result: *const c_void,
   on_network_stats: *const c_void,
+  on_providers_discovered: *const c_void,
 ) {
   run_ffi(
     AssertUnwindSafe(|| {
@@ -102,12 +103,52 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
         on_turn_relays_discovered: on_turn_relays_discovered as usize,
         on_turn_auth_result: on_turn_auth_result as usize,
         on_network_stats: on_network_stats as usize,
+        on_providers_discovered: on_providers_discovered as usize,
       };
     }),
     (),
   );
 }
 
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_start_providing(ptr: *mut c_void, key_hex: *const c_char) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() || key_hex.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Ok(hex_str) = unsafe { CStr::from_ptr(key_hex) }.to_str() {
+        if let Ok(key_bytes) = hex_decode(hex_str) {
+          if let Some(tx) = &node.command_tx {
+            let _ = tx.send(Command::StartProviding(key_bytes));
+          }
+        }
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_get_providers(ptr: *mut c_void, key_hex: *const c_char) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() || key_hex.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Ok(hex_str) = unsafe { CStr::from_ptr(key_hex) }.to_str() {
+        if let Ok(key_bytes) = hex_decode(hex_str) {
+          if let Some(tx) = &node.command_tx {
+            let _ = tx.send(Command::GetProviders(key_bytes));
+          }
+        }
+      }
+    }),
+    (),
+  );
+}
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_reconnect(ptr: *mut c_void) {
   run_ffi(

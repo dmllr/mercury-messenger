@@ -40,6 +40,16 @@ class AccountService {
     return id_manager_->GetIdentity()->GetPrivateKey();
   }
 
+  [[nodiscard]] auto GetDevicePublicKey() const -> std::vector<std::byte> {
+    INVARIANT(id_manager_->IdentityExists());
+    return id_manager_->GetDevicePublicKey();
+  }
+
+  [[nodiscard]] auto GetDevicePrivateKey() const -> std::vector<std::byte> {
+    INVARIANT(id_manager_->IdentityExists());
+    return id_manager_->GetDevicePrivateKey();
+  }
+
   [[nodiscard]] auto IdentityExists() const -> bool {
     return id_manager_->IdentityExists();
   }
@@ -137,6 +147,11 @@ class AccountService {
   // Signing utility using the managed identity
   [[nodiscard]] auto Sign(std::span<std::byte const> const message) const -> std::vector<std::byte> {
     return id_manager_->Sign(message);
+  }
+
+  // Signing utility using the device identity
+  [[nodiscard]] auto SignWithDevice(std::span<std::byte const> const message) const -> std::vector<std::byte> {
+    return id_manager_->SignWithDevice(message);
   }
 
   void UpdatePlatformPermissions(bool has_notif, bool has_battery, bool has_calls) {

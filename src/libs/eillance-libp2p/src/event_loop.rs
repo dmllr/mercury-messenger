@@ -1,4 +1,4 @@
-use crate::behaviour::{MercuryBehaviour, MercuryBehaviourEvent};
+use crate::behaviour::MercuryBehaviour;
 use crate::types::{Callbacks, Command, NodeRole};
 use crate::utils::{notify_disconnected, resolve_multiaddr};
 use futures::StreamExt;
@@ -398,6 +398,16 @@ fn handle_command(
           .kademlia
           .stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
       }
+    }
+    Command::StartProviding(key_bytes) => {
+      let key = libp2p::kad::RecordKey::new(&key_bytes);
+      if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(key) {
+        crate::node_log!(callbacks, 2, "Failed to start providing custom DHT key: {:?}", e);
+      }
+    }
+    Command::GetProviders(key_bytes) => {
+      let key = libp2p::kad::RecordKey::new(&key_bytes);
+      swarm.behaviour_mut().kademlia.get_providers(key);
     }
     _ => {}
   }
