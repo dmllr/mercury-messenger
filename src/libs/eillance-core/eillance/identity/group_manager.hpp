@@ -91,9 +91,6 @@ class GroupManager {
   }
 
   void ProjectGroupState(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
-    if (is_mine) {
-      return;
-    }
     std::string const type = json.value("type", "");
     if (type == "group_create") {
       Group g;

@@ -37,12 +37,9 @@ class FileTransferService {
         transport_(sm->data_transport) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) -> void {
       if (!e.message.empty() && e.message[0] == std::byte{0xFE}) {
-        ProcessBinaryMessage(e.peer_id, e.message);
+        ContactID master_id = transport_->GetMasterId(e.peer_id);
+        ProcessBinaryMessage(master_id, e.message);
       }
-    }));
-
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-      this->OnConnectionReady(e.peer_id);
     }));
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
@@ -51,8 +48,11 @@ class FileTransferService {
 
     event_unsubs_.push_back(
         EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
-          if (e.state == transport::PeerConnectionState::disconnected ||
-              e.state == transport::PeerConnectionState::failed || e.state == transport::PeerConnectionState::closed) {
+          if (e.state == transport::PeerConnectionState::connected) {
+            this->OnConnectionReady(e.peer_id);
+          } else if (e.state == transport::PeerConnectionState::disconnected ||
+                     e.state == transport::PeerConnectionState::failed ||
+                     e.state == transport::PeerConnectionState::closed) {
             std::lock_guard<std::mutex> const lock(transfers_mutex_);
             for (auto it = active_uploads_.begin(); it != active_uploads_.end();) {
               if (it->second.peer_id == e.peer_id) {
@@ -708,31 +708,13 @@ class FileTransferService {
     });
   }
 
-  void PumpUploadBatch(ContactID const& peer_id, std::string const& file_id) {
-    std::unique_lock<std::mutex> lock(transfers_mutex_);
-    auto const it = active_uploads_.find(file_id);
-    if (it == active_uploads_.end()) {
-      return;
-    }
-    auto& state = it->second;
-
-    if (state.paused) {
-      state.is_pumping = false;
-      return;
-    }
-
-    if (constexpr std::size_t max_in_flight = 128;
-        state.chunks_sent_absolute >= state.chunks_acked_absolute &&
-        (state.chunks_sent_absolute - state.chunks_acked_absolute) >= max_in_flight) {
-      state.is_pumping = false;
-      ScheduleStuckRetry(peer_id, file_id);
-      return;
-    }
-
-    constexpr std::size_t batch_size = 4;  // 4 chunks of 256KB -> 1MB per loop evaluation
-    std::vector<std::vector<std::byte>> buffers_to_send;
-    std::vector<std::uint32_t> seqs_to_send;
-
+  void ReadChunksForUpload(
+      std::string const& file_id,
+      TransferUploadState& state,
+      std::size_t batch_size,
+      std::vector<std::vector<std::byte>>& buffers_to_send,
+      std::vector<std::uint32_t>& seqs_to_send
+  ) {
     while (buffers_to_send.size() < batch_size && !state.pending_chunks.empty()) {
       std::uint32_t seq = state.pending_chunks.back();
       state.pending_chunks.pop_back();
@@ -776,6 +758,68 @@ class FileTransferService {
       seqs_to_send.push_back(seq);
       state.chunks_sent_absolute++;
     }
+  }
+
+  void HandleUploadSendFailure(
+      ContactID const& peer_id,
+      std::string const& file_id,
+      TransferUploadState& state,
+      std::vector<std::uint32_t> const& seqs_to_send,
+      std::size_t buffers_to_send_size,
+      std::size_t failed_index
+  ) {
+    for (std::size_t i = buffers_to_send_size; i > failed_index; --i) {
+      state.pending_chunks.push_back(seqs_to_send[i - 1]);
+      state.chunks_sent_absolute--;
+    }
+    state.is_pumping = false;
+
+    bool is_connected = false;
+    if (auto p = transport_->GetPeer(peer_id)) {
+      is_connected = p->data_channel_is_open.load();
+    }
+
+    if (is_connected) {
+      transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id]() -> void {
+        {
+          std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
+          if (active_uploads_.contains(file_id)) {
+            active_uploads_[file_id].is_pumping = true;
+          }
+        }
+        PumpUploadBatch(peer_id, file_id);
+      });
+    } else {
+      active_uploads_.erase(file_id);
+    }
+  }
+
+  void PumpUploadBatch(ContactID const& peer_id, std::string const& file_id) {
+    std::unique_lock<std::mutex> lock(transfers_mutex_);
+    auto const it = active_uploads_.find(file_id);
+    if (it == active_uploads_.end()) {
+      return;
+    }
+    auto& state = it->second;
+
+    if (state.paused) {
+      state.is_pumping = false;
+      return;
+    }
+
+    if (constexpr std::size_t max_in_flight = 128;
+        state.chunks_sent_absolute >= state.chunks_acked_absolute &&
+        (state.chunks_sent_absolute - state.chunks_acked_absolute) >= max_in_flight) {
+      state.is_pumping = false;
+      ScheduleStuckRetry(peer_id, file_id);
+      return;
+    }
+
+    constexpr std::size_t batch_size = 4;  // 4 chunks of 256KB -> 1MB per loop evaluation
+    std::vector<std::vector<std::byte>> buffers_to_send;
+    std::vector<std::uint32_t> seqs_to_send;
+
+    ReadChunksForUpload(file_id, state, batch_size, buffers_to_send, seqs_to_send);
 
     bool const more_pending = !state.pending_chunks.empty();
     lock.unlock();  // Drop lock during heavy asynchronous transfers
@@ -798,30 +842,7 @@ class FileTransferService {
     auto& state2 = it2->second;
 
     if (send_failed) {
-      for (std::size_t i = buffers_to_send.size(); i > failed_index; --i) {
-        state2.pending_chunks.push_back(seqs_to_send[i - 1]);
-        state2.chunks_sent_absolute--;
-      }
-      state2.is_pumping = false;
-
-      bool is_connected = false;
-      if (auto p = transport_->GetPeer(peer_id)) {
-        is_connected = p->data_channel_is_open.load();
-      }
-
-      if (is_connected) {
-        transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id]() -> void {
-          {
-            std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
-            if (active_uploads_.contains(file_id)) {
-              active_uploads_[file_id].is_pumping = true;
-            }
-          }
-          PumpUploadBatch(peer_id, file_id);
-        });
-      } else {
-        active_uploads_.erase(file_id);
-      }
+      HandleUploadSendFailure(peer_id, file_id, state2, seqs_to_send, buffers_to_send.size(), failed_index);
     } else if (more_pending) {
       transfer_queue_.DispatchAfter(std::chrono::milliseconds(10), [this, peer_id, file_id]() -> void {
         PumpUploadBatch(peer_id, file_id);

@@ -9,10 +9,11 @@
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_CallViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/) {
-  if (!g_clientEngine) {
+  auto engine = GetSafeEngine();
+  if (!engine) {
     return 0;
   }
-  auto* vm = new eillance::view_model::CallViewModel(g_clientEngine->GetClient());
+  auto* vm = new eillance::view_model::CallViewModel(engine->GetClient());
   return reinterpret_cast<jlong>(vm);
 }
 

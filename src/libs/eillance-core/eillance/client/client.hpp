@@ -127,7 +127,7 @@ class Client final {
             LGI << "Network interface change detected (online -> online). Reconnecting transport.";
             if (this->is_running_.load()) {
               for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
-                EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
+                EventQueue::Instance().Push(EventConnectionAttemptFinished{sm_->data_transport->GetMasterId(id)});
               }
               sm_->data_transport->Reconnect();
               sm_->data_transport->DiscoverTurnRelays();
@@ -143,9 +143,9 @@ class Client final {
           if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
               state == ServiceConnectionState::disconnected) {
             for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{sm_->data_transport->GetMasterId(id)});
               sm_->data_transport->Disconnect(id);
-              sm_->media_transport->Disconnect(id);
+              sm_->media_transport->Disconnect(sm_->data_transport->GetMasterId(id));
             }
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
@@ -267,7 +267,8 @@ class Client final {
     }
 
     sm_->data_transport->SetId(sm_->account->GetId());
-    sm_->data_transport->SetSecretKey(sm_->account->GetPrivateKey());
+    sm_->data_transport->SetDeviceId(ContactID(sm_->account->GetDevicePublicKey()));
+    sm_->data_transport->SetSecretKey(sm_->account->GetDevicePrivateKey());
     sm_->data_transport->Start();
     sm_->sync_engine->Start();
     sm_->delivery_service->Start();
@@ -289,7 +290,7 @@ class Client final {
 
     auto peers = sm_->data_transport->GetPeers();
     for (auto const& id : peers | std::views::keys) {
-      sm_->media_transport->Disconnect(id);
+      sm_->media_transport->Disconnect(sm_->data_transport->GetMasterId(id));
       sm_->data_transport->Disconnect(id);
       sm_->data_transport->RemovePeer(id);
     }
@@ -629,13 +630,17 @@ class Client final {
       return;
     }
 
-    auto const contact = sm_->contact->GetContact(peer_id);
-    if (contact && contact->status == identity::ContactStatus::rejected) {
-      return;
+    if (peer_id != sm_->account->GetId()) {
+      auto const contact = sm_->contact->GetContact(peer_id);
+      if (contact && contact->status == identity::ContactStatus::rejected) {
+        EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
+        return;
+      }
     }
 
     auto peer = sm_->data_transport->GetPeer(peer_id);
     if (peer && peer->data_channel_is_open) {
+      EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
       return;
     }
     if (auto const state = sm_->data_transport->GetConnectionState(peer_id);
@@ -645,6 +650,7 @@ class Client final {
 
     auto const now = Time::SteadyNow();
     if (peer && (now - peer->last_connect_attempt.load() < 5000000ULL)) {
+      EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
       return;
     }
 
@@ -653,7 +659,6 @@ class Client final {
       peer->last_connect_attempt = now;
       sm_->data_transport->AddPeer(peer_id, peer);
     } else {
-      peer->last_activity_time = now;
       peer->last_connect_attempt = now;
     }
     sm_->data_transport->Connect(peer_id);
@@ -711,6 +716,7 @@ class Client final {
             .count();
 
     for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
+      auto const master_id = sm_->data_transport->GetMasterId(id);
       auto const state = sm_->data_transport->GetConnectionState(id);
       bool const is_data_connected = state == transport::PeerConnectionState::connected;
       bool const is_connecting =
@@ -719,7 +725,7 @@ class Client final {
       if (peer->has_media_peer_connection) {
         peer->last_activity_time = now;
         if (!peer->data_channel_is_open) {
-          Connect(id);
+          Connect(master_id);
         }
       } else if (is_data_connected) {
         auto const lat = peer->last_activity_time.load();
@@ -728,13 +734,15 @@ class Client final {
           sm_->data_transport->Disconnect(id);
         }
       } else if (is_connecting) {
-        if (auto const lat = peer->last_activity_time.load(); now > lat && (now - lat) > 45ULL * Time::uS) {
+        if (auto const lca = peer->last_connect_attempt.load(); now > lca && (now - lca) > 120ULL * Time::uS) {
           LGI << "Peer " << id.ToString() << " stuck in connecting. Closing.";
-          EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
+          EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
           sm_->data_transport->Disconnect(id);
         }
       }
     }
+
+    Connect(sm_->account->GetId());
 
     background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
   }

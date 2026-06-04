@@ -53,6 +53,8 @@ class SyncEngine {
     size_t peer_total_entries = 0;
     size_t current_batch_index = 0;
     size_t highest_sent_batch_index = 0;
+    bool pending_request = false;
+    Time::Unit last_activity = 0;
   };
 
   std::unordered_map<std::string, SyncSession> sessions_;
@@ -69,16 +71,79 @@ class SyncEngine {
         transport_(std::move(transport)),
         my_id_(my_id) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
-      dispatchQueue_.Dispatch([this, peer_id = e.peer_id]() -> void {
-        if (auto const peer = transport_->GetPeer(peer_id);
-            !peer || !peer->session_cipher->IsReady() || !peer->crcp_verified) {
+      dispatchQueue_.Dispatch([this, master_id = e.peer_id]() -> void {
+        if (master_id == my_id_) {
           return;
         }
+
+        std::vector<ContactID> active_devices;
+        for (auto const& [net_id, peer] : transport_->GetPeers()) {
+          if (transport_->GetMasterId(net_id) == master_id) {
+            if (peer->data_channel_is_open && peer->session_cipher->IsReady() && peer->crcp_verified) {
+              active_devices.push_back(net_id);
+            }
+          }
+        }
+
+        if (active_devices.empty()) {
+          return;
+        }
+
+        for (auto const& dev_id : active_devices) {
+          ProposeSync(TopicID(master_id), dev_id);
+        }
+
+        auto const groups = storage_->GetGroups();
+        for (auto const& g : groups) {
+          bool is_member = false;
+          for (auto const& m : g.members) {
+            if (m.contact_id == master_id) {
+              is_member = true;
+              break;
+            }
+          }
+          if (is_member) {
+            for (auto const& dev_id : active_devices) ProposeSync(TopicID(g.id), dev_id);
+          }
+        }
+
+        auto const channels = storage_->GetChannels();
+        for (auto const& c : channels) {
+          bool is_member = false;
+          for (auto const& m : c.members) {
+            if (m.contact_id == master_id) {
+              is_member = true;
+              break;
+            }
+          }
+          if (is_member) {
+            for (auto const& dev_id : active_devices) ProposeSync(TopicID(c.id), dev_id);
+          }
+        }
+
         auto const reqs = storage_->GetSyncRequests();
         for (auto const& req : reqs) {
-          if (req.target_peer_id == peer_id) {
-            ProposeSync(req.topic_id, peer_id);
+          if (req.target_peer_id == master_id) {
+            for (auto const& dev_id : active_devices) ProposeSync(req.topic_id, dev_id);
           }
+        }
+      });
+    }));
+
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSelfDeviceConnected>([this](auto const& e) -> void {
+      dispatchQueue_.Dispatch([this, device_id = e.device_id]() -> void {
+        ProposeSync(TopicID(my_id_), device_id);
+
+        for (auto const& c : storage_->GetContacts()) {
+          ProposeSync(TopicID(c.peer_id), device_id);
+        }
+
+        for (auto const& g : storage_->GetGroups()) {
+          ProposeSync(TopicID(g.id), device_id);
+        }
+
+        for (auto const& ch : storage_->GetChannels()) {
+          ProposeSync(TopicID(ch.id), device_id);
         }
       });
     }));
@@ -152,53 +217,56 @@ class SyncEngine {
 
     auto group = storage_->GetGroup(GroupID(topic_id.Span()));
     if (group) {
-      for (auto const& member : group->members) {
-        if (member.contact_id != my_id_) {
-          storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
-          if (auto peer = transport_->GetPeer(member.contact_id);
-              peer && peer->data_channel_is_open && peer->crcp_verified) {
-            ProposeSync(topic_id, member.contact_id);
-          } else {
-            EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
-          }
-        }
-      }
+      SendSyncRequestsToMembers(topic_id, my_id_, group->members);
     } else if (auto channel = storage_->GetChannel(ChannelID(topic_id.Span()))) {
       if (channel->owner_id == my_id_) {
-        for (auto const& member : channel->members) {
-          if (member.contact_id != my_id_) {
-            storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
-            if (auto peer = transport_->GetPeer(member.contact_id);
-                peer && peer->data_channel_is_open && peer->crcp_verified) {
-              ProposeSync(topic_id, member.contact_id);
-            } else {
-              EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+        SendSyncRequestsToMembers(topic_id, my_id_, channel->members);
+      } else {
+        storage_->AddSyncRequest({topic_id, channel->owner_id, Timestamp::Now(), Timestamp{0}});
+        bool proposed = false;
+        for (auto const& [net_id, peer] : transport_->GetPeers()) {
+          if (transport_->GetMasterId(net_id) == channel->owner_id) {
+            if (peer->data_channel_is_open && peer->crcp_verified) {
+              ProposeSync(topic_id, net_id);
+              proposed = true;
             }
           }
         }
-      } else {
-        storage_->AddSyncRequest({topic_id, channel->owner_id, Timestamp::Now(), Timestamp{0}});
-        if (auto peer = transport_->GetPeer(channel->owner_id);
-            peer && peer->data_channel_is_open && peer->crcp_verified) {
-          ProposeSync(topic_id, channel->owner_id);
-        } else {
+        if (!proposed) {
           EventQueue::Instance().Push(EventConnectionRequested{channel->owner_id});
         }
       }
     } else {
-      storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
+      if (target_peer != my_id_) {
+        storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
 
-      auto contact = storage_->GetContact(target_peer);
-      if (!contact || contact->status != identity::ContactStatus::confirmed) {
-        LGE << "Sync error/rejection: Contact " << target_peer.ToString() << " is not confirmed.";
-        return;
+        auto contact = storage_->GetContact(target_peer);
+        if (!contact || contact->status != identity::ContactStatus::confirmed) {
+          LGE << "Sync error/rejection: Contact " << target_peer.ToString() << " is not confirmed.";
+        } else {
+          bool proposed = false;
+          for (auto const& [net_id, peer] : transport_->GetPeers()) {
+            if (transport_->GetMasterId(net_id) == target_peer) {
+              if (peer->data_channel_is_open && peer->crcp_verified) {
+                ProposeSync(topic_id, net_id);
+                proposed = true;
+              }
+            }
+          }
+          if (!proposed) {
+            if (type != messaging::LedgerActionType::ProfileUpdate) {
+              EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+            }
+          }
+        }
       }
+    }
 
-      if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open && peer->crcp_verified) {
-        ProposeSync(topic_id, target_peer);
-      } else {
-        if (type != messaging::LedgerActionType::ProfileUpdate) {
-          EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+    storage_->AddSyncRequest({topic_id, my_id_, Timestamp::Now(), Timestamp{0}});
+    for (auto const& [net_id, peer] : transport_->GetPeers()) {
+      if (transport_->GetMasterId(net_id) == my_id_) {
+        if (peer->data_channel_is_open && peer->crcp_verified) {
+          ProposeSync(topic_id, net_id);
         }
       }
     }
@@ -230,15 +298,23 @@ class SyncEngine {
       std::lock_guard<std::mutex> const lock(sessions_mutex_);
       auto& session = sessions_[GetSessionKey(topic_id, target_peer)];
       if (session.active) {
-        return;
+        if (Time::SteadyNow() - session.last_activity > 15ULL * 1000000ULL) {
+          LGE << "[Sync] Session stuck for too long, forcing restart.";
+        } else {
+          session.pending_request = true;
+          return;
+        }
       }
       session.topic_id = topic_id;
       session.peer_id = target_peer;
       session.active = true;
+      session.pending_request = false;
+      session.last_activity = Time::SteadyNow();
       session.last_head = messaging::LedgerHash();
     }
 
-    EventQueue::Instance().Push(EventSyncStateChanged{target_peer, true, 0.0f});
+    ContactID const master_id = transport_->GetMasterId(target_peer);
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.0f});
 
     dispatchQueue_.Dispatch([this, topic_id, target_peer]() -> void { VerifySyncState(topic_id, target_peer); });
   }
@@ -249,6 +325,11 @@ class SyncEngine {
       std::string const topic_str = msg.value("topic", peer_id.ToString());
       TopicID const topic_id(topic_str);
       std::string const session_key = GetSessionKey(topic_id, peer_id);
+
+      {
+        std::lock_guard<std::mutex> const slock(sessions_mutex_);
+        sessions_[session_key].last_activity = Time::SteadyNow();
+      }
 
       if (type == "sync_start") {
         ProcessSyncStart(peer_id, topic_id, session_key, msg);
@@ -268,6 +349,74 @@ class SyncEngine {
   }
 
  private:
+  template <typename MemberType>
+  void
+  SendSyncRequestsToMembers(TopicID const& topic_id, ContactID const& my_id, std::vector<MemberType> const& members) {
+    for (auto const& member : members) {
+      if (member.contact_id != my_id) {
+        storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+        bool proposed = false;
+        for (auto const& [net_id, peer] : transport_->GetPeers()) {
+          if (transport_->GetMasterId(net_id) == member.contact_id) {
+            if (peer->data_channel_is_open && peer->crcp_verified) {
+              ProposeSync(topic_id, net_id);
+              proposed = true;
+            }
+          }
+        }
+        if (!proposed) {
+          EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+        }
+      }
+    }
+  }
+
+  template <typename MemberType>
+  void
+  ForwardToMembers(TopicID const& topic_id, ContactID const& from_master_id, std::vector<MemberType> const& members) {
+    for (auto const& member : members) {
+      if (member.contact_id != my_id_ && member.contact_id != from_master_id) {
+        storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
+        bool proposed = false;
+        for (auto const& [net_id, peer] : transport_->GetPeers()) {
+          if (transport_->GetMasterId(net_id) == member.contact_id) {
+            if (peer->data_channel_is_open && peer->crcp_verified) {
+              ProposeSync(topic_id, net_id);
+              proposed = true;
+            }
+          }
+        }
+        if (!proposed) {
+          EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+        }
+      }
+    }
+  }
+
+  void ForwardNewEntries(TopicID const& topic_id, ContactID const& from_network_id) {
+    ContactID const from_master_id = transport_->GetMasterId(from_network_id);
+
+    storage_->AddSyncRequest({topic_id, my_id_, Timestamp::Now(), Timestamp{0}});
+    for (auto const& [net_id, peer] : transport_->GetPeers()) {
+      if (net_id == from_network_id) {
+        continue;
+      }
+      if (transport_->GetMasterId(net_id) == my_id_) {
+        if (peer->data_channel_is_open && peer->session_cipher->IsReady() && peer->crcp_verified) {
+          ProposeSync(topic_id, net_id);
+        }
+      }
+    }
+
+    auto group = storage_->GetGroup(GroupID(topic_id.Span()));
+    if (group) {
+      ForwardToMembers(topic_id, from_master_id, group->members);
+    } else if (auto channel = storage_->GetChannel(ChannelID(topic_id.Span()));
+               channel && channel->owner_id == my_id_) {
+      ForwardToMembers(topic_id, from_master_id, channel->members);
+    }
+  }
+
   auto GetSessionKey(TopicID const& topic_id, ContactID const& peer_id) const -> std::string {
     return topic_id.ToString() + "_" + peer_id.ToString();
   }
@@ -363,12 +512,18 @@ class SyncEngine {
 
   void FinishSync(ContactID const& peer_id, TopicID const& topic_id) {
     bool any_active = false;
+    bool has_pending = false;
     {
       std::lock_guard<std::mutex> const lock(sessions_mutex_);
       auto& session = sessions_[GetSessionKey(topic_id, peer_id)];
       session.active = false;
       session.zero_progress_loops = 0;
       session.last_head = messaging::LedgerHash();
+
+      if (session.pending_request) {
+        has_pending = true;
+        session.pending_request = false;
+      }
 
       for (auto const& [key, s] : sessions_) {
         if (s.peer_id == peer_id && s.active) {
@@ -378,10 +533,16 @@ class SyncEngine {
       }
     }
 
-    storage_->RemoveSyncRequest(topic_id, peer_id);
+    if (has_pending) {
+      dispatchQueue_.Dispatch([this, topic_id, peer_id]() -> void { ProposeSync(topic_id, peer_id); });
+      return;
+    }
+
+    ContactID const master_id = transport_->GetMasterId(peer_id);
+    storage_->RemoveSyncRequest(topic_id, master_id);
 
     if (!any_active) {
-      EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
+      EventQueue::Instance().Push(EventSyncStateChanged{master_id, false, 1.0f});
     }
     EventQueue::Instance().Push(EventDataReloaded{});
     LGI << "[Sync] Sync finished with " << peer_id.ToString();
@@ -504,13 +665,15 @@ class SyncEngine {
     }
 
     if (!batches_to_send.empty()) {
-      EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.5f});
+      ContactID const master_id = transport_->GetMasterId(peer_id);
+      EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.5f});
     }
   }
 
   void
   ProcessSyncStart(ContactID const& peer_id, TopicID const& topic_id, std::string const& session_key, Json const& msg) {
-    LGD << "[Sync] Received sync_start from " << peer_id.ToString() << " with head " << msg.value("head", "");
+    LGD << "[Sync] Received sync_start from " << peer_id.ToString() << " for topic " << topic_id.ToString()
+        << " with head " << msg.value("head", "");
     messaging::LedgerHash const peer_head(msg.value("head", ""));
     size_t const peer_size = msg.value("size", static_cast<size_t>(0));
 
@@ -540,7 +703,8 @@ class SyncEngine {
       session.last_head = peer_head;
     }
 
-    EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.0f});
+    ContactID const master_id = transport_->GetMasterId(peer_id);
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.0f});
 
     Json const req = {{"type", "sync_checkpoints"}, {"topic", topic_id.ToString()}, {"checkpoints", checkpoints}};
     transport_->SendJson(peer_id, req);
@@ -552,7 +716,7 @@ class SyncEngine {
       std::string const& session_key,
       Json const& msg
   ) {
-    LGD << "[Sync] Received sync_checkpoints from " << peer_id.ToString();
+    LGD << "[Sync] Received sync_checkpoints from " << peer_id.ToString() << " for topic " << topic_id.ToString();
     auto checkpoints = msg.value("checkpoints", std::vector<std::string>{});
     messaging::LedgerHash lca;
 
@@ -623,8 +787,8 @@ class SyncEngine {
     size_t const batch_index = msg.value("batch_index", 0ULL);
     size_t const peer_total_entries = msg.value("total_entries", 0ULL);
 
-    LGI << "[Sync] Received sync_batch from " << peer_id.ToString() << " batch_index: " << batch_index << " containing "
-        << msg["entries"].size() << " entries.";
+    LGI << "[Sync] Received sync_batch from " << peer_id.ToString() << " for topic " << topic_id.ToString()
+        << " batch_index: " << batch_index << " containing " << msg["entries"].size() << " entries.";
 
     auto actually_new = ProcessReceivedEntries(peer_id, topic_id, msg["entries"]);
 
@@ -687,7 +851,12 @@ class SyncEngine {
         {"entries", entries_json}
     };
     transport_->SendJson(peer_id, reply);
-    EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, 0.5f});
+    ContactID const master_id = transport_->GetMasterId(peer_id);
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.5f});
+
+    if (!actually_new.empty()) {
+      ForwardNewEntries(topic_id, peer_id);
+    }
   }
 
   void ProcessSyncBatchReply(
@@ -700,8 +869,8 @@ class SyncEngine {
     size_t const batch_index = msg.value("batch_index", 0ULL);
     size_t const peer_total_entries = msg.value("total_entries", 0ULL);
 
-    LGI << "[Sync] Received sync_batch_reply from " << peer_id.ToString() << " batch_index: " << batch_index
-        << " containing " << msg["entries"].size() << " entries.";
+    LGI << "[Sync] Received sync_batch_reply from " << peer_id.ToString() << " for topic " << topic_id.ToString()
+        << " batch_index: " << batch_index << " containing " << msg["entries"].size() << " entries.";
 
     auto actually_new = ProcessReceivedEntries(peer_id, topic_id, msg["entries"]);
 
@@ -710,23 +879,7 @@ class SyncEngine {
     }
 
     if (!actually_new.empty()) {
-      auto group = storage_->GetGroup(GroupID(topic_id.Span()));
-      if (group) {
-        for (auto const& member : group->members) {
-          if (member.contact_id != my_id_ && member.contact_id != peer_id) {
-            storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
-            EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
-          }
-        }
-      } else if (auto channel = storage_->GetChannel(ChannelID(topic_id.Span()));
-                 channel && channel->owner_id == my_id_) {
-        for (auto const& member : channel->members) {
-          if (member.contact_id != my_id_ && member.contact_id != peer_id) {
-            storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
-            EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
-          }
-        }
-      }
+      ForwardNewEntries(topic_id, peer_id);
     }
 
     size_t my_total = 0;
@@ -778,13 +931,19 @@ class SyncEngine {
       }
       processed.insert(key);
 
-      auto contact = storage_->GetContact(req.target_peer_id);
-      if (!contact || contact->status != identity::ContactStatus::confirmed) {
-        continue;
+      bool const is_self = (req.target_peer_id == my_id_);
+      if (!is_self) {
+        auto contact = storage_->GetContact(req.target_peer_id);
+        if (!contact || contact->status != identity::ContactStatus::confirmed) {
+          continue;
+        }
       }
-      if (auto const peer = transport_->GetPeer(req.target_peer_id); peer && peer->data_channel_is_open) {
-        if (peer->session_cipher->IsReady() && peer->crcp_verified) {
-          ProposeSync(req.topic_id, req.target_peer_id);
+
+      for (auto const& [net_id, peer] : transport_->GetPeers()) {
+        if (transport_->GetMasterId(net_id) == req.target_peer_id) {
+          if (peer->data_channel_is_open && peer->session_cipher->IsReady() && peer->crcp_verified) {
+            ProposeSync(req.topic_id, net_id);
+          }
         }
       }
     }
