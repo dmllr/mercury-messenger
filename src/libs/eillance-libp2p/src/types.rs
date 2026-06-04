@@ -32,6 +32,7 @@ pub struct Callbacks {
   pub on_turn_relays_discovered: usize,
   pub on_turn_auth_result: usize,
   pub on_network_stats: usize,
+  pub on_providers_discovered: usize,
 }
 unsafe impl Send for Callbacks {}
 unsafe impl Sync for Callbacks {}
@@ -54,6 +55,8 @@ pub enum Command {
   DiscoverTurnRelays,
   AuthTurnRelay(PeerId),
   SetTurnEligibility(bool),
+  StartProviding(Vec<u8>),
+  GetProviders(Vec<u8>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

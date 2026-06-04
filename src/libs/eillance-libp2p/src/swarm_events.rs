@@ -106,7 +106,7 @@ pub(crate) fn handle_swarm_event(
   }
 }
 
-fn handle_new_listen_addr(address: Multiaddr, state: &mut EventLoopState, callbacks: &Callbacks, role: NodeRole) {
+fn handle_new_listen_addr(address: Multiaddr, state: &mut EventLoopState, callbacks: &Callbacks, _role: NodeRole) {
   crate::node_log!(callbacks, 3, "Listen Active. Multiaddr: {}", address);
   if address
     .iter()
@@ -476,20 +476,45 @@ fn handle_kademlia(
       result: kad::QueryResult::GetProviders(res),
       ..
     } => {
-      if let Ok(kad::GetProvidersOk::FoundProviders { providers, .. }) = res {
-        if callbacks.on_turn_relays_discovered != 0 {
-          let mut providers_hex = Vec::new();
-          for peer in providers {
-            if let Some(pk) = peerid_to_pubkey(&peer) {
-              providers_hex.push(hex_encode(&pk));
+      if let Ok(kad::GetProvidersOk::FoundProviders { key, providers, .. }) = res {
+        if key.as_ref() == b"mercury/turn_relays" {
+          if callbacks.on_turn_relays_discovered != 0 {
+            let mut providers_hex = Vec::new();
+            for peer in providers {
+              if let Some(pk) = peerid_to_pubkey(&peer) {
+                providers_hex.push(hex_encode(&pk));
+              }
+            }
+            if !providers_hex.is_empty() {
+              let joined = providers_hex.join(",");
+              let cb: extern "C" fn(*mut c_void, *const c_char) =
+                unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
+              if let Ok(c_str) = CString::new(joined) {
+                cb(callbacks.context as *mut c_void, c_str.as_ptr());
+              }
             }
           }
-          if !providers_hex.is_empty() {
-            let joined = providers_hex.join(",");
-            let cb: extern "C" fn(*mut c_void, *const c_char) =
-              unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
-            if let Ok(c_str) = CString::new(joined) {
-              cb(callbacks.context as *mut c_void, c_str.as_ptr());
+        } else {
+          if callbacks.on_providers_discovered != 0 {
+            let mut providers_hex = Vec::new();
+            for peer in providers {
+              if let Some(pk) = peerid_to_pubkey(&peer) {
+                providers_hex.push(hex_encode(&pk));
+              }
+            }
+            if !providers_hex.is_empty() {
+              let joined = providers_hex.join(",");
+              let cb: extern "C" fn(*mut c_void, *const c_char, *const c_char) =
+                unsafe { std::mem::transmute(callbacks.on_providers_discovered) };
+              if let Ok(c_str_key) = CString::new(hex_encode(key.as_ref())) {
+                if let Ok(c_str_prov) = CString::new(joined) {
+                  cb(
+                    callbacks.context as *mut c_void,
+                    c_str_key.as_ptr(),
+                    c_str_prov.as_ptr(),
+                  );
+                }
+              }
             }
           }
         }
@@ -593,7 +618,6 @@ fn handle_chat(
     request_response::Event::InboundFailure { peer, error, .. } => {
       crate::node_log!(callbacks, 2, "Chat inbound failure from {}: {:?}", peer, error);
     }
-    _ => {}
   }
 }
 
@@ -635,7 +659,6 @@ fn handle_file(
     request_response::Event::InboundFailure { peer, error, .. } => {
       crate::node_log!(callbacks, 2, "File inbound failure from {}: {:?}", peer, error);
     }
-    _ => {}
   }
 }
 
@@ -645,7 +668,7 @@ fn handle_autonat(
   swarm: &mut Swarm<MercuryBehaviour>,
   tx: &mpsc::UnboundedSender<Command>,
   callbacks: &Callbacks,
-  role: NodeRole,
+  _role: NodeRole,
 ) {
   match event {
     autonat::Event::StatusChanged { old, new } => {
