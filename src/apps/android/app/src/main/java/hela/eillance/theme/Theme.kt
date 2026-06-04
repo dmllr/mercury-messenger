@@ -17,6 +17,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -172,7 +173,9 @@ fun EillanceTheme(
   val view = LocalView.current
   if (!view.isInEditMode) {
     SideEffect {
-      WindowCompat.getInsetsController((view.context as Activity).window, view).apply {
+      val window = (view.context as Activity).window
+      window.statusBarColor = colorScheme.surface.toArgb()
+      WindowCompat.getInsetsController(window, view).apply {
         isAppearanceLightStatusBars = !darkTheme
         isAppearanceLightNavigationBars = !darkTheme
       }
