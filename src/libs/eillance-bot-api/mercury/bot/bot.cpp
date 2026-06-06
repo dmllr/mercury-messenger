@@ -72,15 +72,15 @@ class Bot::Impl {
           if (e.message.kind != eillance::messaging::HistoryEntryKind::textMessage) {
             return;
           }
-          if (!std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
+
+          auto const* content = eillance::messaging::GetMessageContent(e.message.data);
+          if (!content) {
             return;
           }
 
-          auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
-
           User user;
-          user.id = e.peer_id.ToString();
-          if (auto contact = client_->GetStorage()->GetContact(e.peer_id)) {
+          user.id = e.message.author_id.ToString();
+          if (auto contact = client_->GetStorage()->GetContact(e.message.author_id)) {
             user.first_name = contact->display_name.value_or("Unknown");
             user.bio = contact->bio.value_or("");
           } else {
@@ -90,8 +90,9 @@ class Bot::Impl {
           Message msg;
           msg.message_id = e.message.id;
           msg.date = e.message.timestamp;
-          msg.text = message.content;
+          msg.text = content->content;
           msg.from = std::move(user);
+          msg.chat_id = e.topic_id.ToString();
 
           message_handler_(msg);
         })
@@ -129,13 +130,13 @@ void Bot::Stop() const {
 }
 
 void Bot::SendMessage(std::string const& chat_id, std::string const& text) const {
-  eillance::ContactID const peer_id(chat_id);
-  std::ignore = impl_->client_->SendChatMessage(peer_id, text);
+  eillance::TopicID const topic(chat_id);
+  std::ignore = impl_->client_->SendChatMessage(topic, text);
 }
 
 void Bot::MarkAsRead(std::string const& chat_id, std::uint64_t message_id) const {
-  eillance::ContactID const peer_id(chat_id);
-  impl_->client_->MarkMessagesAsRead(peer_id, {message_id});
+  eillance::TopicID const topic(chat_id);
+  impl_->client_->MarkMessagesAsRead(topic, {message_id});
 }
 
 void Bot::OnMessage(std::function<void(Message const&)> handler) const {

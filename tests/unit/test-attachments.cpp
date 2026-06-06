@@ -38,6 +38,8 @@ class AttachmentTest : public ::testing::Test {
 
     auto contact_manager = std::make_shared<identity::ContactManager>(storage_);
     sm_->contact_manager = contact_manager;
+    sm_->group_manager = std::make_shared<identity::GroupManager>(storage_);
+    sm_->channel_manager = std::make_shared<identity::ChannelManager>(storage_);
 
     account_service_ = std::make_shared<services::AccountService>(sm_.get());
     sm_->account = account_service_;
@@ -83,13 +85,13 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
   std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "base64thumb", "image/jpeg"});
 
-  auto const record = service_->SendChatMessage(peer1, "Check this out", attachments);
+  auto const record = service_->SendChatMessage(TopicID(peer1), "Check this out", attachments);
 
-  ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(record.data));
-  auto const& entry = std::get<messaging::MessageEntry>(record.data);
-  ASSERT_EQ(entry.attachments.size(), 1);
+  ASSERT_TRUE(std::holds_alternative<messaging::ChatMessageEntry>(record.data));
+  auto const& entry = std::get<messaging::ChatMessageEntry>(record.data);
+  ASSERT_EQ(entry.message.attachments.size(), 1);
 
-  auto const& att = entry.attachments[0];
+  auto const& att = entry.message.attachments[0];
   EXPECT_NE(att.file_path, temp_file_path_);
   EXPECT_TRUE(std::filesystem::exists(att.file_path));
   EXPECT_EQ(att.mime_type, "image/jpeg");
@@ -98,9 +100,9 @@ TEST_F(AttachmentTest, SendMessageCalculatesHash) {
 }
 
 TEST_F(AttachmentTest, PersistenceStoresHash) {
-  messaging::MessageEntry msg_data;
-  msg_data.content = "Text";
-  msg_data.attachments.push_back(
+  messaging::ChatMessageEntry msg_data;
+  msg_data.message.content = "Text";
+  msg_data.message.attachments.push_back(
       {"uuid-123", messaging::AttachmentType::video, "/data/vid.mp4", "video/mp4", 1024, "", "abc123hash", true}
   );
 
@@ -110,22 +112,23 @@ TEST_F(AttachmentTest, PersistenceStoresHash) {
       .direction = messaging::MessageDirection::sent,
       .status = messaging::MessageStatus::delivered,
       .data = msg_data,
-      .peer_id = peer1
+      .topic_id = TopicID(peer1),
+      .author_id = peer1
   };
 
   (void)storage_->AddHistoryEntry(record);
 
-  auto page = storage_->GetHistoryPage(peer1, 0, 10);
+  auto page = storage_->GetHistoryPage(TopicID(peer1), 0, 10);
   ASSERT_EQ(page.messages.size(), 1);
 
   auto const& retrieved = page.messages[0];
-  ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(retrieved.data));
-  auto const& message = std::get<messaging::MessageEntry>(retrieved.data);
+  ASSERT_TRUE(std::holds_alternative<messaging::ChatMessageEntry>(retrieved.data));
+  auto const& message = std::get<messaging::ChatMessageEntry>(retrieved.data);
 
-  ASSERT_EQ(message.attachments.size(), 1);
-  EXPECT_EQ(message.attachments[0].id, "uuid-123");
-  EXPECT_EQ(message.attachments[0].type, messaging::AttachmentType::video);
-  EXPECT_EQ(message.attachments[0].hash, "abc123hash");
+  ASSERT_EQ(message.message.attachments.size(), 1);
+  EXPECT_EQ(message.message.attachments[0].id, "uuid-123");
+  EXPECT_EQ(message.message.attachments[0].type, messaging::AttachmentType::video);
+  EXPECT_EQ(message.message.attachments[0].hash, "abc123hash");
 }
 
 TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
@@ -137,7 +140,7 @@ TEST_F(AttachmentTest, SendQueuedMessagesSerializesHash) {
   std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({temp_file_path_, messaging::AttachmentType::image, "", "image/jpeg"});
 
-  service_->SendChatMessage(peer1, "Text", attachments);
+  service_->SendChatMessage(TopicID(peer1), "Text", attachments);
 
   bool found_chat_message = false;
   eillance::EventQueue::Instance().WaitFor(
@@ -169,12 +172,12 @@ TEST_F(AttachmentTest, AttachmentWithComputationFailureIsSkipped) {
   std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({bad_file, messaging::AttachmentType::file, "", "application/octet-stream"});
 
-  auto const record = service_->SendChatMessage(peer1, "msg", attachments);
+  auto const record = service_->SendChatMessage(TopicID(peer1), "msg", attachments);
 
-  ASSERT_TRUE(std::holds_alternative<messaging::MessageEntry>(record.data));
-  auto const& entry = std::get<messaging::MessageEntry>(record.data);
+  ASSERT_TRUE(std::holds_alternative<messaging::ChatMessageEntry>(record.data));
+  auto const& entry = std::get<messaging::ChatMessageEntry>(record.data);
 
-  EXPECT_TRUE(entry.attachments.empty());
+  EXPECT_TRUE(entry.message.attachments.empty());
 }
 
 TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
@@ -196,9 +199,9 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
 
   att.file_path = final_path.string();
 
-  messaging::MessageEntry msg_data;
-  msg_data.content = "Image";
-  msg_data.attachments.push_back(att);
+  messaging::ChatMessageEntry msg_data;
+  msg_data.message.content = "Image";
+  msg_data.message.attachments.push_back(att);
 
   messaging::HistoryEntryRecord record{
       .kind = messaging::HistoryEntryKind::textMessage,
@@ -206,7 +209,8 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
       .direction = messaging::MessageDirection::received,
       .status = messaging::MessageStatus::delivered,
       .data = msg_data,
-      .peer_id = peer1
+      .topic_id = TopicID(peer1),
+      .author_id = peer1
   };
 
   (void)storage_->AddHistoryEntry(record);
@@ -221,13 +225,13 @@ TEST_F(AttachmentTest, AttachmentPersistenceAcrossRestarts) {
   auto new_service = std::make_shared<services::MessagingService>(new_sm.get());
   new_sm->messaging = new_service;
 
-  auto page = new_service->GetHistoryPage(peer1, 0, 10);
+  auto page = new_service->GetHistoryPage(TopicID(peer1), 0, 10);
 
   ASSERT_EQ(page.messages.size(), 1);
-  auto const& loaded_msg = std::get<messaging::MessageEntry>(page.messages[0].data);
-  ASSERT_EQ(loaded_msg.attachments.size(), 1);
+  auto const& loaded_msg = std::get<messaging::ChatMessageEntry>(page.messages[0].data);
+  ASSERT_EQ(loaded_msg.message.attachments.size(), 1);
 
-  auto const& loaded_att = loaded_msg.attachments[0];
+  auto const& loaded_att = loaded_msg.message.attachments[0];
   EXPECT_TRUE(loaded_att.is_downloaded) << "Attachment should be marked downloaded because file exists";
   EXPECT_EQ(loaded_att.file_path, final_path.string());
 }

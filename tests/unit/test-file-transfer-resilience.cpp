@@ -103,7 +103,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 
   bool completed = false;
   auto sub2 = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
-    if (e.peer_id == peer1 && e.attachment_id == "test_file_id") {
+    if (e.topic_id == TopicID(peer1) && e.attachment_id == "test_file_id") {
       completed = true;
     }
   });
@@ -196,7 +196,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   auto encrypted = other_cipher.Encrypt(payload_json.dump());
 
-  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, 9002, false, {att});
+  client_->Messaging()->OnChatMessageReceived(TopicID(peer1), payload_json, 9002, false, {att});
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::string const data = "0123456789";
@@ -205,7 +205,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 
   bool completed = false;
   auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
-    if (e.peer_id == peer1 && e.attachment_id == "bad_hash_file") {
+    if (e.topic_id == TopicID(peer1) && e.attachment_id == "bad_hash_file") {
       completed = true;
     }
   });
@@ -240,7 +240,7 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({file_path.string(), messaging::AttachmentType::file, "", "text/plain"});
 
-  client_->SendChatMessage(peer1, "Sequence Test", atts);
+  client_->SendChatMessage(TopicID(peer1), "Sequence Test", atts);
 
   EventQueue::Instance().WaitFor([&] { return !status_sequence.empty(); }, std::chrono::seconds(2));
   ASSERT_GE(status_sequence.size(), 1);

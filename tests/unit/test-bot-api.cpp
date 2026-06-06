@@ -88,10 +88,11 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
 }
 
 TEST_F(BotApiTest, AutoRejectCalls) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->crcp_verified = true;
-  peer->data_channel_is_open = true;
-  mock_dt_->AddPeer(peer1, peer);
+  client_->Connect(peer1);
+  if (auto p = mock_dt_->GetPeer(peer1)) {
+    p->crcp_verified = true;
+    p->data_channel_is_open = true;
+  }
 
   auto sig = peer_ident_->Sign(client_->GetId().Span());
   mock_storage_->UpdateContact(
@@ -188,4 +189,36 @@ TEST_F(BotApiTest, SendMessage) {
     }
   }
   EXPECT_TRUE(sent);
+}
+
+TEST_F(BotApiTest, MarkAsRead) {
+  std::ignore = client_->AddContact(peer1, std::nullopt);
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+
+  // Ensure data channel open
+  eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
+
+  // Simulate bot sending a message
+  bot_->MarkAsRead(peer1.ToString(), 999);
+
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& msg : entries) {
+          if (msg.payload.find("message_read") != std::string::npos) return true;
+        }
+        return false;
+      },
+      std::chrono::milliseconds(2000)
+  );
+
+  bool marked = false;
+  for (auto const& msg : mock_storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (msg.payload.find("message_read") != std::string::npos) {
+      marked = true;
+    }
+  }
+  EXPECT_TRUE(marked);
 }

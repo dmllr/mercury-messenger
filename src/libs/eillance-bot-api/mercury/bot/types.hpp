@@ -16,6 +16,7 @@ struct User {
 struct Message {
   std::uint64_t message_id{};
   User from;
+  std::string chat_id;
   std::string text;
   std::uint64_t date{};  // Unix timestamp (microseconds)
 };

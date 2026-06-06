@@ -29,6 +29,8 @@ class ProfileServiceTest : public ::testing::Test {
     sm_->storage = storage_;
     sm_->data_transport = transport_;
     sm_->contact_manager = std::make_shared<identity::ContactManager>(storage_);
+    sm_->group_manager = std::make_shared<identity::GroupManager>(storage_);
+    sm_->channel_manager = std::make_shared<identity::ChannelManager>(storage_);
 
     account_service_ = std::make_shared<services::AccountService>(sm_.get());
     sm_->account = account_service_;
@@ -91,9 +93,12 @@ TEST_F(ProfileServiceTest, UpdateProfileTriggersSystemMessage) {
   EXPECT_TRUE(update_cb_called);
 
   // Verify system message (diff) was generated
-  auto history = messaging_service_->GetHistoryPage(peer1, 0, 10);
+  auto history = messaging_service_->GetHistoryPage(TopicID(peer1), 0, 10);
   ASSERT_FALSE(history.messages.empty());
   auto const& last_msg = history.messages[0];
   EXPECT_EQ(last_msg.kind, messaging::HistoryEntryKind::systemMessage);
-  EXPECT_NE(std::get<messaging::MessageEntry>(last_msg.data).content.find("profile_update_diff"), std::string::npos);
+  EXPECT_NE(
+      std::get<messaging::ChatMessageEntry>(last_msg.data).message.content.find("profile_update_diff"),
+      std::string::npos
+  );
 }

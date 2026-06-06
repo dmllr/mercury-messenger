@@ -17,6 +17,7 @@ namespace eillance::transport {
 class MockDataTransport : public DataTransport::Interface {
  public:
   ContactID id_;
+  ContactID device_id_;
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   std::vector<std::byte> secret_key_;
   std::vector<std::string> bootstrap_urls_;
@@ -25,6 +26,9 @@ class MockDataTransport : public DataTransport::Interface {
 
   void SetId(ContactID const& id) override {
     id_ = id;
+  }
+  void SetDeviceId(ContactID const& id) override {
+    device_id_ = id;
   }
   void SetSecretKey(std::span<std::byte const> key) override {
     secret_key_.assign(key.begin(), key.end());
@@ -63,6 +67,11 @@ class MockDataTransport : public DataTransport::Interface {
       }
     }
     return PeerConnectionState::disconnected;
+  }
+  [[nodiscard]] auto GetMasterId(ContactID const& network_id) const -> ContactID override {
+    return network_id;
+  }
+  void LinkDeviceToMaster(ContactID const& network_id, ContactID const& master_id) override {
   }
 
   void Connect(ContactID const& peer_id) override {
