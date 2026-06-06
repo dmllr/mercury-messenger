@@ -404,6 +404,8 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   sm.storage = A->storage;
   sm.data_transport = A->transport;
   sm.contact_manager = std::make_shared<identity::ContactManager>(A->storage);
+  sm.group_manager = std::make_shared<identity::GroupManager>(A->storage);
+  sm.channel_manager = std::make_shared<identity::ChannelManager>(A->storage);
 
   auto messaging_service = std::make_shared<services::MessagingService>(&sm);
   sm.messaging = messaging_service;
@@ -433,7 +435,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   nlohmann::json delivered_json = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", {100}}};
   messaging_service->ProjectMessage(delivered_entry, delivered_json, false, false);
 
-  auto entry = A->storage->GetHistoryEntry(idB_, 100);
+  auto entry = A->storage->GetHistoryEntry(TopicID(idB_), 100);
   if (entry) {
     EXPECT_EQ(entry->status, messaging::MessageStatus::read);
   }

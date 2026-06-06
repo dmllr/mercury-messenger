@@ -323,7 +323,10 @@ class SyncEngine {
     try {
       std::string const type = msg.value("type", "");
       std::string const topic_str = msg.value("topic", peer_id.ToString());
-      TopicID const topic_id(topic_str);
+      TopicID topic_id(topic_str);
+      if (topic_id == TopicID(my_id_)) {
+        topic_id = TopicID(peer_id);
+      }
       std::string const session_key = GetSessionKey(topic_id, peer_id);
 
       {

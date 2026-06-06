@@ -123,7 +123,7 @@ TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   std::ofstream(file_path).close();
   atts[0].file_path = file_path;
 
-  client_->SendChatMessage(peer1, "Msg", atts);
+  client_->SendChatMessage(TopicID(peer1), "Msg", atts);
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         auto entries = storage_->GetLedgerEntries(TopicID(peer1));
@@ -153,7 +153,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
 
   bool download_cb_called = false;
   auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
-    if (e.peer_id == peer1 && e.attachment_id == "att_1") {
+    if (e.topic_id == TopicID(peer1) && e.attachment_id == "att_1") {
       download_cb_called = true;
     }
   });
@@ -175,7 +175,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   att.is_downloaded = false;
   att.note = "Incoming note";
 
-  client_->Messaging()->OnChatMessageReceived(peer1, payload_json, 12345, false, {att});
+  client_->Messaging()->OnChatMessageReceived(TopicID(peer1), payload_json, 12345, false, {att});
 
   auto stored_att = mock_storage_->GetAttachment("att_1");
   ASSERT_TRUE(stored_att.has_value());
@@ -197,7 +197,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
 }
 
 TEST_F(MessagingServiceTest, SendMessage_AppendsToLedger) {
-  auto const entry = client_->SendChatMessage(peer1, "Ledger Message");
+  auto const entry = client_->SendChatMessage(TopicID(peer1), "Ledger Message");
   EXPECT_EQ(entry.status, messaging::MessageStatus::sending);
 
   auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
@@ -236,10 +236,11 @@ TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
       {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
-       .peer_id = peer1}
+       .topic_id = TopicID(peer1),
+       .author_id = peer1}
   );
 
-  client_->MarkMessagesAsRead(peer1, {entry.id});
+  client_->MarkMessagesAsRead(TopicID(peer1), {entry.id});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));

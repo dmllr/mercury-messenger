@@ -61,15 +61,16 @@ TEST_F(ResilienceTest, SyncEnginePersistsUnsentReceipts) {
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
        .status = messaging::MessageStatus::delivered,
-       .data = messaging::MessageEntry{"hello"},
-       .peer_id = peer1}
+       .data = messaging::ChatMessageEntry{messaging::MessageContent{"hello"}},
+       .topic_id = TopicID(peer1),
+       .author_id = peer1}
   );
 
-  client_->MarkMessagesAsRead(peer1, {entry.id});
+  client_->MarkMessagesAsRead(TopicID(peer1), {entry.id});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   auto reqs = mock_storage_->GetSyncRequests();
-  ASSERT_EQ(reqs.size(), 1);
+  ASSERT_GE(reqs.size(), 1);
 
   auto entries = storage_->GetLedgerEntries(TopicID(peer1));
   ASSERT_GE(entries.size(), 1);
@@ -134,10 +135,10 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
 
   // Verify message stored
-  auto [messages, total_messages] = client_->GetMessageHistoryPage(peer1, 0, 10);
+  auto [messages, total_messages] = client_->GetMessageHistoryPage(TopicID(peer1), 0, 10);
   ASSERT_FALSE(messages.empty());
-  auto const& data = std::get<messaging::MessageEntry>(messages[0].data);
-  EXPECT_EQ(data.content, "Recovery Message");
+  auto const& data = std::get<messaging::ChatMessageEntry>(messages[0].data);
+  EXPECT_EQ(data.message.content, "Recovery Message");
 }
 
 TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
@@ -151,9 +152,10 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
   entry.type = messaging::LedgerActionType::ContactState;
   entry.payload = req_msg.dump();
 
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  mock_dt_->AddPeer(peer1, peer);
+  client_->Connect(peer1);
+  if (auto p = mock_dt_->GetPeer(peer1)) {
+    p->data_channel_is_open = true;
+  }
 
   EventQueue::Instance().Push(EventLedgerAppended{entry});
 

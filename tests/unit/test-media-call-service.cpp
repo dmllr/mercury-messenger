@@ -68,7 +68,7 @@ TEST_F(MediaCallServiceTest, StartVoiceCall) {
 
 TEST_F(MediaCallServiceTest, AcceptCall) {
   // 1. Simulate Incoming Call Request
-  client_->Calls()->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+  client_->Calls()->OnCallRequest(peer1, peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
   client_->Calls()->OnCallRinging(peer1, "call_id_1");
   // Also push media state connected to hit the correct accept logic
   EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{peer1, transport::PeerConnectionState::connected});
@@ -125,7 +125,7 @@ TEST_F(MediaCallServiceTest, Hangup) {
 TEST_F(MediaCallServiceTest, RejectCall) {
   EventQueue::Instance().Push(EventIncomingCall{peer1, messaging::HistoryEntryKind::voiceCall});
   // Setup to ensure it's loaded as current_call
-  client_->Calls()->OnCallRequest(peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
+  client_->Calls()->OnCallRequest(peer1, peer1, "call_id_1", messaging::HistoryEntryKind::voiceCall);
 
   bool terminated_cb = false;
   auto sub = EventQueue::Instance().Subscribe<EventCallTerminated>([&](auto const& e) {

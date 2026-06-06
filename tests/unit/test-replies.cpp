@@ -50,11 +50,12 @@ TEST_F(RepliesTest, SendReplyMapsToWireId) {
       {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
-       .data = messaging::MessageEntry{"Incoming Message"},
-       .peer_id = peer_id_}
+       .data = messaging::ChatMessageEntry{messaging::MessageContent{"Incoming Message"}},
+       .topic_id = TopicID(peer_id_),
+       .author_id = peer_id_}
   );
 
-  client_->Messaging()->SendChatMessage(peer_id_, "Reply", {}, entry.id);
+  client_->Messaging()->SendChatMessage(TopicID(peer_id_), "Reply", {}, entry.id);
 
   auto ledger_entries = storage_->GetLedgerEntries(TopicID(peer_id_));
   ASSERT_GE(ledger_entries.size(), 1);
