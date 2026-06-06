@@ -26,6 +26,7 @@ add_executable(h-e-tests
   test-call-id.cpp
   test-call-view-model.cpp
   test-capture.cpp
+  test-channel-manager.cpp
   test-circular-buffer.cpp
   test-client-core.cpp
   test-contact-id.cpp
@@ -40,6 +41,7 @@ add_executable(h-e-tests
   test-event-queue.cpp
   test-file-transfer-cancellation.cpp
   test-file-transfer-resilience.cpp
+  test-group-manager.cpp
   test-h264-utils.cpp
   test-id-manager.cpp
   test-internal-messaging-service.cpp

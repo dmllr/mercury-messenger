@@ -69,7 +69,7 @@ TEST_F(ContactServiceTest, AddContact) {
   EXPECT_EQ(contact->status, identity::ContactStatus::pendingApproval);
 
   // Verify system message was generated
-  auto [messages, total_messages] = client_->GetMessageHistoryPage(peer1, 0, 10);
+  auto [messages, total_messages] = client_->GetMessageHistoryPage(TopicID(peer1), 0, 10);
   ASSERT_FALSE(messages.empty());
   auto const& last_msg = messages[0];
   EXPECT_EQ(last_msg.kind, messaging::HistoryEntryKind::systemMessage);
@@ -111,9 +111,10 @@ TEST_F(ContactServiceTest, ConfirmContact) {
     }
   });
 
-  auto peer = std::make_shared<transport::Peer>(peer1);
-  peer->data_channel_is_open = true;
-  mock_dt_->AddPeer(peer1, peer);
+  client_->Connect(peer1);
+  if (auto p = mock_dt_->GetPeer(peer1)) {
+    p->data_channel_is_open = true;
+  }
 
   contact_service_->ConfirmContact(peer1);
 

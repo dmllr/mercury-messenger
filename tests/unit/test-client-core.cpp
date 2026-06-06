@@ -28,6 +28,10 @@ class ClientCoreTest : public ::testing::Test {
     (void)client_->GenerateNewIdentity();
     my_id_ = client_->GetId();
 
+    std::string mnemonic;
+    peer_ident_ = eillance::crypto::Identity::CreateNew(mnemonic);
+    peer1 = ContactID(peer_ident_->GetPublicKey());
+
     client_->Start();
   }
 
@@ -42,7 +46,8 @@ class ClientCoreTest : public ::testing::Test {
   std::shared_ptr<Client> client_;
   ContactID my_id_;
 
-  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+  std::unique_ptr<crypto::Identity> peer_ident_;
+  ContactID peer1;
 };
 
 TEST_F(ClientCoreTest, ConnectSequence) {
@@ -69,7 +74,13 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   });
 
   eillance::crypto::SessionCipher dummy_cipher;
-  nlohmann::json const key_msg = {{"type", "key_exchange"}, {"key", std::vector<std::byte>()}, {"is_reply", false}};
+  auto test_sig = peer_ident_->Sign(client_->GetId().Span());
+  nlohmann::json const key_msg = {
+      {"type", "key_exchange"},
+      {"key", std::vector<std::byte>()},
+      {"is_reply", false},
+      {"signature", crypto::ToHex(test_sig)}
+  };
 
   // Transform the byte array to uint8 array to avoid nlohmann::json dump
   // implicitly mangling the std::byte arrays when parsed back via string parsing.
@@ -138,4 +149,56 @@ TEST_F(ClientCoreTest, ContactRequestProcessing) {
   EXPECT_EQ(contacts[0].peer_id, peer1);
   EXPECT_EQ(contacts[0].display_name, "Peer One");
   EXPECT_EQ(contacts[0].status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ClientCoreTest, GroupLifecycle) {
+  auto gid = client_->CreateGroup("My Group", {peer1});
+
+  auto groups = client_->GetGroups();
+  ASSERT_EQ(groups.size(), 1);
+  EXPECT_EQ(groups[0].name, "My Group");
+
+  auto members = client_->GetGroupMembers(gid);
+  ASSERT_EQ(members.size(), 2);  // owner + peer1
+
+  EXPECT_TRUE(
+      client_->AddGroupMember(gid, ContactID("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15"))
+  );
+  members = client_->GetGroupMembers(gid);
+  EXPECT_EQ(members.size(), 3);
+
+  EXPECT_TRUE(client_->RemoveGroupMember(gid, peer1));
+  members = client_->GetGroupMembers(gid);
+  EXPECT_EQ(members.size(), 2);
+
+  client_->LeaveGroup(gid);
+  members = client_->GetGroupMembers(gid);
+  EXPECT_EQ(members.size(), 1);
+}
+
+TEST_F(ClientCoreTest, ChannelLifecycle) {
+  auto cid = client_->CreateChannel("My Channel", "Description");
+
+  auto channels = client_->GetChannels();
+  ASSERT_EQ(channels.size(), 1);
+  EXPECT_EQ(channels[0].name, "My Channel");
+
+  auto members = client_->GetChannelMembers(cid);
+  ASSERT_EQ(members.size(), 1);
+
+  EXPECT_TRUE(
+      client_->AddChannelMember(cid, ContactID("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15"))
+  );
+  members = client_->GetChannelMembers(cid);
+  EXPECT_EQ(members.size(), 2);
+
+  EXPECT_TRUE(
+      client_->RemoveChannelMember(cid, ContactID("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15"))
+  );
+  members = client_->GetChannelMembers(cid);
+  EXPECT_EQ(members.size(), 1);
+
+  client_->UnsubscribeChannel(cid);
+  members = client_->GetChannelMembers(cid);
+  EXPECT_EQ(members.size(), 0);
 }

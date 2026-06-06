@@ -32,7 +32,9 @@ class ViewModelTest : public ::testing::Test {
     mock_media_transport_ = media_transport_impl.get();
     auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_data_transport_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
 
     // Client
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
@@ -60,6 +62,7 @@ class ViewModelTest : public ::testing::Test {
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
   transport::MockMediaTransport* mock_media_transport_{};
+  transport::MockDataTransport* mock_data_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 

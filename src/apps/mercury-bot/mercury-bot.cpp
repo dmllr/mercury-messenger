@@ -95,7 +95,7 @@ auto main(int argc, char** argv) -> int {
       if (std::ofstream out_file(file_path); out_file) {
         out_file << message.text;
         LGI << "Saved to " << file_path;
-        bot.MarkAsRead(message.from.id, message.message_id);
+        bot.MarkAsRead(message.chat_id, message.message_id);
       } else {
         LGE << "Failed to write to file: " << file_path;
       }

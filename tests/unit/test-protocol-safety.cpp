@@ -127,7 +127,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   std::stringstream combined_signatures;
 
   // Text Message
-  client_->SendChatMessage(peer_id_, "Hello Protocol");
+  client_->SendChatMessage(TopicID(peer_id_), "Hello Protocol");
   auto msg_chat = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_chat = GenerateTypeSignature(msg_chat);
   combined_signatures << "CHAT_OUTER:" << sig_chat << "\n";
@@ -140,7 +140,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   }
   std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({file_path.string(), messaging::AttachmentType::image, "thumb_base64", "image/jpeg"});
-  client_->SendChatMessage(peer_id_, "File Attached", atts);
+  client_->SendChatMessage(TopicID(peer_id_), "File Attached", atts);
 
   auto msg_att = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_att = GenerateTypeSignature(msg_att);
@@ -165,11 +165,12 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
       {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
-       .data = messaging::MessageEntry{"Incoming"},
-       .peer_id = peer_id_}
+       .data = messaging::ChatMessageEntry{messaging::MessageContent{"Incoming"}},
+       .topic_id = TopicID(peer_id_),
+       .author_id = peer_id_}
   );
 
-  client_->MarkMessagesAsRead(peer_id_, {entry.id});
+  client_->MarkMessagesAsRead(TopicID(peer_id_), {entry.id});
 
   auto msg_read = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_read = GenerateTypeSignature(msg_read);
@@ -184,7 +185,7 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   combined_signatures << "PROFILE:" << sig_profile << "\n";
 
   // System Message
-  client_->Messaging()->SendSystemMessage(peer_id_, R"({"action": "call_request"})", true);
+  client_->Messaging()->SendSystemMessage(TopicID(peer_id_), R"({"action": "call_request"})", true);
 
   auto msg_sys = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_sys = GenerateTypeSignature(msg_sys);

@@ -169,9 +169,6 @@ class DeliveryService {
       if (unreachable_contacts_.erase(peer_id) != 0U) {
         EventQueue::Instance().Push(EventContactUnreachable{peer_id, false});
       }
-      if (unwilling_contacts_.erase(peer_id) != 0U) {
-        EventQueue::Instance().Push(EventContactUnwilling{peer_id, false});
-      }
     }
     AttemptDelivery(peer_id, true);
   }

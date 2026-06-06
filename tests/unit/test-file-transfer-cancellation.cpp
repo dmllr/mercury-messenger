@@ -97,8 +97,8 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
   std::vector<messaging::AttachmentRequest> attachments;
   attachments.push_back({file_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
 
-  auto record = client_->SendChatMessage(peer1, "File", attachments);
-  std::string const att_id = std::get<messaging::MessageEntry>(record.data).attachments[0].id;
+  auto record = client_->SendChatMessage(TopicID(peer1), "File", attachments);
+  std::string const att_id = std::get<messaging::ChatMessageEntry>(record.data).message.attachments[0].id;
   EventQueue::Instance().WaitFor(
       [&]() {
         auto db_att = storage_->GetAttachment(att_id);
@@ -107,7 +107,7 @@ TEST_F(FileTransferCancellationTest, CancelUpload) {
       std::chrono::milliseconds(2000)
   );
 
-  client_->CancelTransfer(peer1, att_id, true);
+  client_->CancelTransfer(TopicID(peer1), att_id, true);
   EventQueue::Instance().WaitFor(
       [&]() {
         auto db_att = storage_->GetAttachment(att_id);
@@ -130,15 +130,16 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   att.hash = "dummy_hash";
   att.is_downloaded = false;
 
-  messaging::MessageEntry msg_data;
-  msg_data.attachments.push_back(att);
+  messaging::ChatMessageEntry msg_data;
+  msg_data.message.attachments.push_back(att);
 
   auto entry = mock_storage_->AddHistoryEntry(
       {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = 100,
        .direction = messaging::MessageDirection::received,
        .data = msg_data,
-       .peer_id = peer1}
+       .topic_id = TopicID(peer1),
+       .author_id = peer1}
   );
 
   std::vector<std::byte> const payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
@@ -150,7 +151,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   std::filesystem::path const temp_path = attachments_dir_ / "down_id.tmp";
   ASSERT_TRUE(std::filesystem::exists(temp_path));
 
-  client_->CancelTransfer(peer1, "down_id", false);
+  client_->CancelTransfer(TopicID(peer1), "down_id", false);
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   EXPECT_TRUE(std::filesystem::exists(temp_path));
@@ -170,11 +171,11 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
 
   std::ofstream(att.file_path) << "data";
 
-  messaging::MessageEntry msg_data;
-  msg_data.attachments.push_back(att);
-  std::ignore = storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
+  messaging::ChatMessageEntry msg_data;
+  msg_data.message.attachments.push_back(att);
+  std::ignore = storage_->AddHistoryEntry({.data = msg_data, .topic_id = TopicID(peer1), .author_id = peer1});
 
-  client_->ResumeTransfer(peer1, "resume_id", false);
+  client_->ResumeTransfer(TopicID(peer1), "resume_id", false);
   EventQueue::Instance().WaitFor(
       [&] {
         auto db_att = storage_->GetAttachment("resume_id");
