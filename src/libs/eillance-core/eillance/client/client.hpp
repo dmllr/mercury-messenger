@@ -750,7 +750,9 @@ class Client final {
         auto const lat = peer->last_activity_time.load();
         if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
           LGI << "Peer " << master_id.ToString() << " inactive. Closing.";
+          EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
           sm_->data_transport->Disconnect(master_id);
+          sm_->data_transport->RemovePeer(master_id);
           disconnected_masters.insert(master_id);
         }
       } else if (is_connecting) {
@@ -758,6 +760,7 @@ class Client final {
           LGI << "Peer " << master_id.ToString() << " stuck in connecting. Closing.";
           EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
           sm_->data_transport->Disconnect(master_id);
+          sm_->data_transport->RemovePeer(master_id);
           disconnected_masters.insert(master_id);
         }
       }
