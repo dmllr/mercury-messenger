@@ -293,7 +293,7 @@ class DeliveryService {
     }
     for (auto const& contact : contact_manager_->GetContacts()) {
       if (contact.status != identity::ContactStatus::rejected) {
-        AttemptDelivery(contact.peer_id, true);
+        AttemptDelivery(contact.peer_id, false);
       }
     }
   }

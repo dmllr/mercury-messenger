@@ -509,7 +509,7 @@ class MessagingService {
     }
   }
 
-  void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+  void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool  /*is_mine*/) {
     TopicID topic_id = entry.topic_id;
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
@@ -522,7 +522,7 @@ class MessagingService {
     }
   }
 
-  void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+  void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool  /*is_mine*/) {
     TopicID topic_id = entry.topic_id;
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
@@ -534,7 +534,7 @@ class MessagingService {
     }
   }
 
-  void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+  void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool  /*is_mine*/) {
     TopicID topic_id = entry.topic_id;
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
@@ -640,7 +640,7 @@ class MessagingService {
       bool is_system,
       std::vector<messaging::Attachment> const& attachments = {}
   ) {
-    ContactID peer_id(topic_id.Span());
+    ContactID const peer_id(topic_id.Span());
     auto peer = transport_->GetPeer(peer_id);
     if (!peer || !peer->session_cipher->IsReady()) {
       return;
@@ -652,7 +652,7 @@ class MessagingService {
     }
 
     if (auto const p = transport_->GetPeer(peer_id)) {
-      p->last_activity_time = Time::Now();
+      p->last_activity_time = Time::SteadyNow();
     }
 
     {
@@ -685,7 +685,7 @@ class MessagingService {
       return;
     }
 
-    std::vector<messaging::Attachment> local_attachments = ProcessIncomingAttachments(attachments);
+    auto const local_attachments = ProcessIncomingAttachments(attachments);
 
     uint64_t local_reply_to_id = 0;
     try {
