@@ -357,7 +357,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
       std::lock_guard<std::mutex> const lock(peersMutex_);
       if (auto it = master_to_devices_.find(peer_id); it != master_to_devices_.end()) {
         networks = it->second;
-        master_to_devices_.erase(it);
       } else {
         networks.push_back(peer_id);
       }
@@ -371,7 +370,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
             changed = true;
           }
         }
-        device_to_master_.erase(net_id);
       }
     }
     if (node_) {
