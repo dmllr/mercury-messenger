@@ -322,10 +322,10 @@ class SyncEngine {
   void ProcessSyncMessage(ContactID const& peer_id, Json const& msg) {
     try {
       std::string const type = msg.value("type", "");
-      std::string const topic_str = msg.value("topic", peer_id.ToString());
+      std::string const topic_str = msg.value("topic", transport_->GetMasterId(peer_id).ToString());
       TopicID topic_id(topic_str);
       if (topic_id == TopicID(my_id_)) {
-        topic_id = TopicID(peer_id);
+        topic_id = TopicID(transport_->GetMasterId(peer_id));
       }
       std::string const session_key = GetSessionKey(topic_id, peer_id);
 
