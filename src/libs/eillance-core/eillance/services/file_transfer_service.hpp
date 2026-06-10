@@ -83,7 +83,20 @@ class FileTransferService {
   }
 
   void OnConnectionReady(ContactID const& peer_id) {
-    auto const pending_attachments = storage_->GetPendingAttachments(TopicID(peer_id));
+    auto pending_attachments = storage_->GetPendingAttachments(TopicID(peer_id));
+    for (auto const& g : storage_->GetGroups()) {
+      if (std::ranges::any_of(g.members, [&](auto const& m) { return m.contact_id == peer_id; })) {
+        auto g_atts = storage_->GetPendingAttachments(TopicID(g.id));
+        pending_attachments.insert(pending_attachments.end(), g_atts.begin(), g_atts.end());
+      }
+    }
+    for (auto const& c : storage_->GetChannels()) {
+      if (std::ranges::any_of(c.members, [&](auto const& m) { return m.contact_id == peer_id; })) {
+        auto c_atts = storage_->GetPendingAttachments(TopicID(c.id));
+        pending_attachments.insert(pending_attachments.end(), c_atts.begin(), c_atts.end());
+      }
+    }
+
     std::lock_guard<std::mutex> const lock(transfers_mutex_);
     for (auto const& attachment : pending_attachments) {
       if (attachment.status == messaging::AttachmentStatus::paused ||
@@ -92,11 +105,12 @@ class FileTransferService {
         continue;
       }
 
+      auto const key = peer_id.ToString() + "_" + attachment.id;
       if (attachment.is_downloaded) {
-        if (!active_uploads_.contains(attachment.id)) {
+        if (!active_uploads_.contains(key)) {
           bool found = false;
           for (auto const& q : upload_queue_) {
-            if (q.attachment_id == attachment.id) {
+            if (q.attachment_id == attachment.id && q.peer_id == peer_id) {
               found = true;
               break;
             }
@@ -106,10 +120,10 @@ class FileTransferService {
           }
         }
       } else {
-        if (!active_downloads_.contains(attachment.id)) {
+        if (!active_downloads_.contains(key)) {
           bool found = false;
           for (auto const& q : download_queue_) {
-            if (q.attachment_id == attachment.id) {
+            if (q.attachment_id == attachment.id && q.peer_id == peer_id) {
               found = true;
               break;
             }
@@ -252,61 +266,59 @@ class FileTransferService {
     }
   }
 
-  void CancelTransfer(
-      ContactID const& peer_id,
-      std::string const& attachment_id,
-      bool const is_upload,
-      bool const notify_peer = true
-  ) {
+  void CancelTransfer(std::string const& attachment_id, bool const is_upload, bool const notify_peer = true) {
+    std::vector<ContactID> peers_to_notify;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
       if (is_upload) {
-        active_uploads_.erase(attachment_id);
-      } else {
-        if (active_downloads_.contains(attachment_id)) {
-          auto& state = active_downloads_[attachment_id];
-          state.stream.close();
-          active_downloads_.erase(attachment_id);
+        for (auto it = active_uploads_.begin(); it != active_uploads_.end();) {
+          if (it->second.file_id == attachment_id) {
+            peers_to_notify.push_back(it->second.peer_id);
+            it = active_uploads_.erase(it);
+          } else {
+            ++it;
+          }
         }
+        std::erase_if(upload_queue_, [&](auto const& q) { return q.attachment_id == attachment_id; });
+      } else {
+        for (auto it = active_downloads_.begin(); it != active_downloads_.end();) {
+          if (it->second.file_id == attachment_id) {
+            it->second.stream.close();
+            peers_to_notify.push_back(it->second.peer_id);
+            it = active_downloads_.erase(it);
+          } else {
+            ++it;
+          }
+        }
+        std::erase_if(download_queue_, [&](auto const& q) { return q.attachment_id == attachment_id; });
       }
     }
 
     if (notify_peer) {
-      if (is_upload) {
-        SendCancel(peer_id, attachment_id);
-      } else {
-        // Downloader "Cancel" acts as Pause unless Discard is called.
-        SendPause(peer_id, attachment_id);
+      for (auto const& peer_id : peers_to_notify) {
+        if (is_upload)
+          SendCancel(peer_id, attachment_id);
+        else
+          SendPause(peer_id, attachment_id);
       }
     }
 
     auto const new_status = (!is_upload) ? messaging::AttachmentStatus::paused : messaging::AttachmentStatus::canceled;
 
     storage_->UpdateAttachmentStatus(attachment_id, new_status, is_upload);
-    EventQueue::Instance().Push(EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, new_status});
     TriggerNextTransfers();
   }
 
-  void ResumeTransfer(ContactID const& peer_id, std::string const& attachment_id, bool const is_upload) {
+  void ResumeTransfer(std::string const& attachment_id, bool const is_upload) {
     if (is_upload) {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, true);
-      EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::pending}
-      );
-      std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      upload_queue_.push_back({peer_id, attachment_id, 0});
     } else {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::pending, false);
-      EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::pending}
-      );
-      std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      download_queue_.push_back({peer_id, attachment_id, 0});
     }
     TriggerNextTransfers();
   }
 
-  void DiscardAttachment(ContactID const& peer_id, std::string const& attachment_id) {
+  void DiscardAttachment(std::string const& attachment_id) {
     auto const attachment = storage_->GetAttachment(attachment_id);
     bool should_hide = false;
 
@@ -318,46 +330,56 @@ class FileTransferService {
       }
     }
 
+    std::vector<ContactID> peers_to_notify;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      active_uploads_.erase(attachment_id);
-      if (active_downloads_.contains(attachment_id)) {
-        auto& state = active_downloads_[attachment_id];
-        state.stream.close();
-        if (should_hide) {
-          std::error_code error_code;
-          std::filesystem::remove(state.temp_path, error_code);
-          std::filesystem::remove(state.progress_path, error_code);
+      for (auto it = active_uploads_.begin(); it != active_uploads_.end();) {
+        if (it->second.file_id == attachment_id) {
+          it = active_uploads_.erase(it);
+        } else {
+          ++it;
         }
-        active_downloads_.erase(attachment_id);
       }
+      for (auto it = active_downloads_.begin(); it != active_downloads_.end();) {
+        if (it->second.file_id == attachment_id) {
+          it->second.stream.close();
+          if (should_hide) {
+            std::error_code error_code;
+            std::filesystem::remove(it->second.temp_path, error_code);
+            std::filesystem::remove(it->second.progress_path, error_code);
+          }
+          peers_to_notify.push_back(it->second.peer_id);
+          it = active_downloads_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      std::erase_if(upload_queue_, [&](auto const& q) { return q.attachment_id == attachment_id; });
+      std::erase_if(download_queue_, [&](auto const& q) { return q.attachment_id == attachment_id; });
     }
 
     if (!should_hide) {
-      SendCancel(peer_id, attachment_id);
+      for (auto const& peer_id : peers_to_notify) {
+        SendCancel(peer_id, attachment_id);
+      }
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::canceled, false);
-      EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::canceled}
-      );
     } else {
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
-      EventQueue::Instance().Push(
-          EventAttachmentStatusChanged{TopicID(peer_id), attachment_id, messaging::AttachmentStatus::discarded}
-      );
     }
     TriggerNextTransfers();
   }
 
   void HandleCancel(ContactID const& peer_id, std::string const& file_id) {
+    auto const key = peer_id.ToString() + "_" + file_id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      if (active_uploads_.contains(file_id)) {
-        active_uploads_.erase(file_id);
+      if (active_uploads_.contains(key)) {
+        active_uploads_.erase(key);
       }
-      if (active_downloads_.contains(file_id)) {
-        auto& state = active_downloads_[file_id];
+      if (active_downloads_.contains(key)) {
+        auto& state = active_downloads_[key];
         state.stream.close();
-        active_downloads_.erase(file_id);
+        active_downloads_.erase(key);
       }
     }
 
@@ -380,7 +402,8 @@ class FileTransferService {
   static constexpr std::size_t sequenceSize = 4;
 
   void FinalizeDownload(ContactID const& peer_id, std::string const& file_id, std::unique_lock<std::mutex>& lock) {
-    auto iterator = active_downloads_.find(file_id);
+    auto const key = peer_id.ToString() + "_" + file_id;
+    auto iterator = active_downloads_.find(key);
     if (iterator == active_downloads_.end()) {
       lock.unlock();
       TriggerNextTransfers();
@@ -425,6 +448,7 @@ class FileTransferService {
 
   struct TransferUploadState {
     ContactID peer_id;
+    std::string file_id;
     std::string file_path;
     std::ifstream stream;
     std::vector<std::uint32_t> pending_chunks;
@@ -437,6 +461,7 @@ class FileTransferService {
 
   struct TransferDownloadState {
     ContactID peer_id;
+    std::string file_id;
     std::filesystem::path file_path;
     std::fstream stream;
     std::filesystem::path temp_path;
@@ -455,9 +480,10 @@ class FileTransferService {
       std::uint64_t message_id,
       bool request_missing
   ) {
+    auto const key = peer_id.ToString() + "_" + attachment.id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      if (active_downloads_.contains(attachment.id)) {
+      if (active_downloads_.contains(key)) {
         return;
       }
     }
@@ -477,6 +503,7 @@ class FileTransferService {
 
     TransferDownloadState state;
     state.peer_id = peer_id;
+    state.file_id = attachment.id;
     state.file_path = std::filesystem::path(attachment.file_path);
     state.temp_path = temp_path;
     state.progress_path = progress_path;
@@ -530,8 +557,8 @@ class FileTransferService {
 
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      if (!active_downloads_.contains(attachment.id)) {
-        active_downloads_[attachment.id] = std::move(state);
+      if (!active_downloads_.contains(key)) {
+        active_downloads_[key] = std::move(state);
       }
     }
 
@@ -556,9 +583,10 @@ class FileTransferService {
       messaging::Attachment const& attachment,
       std::vector<std::uint32_t> const& missing_chunks = {}
   ) {
+    auto const key = peer_id.ToString() + "_" + attachment.id;
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    if (active_uploads_.contains(attachment.id)) {
-      auto& state = active_uploads_[attachment.id];
+    if (active_uploads_.contains(key)) {
+      auto& state = active_uploads_[key];
       state.paused = false;
       if (!missing_chunks.empty()) {
         state.pending_chunks = missing_chunks;
@@ -588,6 +616,7 @@ class FileTransferService {
 
       TransferUploadState state;
       state.peer_id = peer_id;
+      state.file_id = attachment.id;
       state.file_path = attachment.file_path;
       state.stream = std::move(file);
       state.total_size = attachment.size_bytes;
@@ -609,7 +638,7 @@ class FileTransferService {
       }
 
       state.is_pumping = true;
-      active_uploads_[attachment.id] = std::move(state);
+      active_uploads_[key] = std::move(state);
 
       transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() -> void {
         PumpUploadBatch(peer_id, file_id);
@@ -618,10 +647,11 @@ class FileTransferService {
   }
 
   void HandlePause(ContactID const& peer_id, std::string const& file_id) {
+    auto const key = peer_id.ToString() + "_" + file_id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      if (active_uploads_.contains(file_id)) {
-        active_uploads_.erase(file_id);
+      if (active_uploads_.contains(key)) {
+        active_uploads_.erase(key);
       }
     }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::paused, true);
@@ -632,9 +662,10 @@ class FileTransferService {
   }
 
   void HandleResume(ContactID const& peer_id, std::string const& file_id, std::span<std::byte const> const) {
+    auto const key = peer_id.ToString() + "_" + file_id;
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    if (active_uploads_.contains(file_id)) {
-      auto& state = active_uploads_[file_id];
+    if (active_uploads_.contains(key)) {
+      auto& state = active_uploads_[key];
       state.paused = false;
       if (!state.is_pumping) {
         state.is_pumping = true;
@@ -657,9 +688,10 @@ class FileTransferService {
     std::uint64_t bytes = 0;
     std::memcpy(&bytes, payload.data(), sizeof(bytes));
 
+    auto const key = peer_id.ToString() + "_" + file_id;
     std::unique_lock<std::mutex> const lock(transfers_mutex_);
-    if (active_uploads_.contains(file_id)) {
-      auto& state = active_uploads_[file_id];
+    if (active_uploads_.contains(key)) {
+      auto& state = active_uploads_[key];
       if (std::size_t const acked = bytes / chunkSizeBytes; acked > state.chunks_acked_absolute) {
         state.chunks_acked_absolute = acked;
       }
@@ -682,9 +714,10 @@ class FileTransferService {
 
   void ScheduleEndRetry(ContactID const& peer_id, std::string const& file_id) {
     transfer_queue_.DispatchAfter(std::chrono::seconds(5), [this, peer_id, file_id]() -> void {
+      auto const key = peer_id.ToString() + "_" + file_id;
       std::unique_lock<std::mutex> lock(transfers_mutex_);
-      if (active_uploads_.contains(file_id)) {
-        if (active_uploads_[file_id].pending_chunks.empty()) {
+      if (active_uploads_.contains(key)) {
+        if (active_uploads_[key].pending_chunks.empty()) {
           return;
         }
         lock.unlock();
@@ -696,9 +729,10 @@ class FileTransferService {
 
   void ScheduleStuckRetry(ContactID const& peer_id, std::string const& file_id) {
     transfer_queue_.DispatchAfter(std::chrono::seconds(3), [this, peer_id, file_id]() -> void {
+      auto const key = peer_id.ToString() + "_" + file_id;
       std::unique_lock<std::mutex> lock(transfers_mutex_);
-      if (active_uploads_.contains(file_id)) {
-        if (auto const& state = active_uploads_[file_id];
+      if (active_uploads_.contains(key)) {
+        if (auto const& state = active_uploads_[key];
             !state.is_pumping && !state.paused && !state.pending_chunks.empty()) {
           lock.unlock();
           SendEnd(peer_id, file_id);
@@ -779,24 +813,26 @@ class FileTransferService {
       is_connected = p->data_channel_is_open.load();
     }
 
+    auto const key = peer_id.ToString() + "_" + file_id;
     if (is_connected) {
-      transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id]() -> void {
+      transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id, key]() -> void {
         {
           std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
-          if (active_uploads_.contains(file_id)) {
-            active_uploads_[file_id].is_pumping = true;
+          if (active_uploads_.contains(key)) {
+            active_uploads_[key].is_pumping = true;
           }
         }
         PumpUploadBatch(peer_id, file_id);
       });
     } else {
-      active_uploads_.erase(file_id);
+      active_uploads_.erase(key);
     }
   }
 
   void PumpUploadBatch(ContactID const& peer_id, std::string const& file_id) {
+    auto const key = peer_id.ToString() + "_" + file_id;
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    auto const it = active_uploads_.find(file_id);
+    auto const it = active_uploads_.find(key);
     if (it == active_uploads_.end()) {
       return;
     }
@@ -835,7 +871,7 @@ class FileTransferService {
     }
 
     lock.lock();
-    auto const it2 = active_uploads_.find(file_id);
+    auto const it2 = active_uploads_.find(key);
     if (it2 == active_uploads_.end()) {
       return;
     }
@@ -863,14 +899,21 @@ class FileTransferService {
 
     std::span<std::byte const> const chunk_data = payload.subspan(sequenceSize);
 
+    auto const key = peer_id.ToString() + "_" + file_id;
     std::unique_lock<std::mutex> lock(transfers_mutex_);
 
-    if (!active_downloads_.contains(file_id)) {
+    if (!active_downloads_.contains(key)) {
       if (auto attachment = storage_->GetAttachment(file_id)) {
-        if (attachment->status == messaging::AttachmentStatus::paused ||
-            attachment->status == messaging::AttachmentStatus::canceled ||
+        if (attachment->status == messaging::AttachmentStatus::paused) {
+          lock.unlock();
+          SendPause(peer_id, file_id);
+          return;
+        }
+        if (attachment->status == messaging::AttachmentStatus::canceled ||
             attachment->status == messaging::AttachmentStatus::peerCanceled ||
             attachment->status == messaging::AttachmentStatus::discarded) {
+          lock.unlock();
+          SendCancel(peer_id, file_id);
           return;
         }
         if (attachment->status == messaging::AttachmentStatus::done) {
@@ -882,11 +925,13 @@ class FileTransferService {
         StartDownloadInternal(peer_id, *attachment, 0, false);
         lock.lock();
       } else {
+        lock.unlock();
+        SendCancel(peer_id, file_id);
         return;
       }
     }
 
-    auto const it = active_downloads_.find(file_id);
+    auto const it = active_downloads_.find(key);
     if (it == active_downloads_.end()) {
       return;
     }
@@ -948,13 +993,18 @@ class FileTransferService {
   }
 
   void HandleEnd(ContactID const& peer_id, std::string const& file_id) {
+    auto const key = peer_id.ToString() + "_" + file_id;
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    auto const iterator = active_downloads_.find(file_id);
+    auto const iterator = active_downloads_.find(key);
     if (iterator == active_downloads_.end()) {
       lock.unlock();
       if (auto const attachment = storage_->GetAttachment(file_id);
           attachment && attachment->status == messaging::AttachmentStatus::done) {
         SendDone(peer_id, file_id);
+      } else if (attachment && attachment->status == messaging::AttachmentStatus::paused) {
+        SendPause(peer_id, file_id);
+      } else {
+        SendCancel(peer_id, file_id);
       }
       return;
     }
@@ -1000,13 +1050,21 @@ class FileTransferService {
     }
 
     auto const attachment = storage_->GetAttachment(file_id);
-    if (!attachment || attachment->status == messaging::AttachmentStatus::discarded) {
+    if (!attachment || attachment->status == messaging::AttachmentStatus::discarded ||
+        attachment->status == messaging::AttachmentStatus::canceled ||
+        attachment->status == messaging::AttachmentStatus::peerCanceled) {
+      SendCancel(peer_id, file_id);
+      return;
+    }
+    if (attachment->status == messaging::AttachmentStatus::paused) {
+      SendPause(peer_id, file_id);
       return;
     }
 
+    auto const key = peer_id.ToString() + "_" + file_id;
     std::unique_lock<std::mutex> lock(transfers_mutex_);
-    if (active_uploads_.contains(file_id)) {
-      auto& state = active_uploads_[file_id];
+    if (active_uploads_.contains(key)) {
+      auto& state = active_uploads_[key];
       state.pending_chunks = missing;
       std::ranges::reverse(state.pending_chunks);
 
@@ -1025,9 +1083,10 @@ class FileTransferService {
   }
 
   void HandleDone(ContactID const& peer_id, std::string const& file_id) {
+    auto const key = peer_id.ToString() + "_" + file_id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
-      active_uploads_.erase(file_id);
+      active_uploads_.erase(key);
     }
     storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::done, true);
     EventQueue::Instance().Push(

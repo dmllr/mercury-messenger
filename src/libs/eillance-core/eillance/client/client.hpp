@@ -6,8 +6,8 @@
 #include <memory>
 #include <random>
 #include <string>
-#include <vector>
 #include <unordered_set>
+#include <vector>
 
 #include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
@@ -92,7 +92,6 @@ class Client final {
               return;
             }
 
-            EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
             sm_->data_transport->Disconnect(event.peer_id);
 
             bool media_active = false;
@@ -105,6 +104,7 @@ class Client final {
                 last_network_state_ != ServiceConnectionState::disconnected) {
               LGI << "Data connection lost for " << event.peer_id.ToString()
                   << " but media is active. Reconnecting data.";
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
               Connect(event.peer_id);
             } else {
               auto const media_state = sm_->media_transport->GetConnectionState(event.peer_id);
@@ -115,6 +115,7 @@ class Client final {
                 sm_->media_transport->Disconnect(event.peer_id);
               }
               sm_->data_transport->RemovePeer(event.peer_id);
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
             }
           }
         })
@@ -151,9 +152,9 @@ class Client final {
               }
               processed_masters.insert(master_id);
 
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
               sm_->data_transport->Disconnect(master_id);
               sm_->media_transport->Disconnect(master_id);
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
             }
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
@@ -747,26 +748,36 @@ class Client final {
           Connect(master_id);
         }
       } else if (is_data_connected) {
-        auto const lat = peer->last_activity_time.load();
-        if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
-          LGI << "Peer " << master_id.ToString() << " inactive. Closing.";
-          EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
-          sm_->data_transport->Disconnect(master_id);
-          sm_->data_transport->RemovePeer(master_id);
-          disconnected_masters.insert(master_id);
+        if (master_id == sm_->account->GetId()) {
+          // Keep connections to our own devices alive indefinitely to ensure seamless sync
+          peer->last_activity_time = now;
+        } else {
+          auto const lat = peer->last_activity_time.load();
+          if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
+            LGI << "Peer " << master_id.ToString() << " inactive. Closing.";
+            sm_->sync_engine->AbortSync(master_id);
+            sm_->data_transport->Disconnect(master_id);
+            sm_->data_transport->RemovePeer(master_id);
+            EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+            disconnected_masters.insert(master_id);
+          }
         }
       } else if (is_connecting) {
         if (auto const lca = peer->last_connect_attempt.load(); now > lca && (now - lca) > 120ULL * Time::uS) {
           LGI << "Peer " << master_id.ToString() << " stuck in connecting. Closing.";
-          EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+          sm_->sync_engine->AbortSync(master_id);
           sm_->data_transport->Disconnect(master_id);
           sm_->data_transport->RemovePeer(master_id);
+          EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
           disconnected_masters.insert(master_id);
         }
       }
     }
 
-    Connect(sm_->account->GetId());
+    if (!disconnected_masters.contains(sm_->account->GetId())) {
+      // Connect to our devices
+      Connect(sm_->account->GetId());
+    }
 
     background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
   }

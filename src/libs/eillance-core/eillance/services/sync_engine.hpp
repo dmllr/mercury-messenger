@@ -233,7 +233,7 @@ class SyncEngine {
           }
         }
         if (!proposed) {
-          EventQueue::Instance().Push(EventConnectionRequested{channel->owner_id});
+          EventQueue::Instance().Push(EventDeliveryRequested{channel->owner_id});
         }
       }
     } else {
@@ -255,7 +255,7 @@ class SyncEngine {
           }
           if (!proposed) {
             if (type != messaging::LedgerActionType::ProfileUpdate) {
-              EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+              EventQueue::Instance().Push(EventDeliveryRequested{target_peer});
             }
           }
         }
@@ -351,6 +351,34 @@ class SyncEngine {
     }
   }
 
+  void AbortSync(ContactID const& target_master_id) {
+    bool found_active = false;
+    {
+      std::lock_guard<std::mutex> const lock(sessions_mutex_);
+      for (auto it = sessions_.begin(); it != sessions_.end();) {
+        if (transport_->GetMasterId(it->second.peer_id) == target_master_id) {
+          if (it->second.active) {
+            found_active = true;
+          }
+          it = sessions_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+    }
+
+    auto reqs = storage_->GetSyncRequests();
+    for (auto const& req : reqs) {
+      if (req.target_peer_id == target_master_id) {
+        found_active = true;
+      }
+    }
+
+    if (found_active) {
+      EventQueue::Instance().Push(EventSyncStateChanged{target_master_id, false, 1.0f});
+    }
+  }
+
  private:
   template <typename MemberType>
   void
@@ -368,7 +396,7 @@ class SyncEngine {
           }
         }
         if (!proposed) {
-          EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+          EventQueue::Instance().Push(EventDeliveryRequested{member.contact_id});
         }
       }
     }
@@ -390,7 +418,7 @@ class SyncEngine {
           }
         }
         if (!proposed) {
-          EventQueue::Instance().Push(EventConnectionRequested{member.contact_id});
+          EventQueue::Instance().Push(EventDeliveryRequested{member.contact_id});
         }
       }
     }

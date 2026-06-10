@@ -111,6 +111,9 @@ struct EventPeerActivity {
 struct EventConnectionRequested {
   ContactID peer_id;
 };
+struct EventDeliveryRequested {
+  ContactID peer_id;
+};
 struct EventDataChannelMessage {
   ContactID peer_id;
   std::vector<std::byte> message;
