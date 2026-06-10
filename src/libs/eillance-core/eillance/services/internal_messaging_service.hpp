@@ -105,7 +105,7 @@ class InternalMessagingService {
       peer->last_activity_time = Time::SteadyNow();
     }
 
-    ContactID master_id = data_transport_->GetMasterId(network_id);
+    ContactID const master_id = data_transport_->GetMasterId(network_id);
 
     if (msg.empty() || msg[0] != std::byte{0xFE}) {
       try {
@@ -246,7 +246,7 @@ class InternalMessagingService {
     peer->session_cipher->Reset();
     peer->last_activity_time = Time::SteadyNow();
 
-    ContactID master_id = data_transport_->GetMasterId(network_id);
+    ContactID const master_id = data_transport_->GetMasterId(network_id);
 
     {
       std::lock_guard<std::mutex> const lock(unsuspend_mutex_);
@@ -310,7 +310,7 @@ class InternalMessagingService {
       return;
     }
 
-    ContactID master_id = message.contains("m_id") ? ContactID(message["m_id"].get<std::string>()) : network_id;
+    ContactID const master_id = message.contains("m_id") ? ContactID(message["m_id"].get<std::string>()) : network_id;
 
     int const peer_sync_version = message.value("sync_version", 0);
     int const peer_ft_version = message.value("ft_version", 0);

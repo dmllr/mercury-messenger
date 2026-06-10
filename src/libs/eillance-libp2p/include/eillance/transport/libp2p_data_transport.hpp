@@ -190,6 +190,15 @@ class Libp2pDataTransport : public DataTransport::Interface {
       node_->SetOnProvidersDiscovered(
           [this](std::string const& key_hex, std::vector<ContactID> const& providers) -> void {
             rx_queue_.Dispatch([this, key_hex, providers]() -> void {
+              if (key_hex.length() != 64) {
+                return;
+              }
+              ContactID const master_id(key_hex);
+              auto p = GetPeer(master_id);
+              if (!p || !p->is_connecting || p->data_channel_is_open) {
+                LGD << "Ignoring discovered providers for " << key_hex << " because we are not connecting to it.";
+                return;
+              }
               for (auto const& provider_id : providers) {
                 LGI << "Discovered provider " << provider_id.ToString() << " for DHT key " << key_hex;
                 node_->Dial(provider_id);
