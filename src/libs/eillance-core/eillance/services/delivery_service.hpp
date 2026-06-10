@@ -53,6 +53,10 @@ class DeliveryService {
         })
     );
 
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDeliveryRequested>([this](auto const& e) -> void {
+      AttemptDelivery(e.peer_id, false);
+    }));
+
     event_unsubs_.push_back(
         EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
           if (e.state == transport::PeerConnectionState::connected) {

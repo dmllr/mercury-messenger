@@ -209,7 +209,18 @@ class MessagingService {
     sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, json_msg);
 
     for (auto const& att : domain_attachments) {
-      sm_->file_transfer->QueueUpload(ContactID(topic_id.Span()), att);
+      auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+      if (group) {
+        for (auto const& m : group->members) {
+          if (m.contact_id != sm_->account->GetId()) sm_->file_transfer->QueueUpload(m.contact_id, att);
+        }
+      } else if (auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()))) {
+        for (auto const& m : channel->members) {
+          if (m.contact_id != sm_->account->GetId()) sm_->file_transfer->QueueUpload(m.contact_id, att);
+        }
+      } else {
+        sm_->file_transfer->QueueUpload(ContactID(topic_id.Span()), att);
+      }
     }
 
     EventQueue::Instance().Push(EventMessageUpdated{topic_id, entry.id});
@@ -276,7 +287,10 @@ class MessagingService {
       bool const is_upload,
       bool const notify_peer = true
   ) const {
-    sm_->file_transfer->CancelTransfer(ContactID(topic_id.Span()), attachment_id, is_upload, notify_peer);
+    sm_->file_transfer->CancelTransfer(attachment_id, is_upload, notify_peer);
+
+    auto const new_status = (!is_upload) ? messaging::AttachmentStatus::paused : messaging::AttachmentStatus::canceled;
+    EventQueue::Instance().Push(EventAttachmentStatusChanged{topic_id, attachment_id, new_status});
 
     if (is_upload) {
       auto const sending_msgs = storage_->GetMessagesWithStatus(topic_id, messaging::MessageStatus::sending);
@@ -305,9 +319,20 @@ class MessagingService {
   }
 
   void ResumeTransfer(TopicID const& topic_id, std::string const& attachment_id, bool const is_upload) {
-    sm_->file_transfer->ResumeTransfer(ContactID(topic_id.Span()), attachment_id, is_upload);
+    sm_->file_transfer->ResumeTransfer(attachment_id, is_upload);
+    EventQueue::Instance().Push(
+        EventAttachmentStatusChanged{topic_id, attachment_id, messaging::AttachmentStatus::pending}
+    );
 
-    auto trigger_sync = [&](ContactID const& target) {
+    auto att = storage_->GetAttachment(attachment_id);
+    if (!att) return;
+
+    auto enqueue = [&](ContactID const& target) {
+      if (is_upload)
+        sm_->file_transfer->QueueUpload(target, *att);
+      else
+        sm_->file_transfer->QueueDownload(target, *att, 0);
+
       for (auto const& [net_id, peer] : transport_->GetPeers()) {
         if (transport_->GetMasterId(net_id) == target) {
           if (peer->data_channel_is_open && peer->crcp_verified) {
@@ -320,19 +345,19 @@ class MessagingService {
     auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
     if (group) {
       for (auto const& m : group->members) {
-        if (m.contact_id != sm_->account->GetId()) trigger_sync(m.contact_id);
+        if (m.contact_id != sm_->account->GetId()) enqueue(m.contact_id);
       }
     } else if (auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()))) {
       for (auto const& m : channel->members) {
-        if (m.contact_id != sm_->account->GetId()) trigger_sync(m.contact_id);
+        if (m.contact_id != sm_->account->GetId()) enqueue(m.contact_id);
       }
     } else {
-      trigger_sync(ContactID(topic_id.Span()));
+      enqueue(ContactID(topic_id.Span()));
     }
   }
 
   void DiscardAttachment(TopicID const& topic_id, std::string const& attachment_id) {
-    sm_->file_transfer->DiscardAttachment(ContactID(topic_id.Span()), attachment_id);
+    sm_->file_transfer->DiscardAttachment(attachment_id);
     auto const attachment = storage_->GetAttachment(attachment_id);
     bool should_send_cancel = true;
     if (attachment) {
@@ -347,6 +372,14 @@ class MessagingService {
       Json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
       sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, cancel_msg);
     }
+
+    EventQueue::Instance().Push(
+        EventAttachmentStatusChanged{
+            topic_id,
+            attachment_id,
+            should_send_cancel ? messaging::AttachmentStatus::canceled : messaging::AttachmentStatus::discarded
+        }
+    );
   }
 
   [[nodiscard]] auto GetDownloadedAttachments(TopicID const& topic_id) const
@@ -509,7 +542,7 @@ class MessagingService {
     }
   }
 
-  void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool  /*is_mine*/) {
+  void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool /*is_mine*/) {
     TopicID topic_id = entry.topic_id;
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
@@ -522,7 +555,7 @@ class MessagingService {
     }
   }
 
-  void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool  /*is_mine*/) {
+  void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool /*is_mine*/) {
     TopicID topic_id = entry.topic_id;
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
@@ -534,7 +567,7 @@ class MessagingService {
     }
   }
 
-  void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool  /*is_mine*/) {
+  void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool /*is_mine*/) {
     TopicID topic_id = entry.topic_id;
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
@@ -968,7 +1001,7 @@ class MessagingService {
       if (!att.is_downloaded && att.status != messaging::AttachmentStatus::discarded &&
           att.status != messaging::AttachmentStatus::canceled) {
         sm_->file_transfer->QueueDownload(entry.author_id, att, db_entry.id);
-        sm_->file_transfer->ResumeTransfer(entry.author_id, att.id, false);
+        sm_->file_transfer->ResumeTransfer(att.id, false);
       }
     }
 
