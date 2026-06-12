@@ -4,7 +4,7 @@
 This script automatically applies code modifications in a simplyfied patch format.
 To ensure the script works correctly, changes should be in the following strict format:
 
-1. Specify the file being modified using a header line starting with `### ` followed by the file path.
+1. Specify the file being modified using a header line starting with `#`s (e.g., `### `) followed by the file path.
    (An optional index like `[7] ` before the file path is also supported).
 2. Provide the code changes inside a markdown code block (e.g., ```cpp ... ```).
 3. Use `<<<<` to mark the beginning of the existing code to find.
@@ -83,9 +83,9 @@ def apply_patches(patch_content):
     os.chdir(git_root)
     print(f"Applying patches from repo root: {git_root}")
 
-    # Find all file blocks: ### filepath OR ### [index] filepath
+    # Find all file blocks: ### filepath OR #### [index] filepath
     # The regex ignores an optional `[digits] ` block before capturing the filepath
-    file_pattern = re.compile(r'^###\s*(?:\[\d+\]\s*)?(.+)$', re.MULTILINE)
+    file_pattern = re.compile(r'^#{3,}\s*(?:\[\d+\]\s*)?(.+)$', re.MULTILINE)
 
     file_matches = list(file_pattern.finditer(patch_content))
     if not file_matches:
