@@ -73,6 +73,7 @@ class Client final {
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventAppForegrounded>([this](auto const&) -> void {
       sm_->is_foreground = true;
+      Connect(sm_->account->GetId());
     }));
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventAppBackgrounded>([this](auto const&) -> void {
@@ -772,11 +773,6 @@ class Client final {
           disconnected_masters.insert(master_id);
         }
       }
-    }
-
-    if (!disconnected_masters.contains(sm_->account->GetId())) {
-      // Connect to our devices
-      Connect(sm_->account->GetId());
     }
 
     background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
