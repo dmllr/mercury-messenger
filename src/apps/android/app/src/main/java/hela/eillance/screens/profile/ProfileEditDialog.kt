@@ -1,12 +1,6 @@
 package hela.eillance.screens.profile
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Base64
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,13 +39,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization.Companion.Sentences
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import hela.eillance.camera.R
+import hela.eillance.components.AvatarPicker
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.viewmodels.ProfileViewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 
 @Composable
 fun ProfileEditDialog(
@@ -67,61 +58,7 @@ fun ProfileEditDialog(
   var bio by remember(myProfile.myBio) { mutableStateOf(myProfile.myBio ?: "") }
   var photoBase64 by remember(myProfile.myPhoto) { mutableStateOf(myProfile.myPhoto) }
 
-  var rawSelectedImage by remember { mutableStateOf<Bitmap?>(null) }
-  var showImageEditor by remember { mutableStateOf(false) }
-
-  val context = LocalContext.current
-  val scope = rememberCoroutineScope()
-  val snackbarHostState = remember { SnackbarHostState() }
-
-  val imagePickerLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.GetContent()
-  ) { uri ->
-    uri?.let {
-      scope.launch(Dispatchers.IO) {
-        try {
-          context.contentResolver.openInputStream(it)?.use { inputStream ->
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            if (bitmap != null) {
-              withContext(Dispatchers.Main) {
-                rawSelectedImage = bitmap
-                showImageEditor = true
-              }
-            } else {
-              snackbarHostState.showSnackbar(context.getString(R.string.profile_edit_image_decode_fail))
-            }
-          }
-        } catch (e: Exception) {
-          e.printStackTrace()
-          snackbarHostState.showSnackbar(context.getString(R.string.profile_edit_image_load_fail))
-        }
-      }
-    }
-  }
-
-  if (showImageEditor && rawSelectedImage != null) {
-    ImageEditorDialog(
-      bitmap = rawSelectedImage!!,
-      onDismiss = {
-        showImageEditor = false
-        rawSelectedImage = null
-      },
-      onSave = { croppedBitmap ->
-        scope.launch(Dispatchers.Default) {
-          val outputStream = ByteArrayOutputStream()
-          croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-          val byteArray = outputStream.toByteArray()
-          val base64 = Base64.encodeToString(byteArray, Base64.NO_WRAP)
-          withContext(Dispatchers.Main) {
-            photoBase64 = base64
-            showImageEditor = false
-            rawSelectedImage = null
-          }
-        }
-      }
-    )
-  } else {
-    Dialog(onDismissRequest = onDismiss) {
+  Dialog(onDismissRequest = onDismiss) {
       Card(
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth()
@@ -138,21 +75,22 @@ fun ProfileEditDialog(
             modifier = Modifier.padding(bottom = 16.dp)
           )
 
-          Box(
+          AvatarPicker(
+            hasPhoto = !photoBase64.isNullOrEmpty(),
+            onPhotoPicked = { photoBase64 = it },
+            onPhotoCleared = { photoBase64 = "" },
             modifier = Modifier
               .size(150.dp)
-              .clip(CircleShape)
-              .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-              .clickable { imagePickerLauncher.launch("image/*") },
-            contentAlignment = Alignment.Center
-          ) {
-            UserAvatar(
-              photoBase64 = photoBase64,
-              modifier = Modifier.fillMaxSize(),
-              fallbackBackground = MaterialTheme.colorScheme.secondaryContainer,
-              fallbackTint = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-          }
+              .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+            fallbackContent = {
+              UserAvatar(
+                photoBase64 = photoBase64,
+                modifier = Modifier.fillMaxSize(),
+                fallbackBackground = MaterialTheme.colorScheme.secondaryContainer,
+                fallbackTint = MaterialTheme.colorScheme.onSecondaryContainer
+              )
+            }
+          )
 
           Text(
             stringResource(id = R.string.profile_edit_change_photo_prompt),
@@ -205,5 +143,4 @@ fun ProfileEditDialog(
         }
       }
     }
-  }
 }

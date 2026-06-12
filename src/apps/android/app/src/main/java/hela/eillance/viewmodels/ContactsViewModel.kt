@@ -131,9 +131,15 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     if (nativePtr != 0L) nativeResetDisplayName(nativePtr, peerId)
   }
 
-  fun createGroup(name: String, peerIds: List<String>) {
+  fun createGroup(name: String, peerIds: List<String>, photo: String?) {
     if (nativePtr != 0L) {
-      nativeCreateGroup(nativePtr, name, peerIds.joinToString(","))
+      nativeCreateGroup(nativePtr, name, peerIds.joinToString(","), photo)
+    }
+  }
+
+  fun updateGroup(groupId: String, name: String?, photo: String?) {
+    if (nativePtr != 0L) {
+      nativeUpdateGroup(nativePtr, groupId, name, photo)
     }
   }
 
@@ -227,7 +233,8 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeUnblockContact(ptr: Long, peerId: String)
   private external fun nativeSetDisplayName(ptr: Long, peerId: String, name: String)
   private external fun nativeResetDisplayName(ptr: Long, peerId: String)
-  private external fun nativeCreateGroup(ptr: Long, name: String, peerIdsCsv: String): String
+  private external fun nativeCreateGroup(ptr: Long, name: String, peerIdsCsv: String, photo: String?): String
+  private external fun nativeUpdateGroup(ptr: Long, groupId: String, name: String?, photo: String?)
   private external fun nativeGenerateToken(ptr: Long): String
   private external fun nativeGetUnreadMessages(ptr: Long, peerId: String): List<HistoryEntry>
   private external fun nativeMarkAllAsRead(ptr: Long, peerId: String)

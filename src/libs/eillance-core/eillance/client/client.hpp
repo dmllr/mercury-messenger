@@ -424,7 +424,11 @@ class Client final {
     sm_->contact->ResetContactDisplayNameOverride(id);
   }
 
-  auto CreateGroup(std::string const& name, std::vector<ContactID> const& member_ids) -> GroupID {
+  auto CreateGroup(
+      std::string const& name,
+      std::vector<ContactID> const& member_ids,
+      std::optional<std::string> const& photo_base64 = std::nullopt
+  ) -> GroupID {
     auto gid = identity::GroupManager::GenerateGroupID();
     identity::Group g;
     g.id = gid;
@@ -435,9 +439,11 @@ class Client final {
       g.members.push_back({m, 0});
     }
 
+    Json payload = {{"type", "group_create"}, {"name", name}, {"owner_id", g.owner_id.ToString()}};
+    ApplyPhotoUpdate(g.photo_base64, payload, photo_base64);
+
     sm_->group_manager->CreateGroupLocal(g);
 
-    Json payload = {{"type", "group_create"}, {"name", name}, {"owner_id", g.owner_id.ToString()}};
     Json members_array = Json::array();
     for (auto const& m : g.members) {
       members_array.push_back({{"contact_id", m.contact_id.ToString()}, {"role", m.role}});
@@ -451,6 +457,27 @@ class Client final {
 
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
     return gid;
+  }
+
+  void UpdateGroup(
+      GroupID const& gid,
+      std::optional<std::string> const& name,
+      std::optional<std::string> const& photo_base64
+  ) {
+    auto g = sm_->group_manager->GetGroup(gid);
+    if (!g || g->owner_id != sm_->account->GetId()) return;
+
+    if (name) g->name = *name;
+
+    Json payload = {{"type", "group_update"}};
+    if (name) payload["name"] = *name;
+
+    ApplyPhotoUpdate(g->photo_base64, payload, photo_base64);
+
+    sm_->group_manager->CreateGroupLocal(*g);
+
+    sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
+    EventQueue::Instance().Push(EventGroupsStateUpdated{});
   }
 
   auto AddGroupMember(GroupID const& gid, ContactID const& member_id) -> bool {
@@ -721,6 +748,22 @@ class Client final {
   }
 
  private:
+  static void ApplyPhotoUpdate(
+      std::optional<std::string>& target_field,
+      Json& payload,
+      std::optional<std::string> const& new_photo
+  ) {
+    if (new_photo) {
+      if (new_photo->empty()) {
+        target_field = std::nullopt;
+        payload["photo"] = nullptr;
+      } else {
+        target_field = *new_photo;
+        payload["photo"] = *new_photo;
+      }
+    }
+  }
+
   void CheckForInactivePeers() {
     if (!is_running_) {
       return;
