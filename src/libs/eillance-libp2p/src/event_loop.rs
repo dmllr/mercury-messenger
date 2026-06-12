@@ -92,6 +92,15 @@ impl EventLoopState {
       }
     }
 
+    for b_addr in &self.bootstrap_addrs {
+      let mut relayed = b_addr.clone();
+      relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+      relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
+      if !addrs.contains(&relayed) {
+        addrs.push(relayed);
+      }
+    }
+
     crate::node_log!(callbacks, 5, "Dialing {} with addresses: {:?}", peer_val, addrs);
 
     let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
@@ -196,7 +205,9 @@ fn handle_keepalive(state: &mut EventLoopState, swarm: &mut Swarm<MercuryBehavio
         "Periodic check: Bootstrap node {:?} not connected, dialing...",
         b_addr
       );
-      let _ = swarm.dial(b_addr.clone());
+      if let Err(e) = swarm.dial(b_addr.clone()) {
+        crate::node_log!(callbacks, 2, "Failed to dial bootstrap node {:?}: {:?}", b_addr, e);
+      }
     }
   }
 

@@ -454,6 +454,14 @@ fn handle_kademlia(
                   addrs.push(relayed);
                 }
               }
+              for b_addr in &state.bootstrap_addrs {
+                let mut relayed = b_addr.clone();
+                relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
+                if !addrs.contains(&relayed) {
+                  addrs.push(relayed);
+                }
+              }
               let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
                 .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
                 .addresses(addrs)
