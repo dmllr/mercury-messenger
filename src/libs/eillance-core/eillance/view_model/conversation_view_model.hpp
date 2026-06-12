@@ -296,7 +296,16 @@ class ConversationViewModel {
 
       if (!page.messages.empty()) {
         for (auto& message : std::ranges::reverse_view(page.messages)) {
-          state.history.push_front(message);
+          bool exists = false;
+          for (auto const& entry : state.history) {
+            if (entry.id == message.id) {
+              exists = true;
+              break;
+            }
+          }
+          if (!exists) {
+            state.history.push_front(message);
+          }
         }
         chat_pages_loaded++;
         state.has_older_messages = (chat_pages_loaded * kPageSize) < page.total_messages;
@@ -334,7 +343,16 @@ class ConversationViewModel {
           break;
         }
         for (auto& message : std::ranges::reverse_view(page.messages)) {
-          state.history.push_front(message);
+          bool exists = false;
+          for (auto const& entry : state.history) {
+            if (entry.id == message.id) {
+              exists = true;
+              break;
+            }
+          }
+          if (!exists) {
+            state.history.push_front(message);
+          }
           if (message.id == message_id) {
             found = true;
           }
@@ -391,6 +409,12 @@ class ConversationViewModel {
 
     void OnMessageReceived(TopicID const&, messaging::HistoryEntryRecord const& message) {
       std::lock_guard<std::mutex> const lock(mutex);
+      for (auto const& entry : state.history) {
+        if (entry.id == message.id) {
+          return;
+        }
+      }
+
       auto msg_copy = message;
       if (auto* content = messaging::GetMessageContent(msg_copy.data)) {
         for (auto& att : content->attachments) {
