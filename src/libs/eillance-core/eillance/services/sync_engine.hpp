@@ -263,12 +263,17 @@ class SyncEngine {
     }
 
     storage_->AddSyncRequest({topic_id, my_id_, Timestamp::Now(), Timestamp{0}});
+    bool proposed_self = false;
     for (auto const& [net_id, peer] : transport_->GetPeers()) {
       if (transport_->GetMasterId(net_id) == my_id_) {
         if (peer->data_channel_is_open && peer->crcp_verified) {
           ProposeSync(topic_id, net_id);
+          proposed_self = true;
         }
       }
+    }
+    if (!proposed_self) {
+      EventQueue::Instance().Push(EventDeliveryRequested{my_id_});
     }
   }
 
@@ -301,7 +306,6 @@ class SyncEngine {
         if (Time::SteadyNow() - session.last_activity > 15ULL * 1000000ULL) {
           LGE << "[Sync] Session stuck for too long, forcing restart.";
         } else {
-          session.pending_request = true;
           return;
         }
       }
@@ -564,12 +568,16 @@ class SyncEngine {
       }
     }
 
+    ContactID const master_id = transport_->GetMasterId(peer_id);
+
     if (has_pending) {
       dispatchQueue_.Dispatch([this, topic_id, peer_id]() -> void { ProposeSync(topic_id, peer_id); });
+      if (!any_active) {
+        EventQueue::Instance().Push(EventSyncStateChanged{master_id, false, 1.0f});
+      }
       return;
     }
 
-    ContactID const master_id = transport_->GetMasterId(peer_id);
     storage_->RemoveSyncRequest(topic_id, master_id);
 
     if (!any_active) {
@@ -961,12 +969,6 @@ class SyncEngine {
     auto const reqs = storage_->GetSyncRequests();
     std::unordered_set<std::string> processed;
     for (auto const& req : reqs) {
-      std::string const key = GetSessionKey(req.topic_id, req.target_peer_id);
-      if (processed.contains(key)) {
-        continue;
-      }
-      processed.insert(key);
-
       bool const is_self = (req.target_peer_id == my_id_);
       if (!is_self) {
         auto contact = storage_->GetContact(req.target_peer_id);
@@ -977,6 +979,24 @@ class SyncEngine {
 
       for (auto const& [net_id, peer] : transport_->GetPeers()) {
         if (transport_->GetMasterId(net_id) == req.target_peer_id) {
+          std::string const key = GetSessionKey(req.topic_id, net_id);
+          if (processed.contains(key)) {
+            continue;
+          }
+
+          bool is_active = false;
+          {
+            std::lock_guard<std::mutex> const lock(sessions_mutex_);
+            if (auto it = sessions_.find(key); it != sessions_.end()) {
+              is_active = it->second.active;
+            }
+          }
+          if (is_active) {
+            processed.insert(key);
+            continue;
+          }
+          processed.insert(key);
+
           if (peer->data_channel_is_open && peer->session_cipher->IsReady() && peer->crcp_verified) {
             ProposeSync(req.topic_id, net_id);
           }

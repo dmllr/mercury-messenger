@@ -114,15 +114,28 @@ class MessagingService {
         std::lock_guard<std::mutex> const lock(sync_state_mutex_);
         is_syncing_[e.peer_id] = e.is_syncing;
         if (!e.is_syncing) {
-          TopicID const topic_id(e.peer_id);
-          if (pending_delivery_receipts_.contains(topic_id) && !pending_delivery_receipts_[topic_id].empty()) {
-            if (!delivery_receipts_debounce_active_[e.peer_id]) {
-              delivery_receipts_debounce_active_[e.peer_id] = true;
-              bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, topic_id]() {
-                FlushDeliveryReceipts(topic_id);
-              });
+          // Flush any pending receipts for all topics associated with this peer session
+          std::vector<TopicID> topics_to_flush;
+          for (auto const& [tid, receipts] : pending_delivery_receipts_) {
+            if (!receipts.empty()) {
+              topics_to_flush.push_back(tid);
             }
           }
+
+          for (auto const& tid : topics_to_flush) {
+            if (!delivery_receipts_debounce_active_[ContactID(tid.Span())]) {
+              delivery_receipts_debounce_active_[ContactID(tid.Span())] = true;
+              bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, tid]() { FlushDeliveryReceipts(tid); });
+            }
+          }
+
+          for (auto const& tid : topics_to_flush) {
+            if (!delivery_receipts_debounce_active_[ContactID(tid.Span())]) {
+              delivery_receipts_debounce_active_[ContactID(tid.Span())] = true;
+              bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, tid]() { FlushDeliveryReceipts(tid); });
+            }
+          }
+
           if (unread_evaluation_needed_[e.peer_id]) {
             evaluate_unread = true;
             unread_evaluation_needed_[e.peer_id] = false;
