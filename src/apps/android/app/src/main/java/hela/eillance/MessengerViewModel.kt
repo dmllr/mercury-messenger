@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 data class SharedContent(
   val text: String? = null,
@@ -37,9 +38,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   private val prefs = application.getSharedPreferences("mercury_global_prefs", Context.MODE_PRIVATE)
   private val PREF_MIGRATION_HANDLED = "v200_migration_handled"
+  private val PREF_IGNORE_BATTERY = "ignore_battery"
+  private val PREF_IGNORE_CALLS = "ignore_calls"
 
   private val _showMigrationDialog = MutableStateFlow(false)
   val showMigrationDialog = _showMigrationDialog.asStateFlow()
+
+  private val _isBatteryIgnored = MutableStateFlow(prefs.getBoolean(PREF_IGNORE_BATTERY, false))
+  private val _isCallsIgnored = MutableStateFlow(prefs.getBoolean(PREF_IGNORE_CALLS, false))
 
   // Navigation states
   private val _incomingCallUiVisible = MutableStateFlow(false)
@@ -60,11 +66,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private var isEngineReady = false
 
   // Computed state for which permission banner to show (if any)
-  val permissionBannerState: StateFlow<BannerType?> = NativeEventBus.permissionBanner.map { type ->
-    when (type) {
-      1 -> BannerType.Notification
-      2 -> BannerType.Battery
-      3 -> BannerType.CallPermissions
+  val permissionBannerState: StateFlow<BannerType?> = combine(
+    _hasNotificationPermission,
+    _hasBatteryExemption,
+    _hasCallPermissions,
+    _isBatteryIgnored,
+    _isCallsIgnored
+  ) { hasNotif, hasBat, hasCall, batIgnored, callsIgnored ->
+    when {
+      !hasNotif -> BannerType.Notification
+      !hasBat && !batIgnored -> BannerType.Battery
+      !hasCall && !callsIgnored -> BannerType.CallPermissions
       else -> null
     }
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -85,6 +97,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
   init {
     checkAllPermissions()
+    viewModelScope.launch {
+      MessengerService.isEngineReady.collect { isReady ->
+        if (isReady) {
+          checkAllPermissions()
+        }
+      }
+    }
   }
 
   fun checkAllPermissions() {
@@ -98,14 +117,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun ignoreBatteryOptimization() {
+    prefs.edit().putBoolean(PREF_IGNORE_BATTERY, true).apply()
+    _isBatteryIgnored.value = true
     MessengerService.instance?.nativeIgnoreBattery()
   }
 
   fun ignoreCallPermissions() {
+    prefs.edit().putBoolean(PREF_IGNORE_CALLS, true).apply()
+    _isCallsIgnored.value = true
     MessengerService.instance?.nativeIgnoreCalls()
   }
 
   fun resetIgnoredPermissions() {
+    prefs.edit().putBoolean(PREF_IGNORE_BATTERY, false).putBoolean(PREF_IGNORE_CALLS, false).apply()
+    _isBatteryIgnored.value = false
+    _isCallsIgnored.value = false
     MessengerService.instance?.nativeResetIgnoredPermissions()
     checkAllPermissions()
   }
