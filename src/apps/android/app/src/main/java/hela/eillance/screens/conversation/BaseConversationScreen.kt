@@ -427,7 +427,7 @@ fun BaseConversationScreen(
         )
       } else {
         ConversationDefaultTopBar(
-          peerId = peerId, contact = contact, onBack = onBack, onShowContactProfile = onShowContactProfile,
+          peerId = peerId, contact = contact, contactsVM = contactsVM, onBack = onBack, onShowContactProfile = onShowContactProfile,
           onStartVoiceCall = {
             if (ContextCompat.checkSelfPermission(
                 context,

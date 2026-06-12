@@ -123,7 +123,7 @@ fun ContactsScreen(
     CreateGroupDialog(
       contacts = contacts.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel },
       onDismissRequest = { showCreateGroupDialog = false },
-      onCreateGroup = { name, ids -> contactsVM.createGroup(name, ids) }
+      onCreateGroup = { name, ids, photo -> contactsVM.createGroup(name, ids, photo) }
     )
   }
 
@@ -384,6 +384,7 @@ fun ContactsScreen(
               items(visibleContacts, key = { it.peerId }) { contact ->
                 ContactListItem(
                   contact = contact,
+                  contactsVM = contactsVM,
                   onClick = { onContactClick(contact.peerId, null) },
                   onShowProfile = { onShowContactProfile(contact.peerId) },
                   zoneId = zoneId,

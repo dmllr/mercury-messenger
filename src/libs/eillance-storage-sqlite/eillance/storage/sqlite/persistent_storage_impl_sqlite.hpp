@@ -324,10 +324,11 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
-    SQLiteStatement const s_grp(db_, "REPLACE INTO groups (id, name, owner_id) VALUES (?, ?, ?);");
+    SQLiteStatement const s_grp(db_, "REPLACE INTO groups (id, name, owner_id, photo_base64) VALUES (?, ?, ?, ?);");
     BindText(s_grp.Get(), 1, group.id.ToString());
     BindText(s_grp.Get(), 2, group.name);
     BindText(s_grp.Get(), 3, group.owner_id.ToString());
+    BindOptionalText(s_grp.Get(), 4, group.photo_base64);
     sqlite3_step(s_grp.Get());
 
     SQLiteStatement const s_del(db_, "DELETE FROM group_members WHERE group_id = ?;");
@@ -349,13 +350,14 @@ class SQLiteStorage final : public PersistentStorageImpl {
   auto GetGroup(GroupID const& group_id) -> std::optional<identity::Group> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
-    SQLiteStatement const s_grp(db_, "SELECT name, owner_id FROM groups WHERE id = ?;");
+    SQLiteStatement const s_grp(db_, "SELECT name, owner_id, photo_base64 FROM groups WHERE id = ?;");
     BindText(s_grp.Get(), 1, group_id.ToString());
     if (sqlite3_step(s_grp.Get()) == SQLITE_ROW) {
       identity::Group group;
       group.id = group_id;
       group.name = ColumnString(s_grp.Get(), 0);
       group.owner_id = ContactID(ColumnString(s_grp.Get(), 1));
+      group.photo_base64 = ColumnOptionalString(s_grp.Get(), 2);
 
       SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM group_members WHERE group_id = ?;");
       BindText(s_mem.Get(), 1, group_id.ToString());
@@ -371,12 +373,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     std::vector<identity::Group> groups;
-    SQLiteStatement const s_grp(db_, "SELECT id, name, owner_id FROM groups;");
+    SQLiteStatement const s_grp(db_, "SELECT id, name, owner_id, photo_base64 FROM groups;");
     while (sqlite3_step(s_grp.Get()) == SQLITE_ROW) {
       identity::Group group;
       group.id = GroupID(ColumnString(s_grp.Get(), 0));
       group.name = ColumnString(s_grp.Get(), 1);
       group.owner_id = ContactID(ColumnString(s_grp.Get(), 2));
+      group.photo_base64 = ColumnOptionalString(s_grp.Get(), 3);
 
       SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM group_members WHERE group_id = ?;");
       BindText(s_mem.Get(), 1, group.id.ToString());
@@ -1591,6 +1594,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 14) migrations::MigrateToV0014(db_);
     if (user_version < 15) migrations::MigrateToV0015(db_);
     if (user_version < 16) migrations::MigrateToV0016(db_);
+    if (user_version < 17) migrations::MigrateToV0017(db_);
     // NOLINTEND(*-braces-around-statements)
   }
 

@@ -4,16 +4,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,6 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
+import hela.eillance.components.AvatarPicker
+import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,9 +40,10 @@ import hela.eillance.ndkio.Contact
 fun CreateGroupDialog(
   contacts: List<Contact>,
   onDismissRequest: () -> Unit,
-  onCreateGroup: (String, List<String>) -> Unit
+  onCreateGroup: (String, List<String>, String?) -> Unit
 ) {
   var groupName by remember { mutableStateOf("") }
+  var groupPhoto by remember { mutableStateOf<String?>(null) }
   val selectedContactIds = remember { mutableStateListOf<String>() }
 
   AlertDialog(
@@ -45,6 +51,23 @@ fun CreateGroupDialog(
     title = { Text(stringResource(id = R.string.group_new)) },
     text = {
       Column {
+        AvatarPicker(
+          hasPhoto = !groupPhoto.isNullOrEmpty(),
+          onPhotoPicked = { groupPhoto = it },
+          onPhotoCleared = { groupPhoto = null },
+          modifier = Modifier
+            .size(80.dp)
+            .align(Alignment.CenterHorizontally),
+          fallbackContent = {
+            UserAvatar(
+              photoBase64 = groupPhoto,
+              modifier = Modifier.fillMaxSize(),
+              fallbackBackground = MaterialTheme.colorScheme.secondaryContainer,
+              fallbackTint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+          }
+        )
+        Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
           value = groupName,
           onValueChange = { groupName = it },
@@ -87,7 +110,7 @@ fun CreateGroupDialog(
       TextButton(
         onClick = {
           if (groupName.isNotBlank() && selectedContactIds.isNotEmpty()) {
-            onCreateGroup(groupName, selectedContactIds.toList())
+            onCreateGroup(groupName, selectedContactIds.toList(), groupPhoto)
             onDismissRequest()
           }
         },

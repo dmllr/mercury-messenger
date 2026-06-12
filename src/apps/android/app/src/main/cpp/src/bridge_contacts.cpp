@@ -141,21 +141,26 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
 extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeCreateGroup(
     JNIEnv* env,
     jobject /*instance*/,
-    jlong ptr,
+    jlong /*ptr*/,
     jstring name,
-    jstring peer_ids_csv
+    jstring peer_ids_csv,
+    jstring photo
 ) {
   auto engine = GetSafeEngine();
   if (!engine) return nullptr;
 
   char const* name_chars = env->GetStringUTFChars(name, nullptr);
   char const* csv_chars = env->GetStringUTFChars(peer_ids_csv, nullptr);
+  char const* photo_chars = photo ? env->GetStringUTFChars(photo, nullptr) : nullptr;
 
   std::string group_name(name_chars);
   std::string csv(csv_chars);
+  std::optional<std::string> p_opt;
+  if (photo_chars) p_opt = std::string(photo_chars);
 
   env->ReleaseStringUTFChars(name, name_chars);
   env->ReleaseStringUTFChars(peer_ids_csv, csv_chars);
+  if (photo) env->ReleaseStringUTFChars(photo, photo_chars);
 
   std::vector<eillance::ContactID> members;
   std::stringstream ss(csv);
@@ -166,8 +171,35 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewM
     }
   }
 
-  auto gid = engine->GetClient()->CreateGroup(group_name, members);
+  auto gid = engine->GetClient()->CreateGroup(group_name, members, p_opt);
   return env->NewStringUTF(gid.ToString().c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeUpdateGroup(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong /*ptr*/,
+    jstring group_id,
+    jstring name,
+    jstring photo
+) {
+  auto engine = GetSafeEngine();
+  if (!engine) return;
+
+  char const* gid_chars = env->GetStringUTFChars(group_id, nullptr);
+  char const* n_chars = name ? env->GetStringUTFChars(name, nullptr) : nullptr;
+  char const* p_chars = photo ? env->GetStringUTFChars(photo, nullptr) : nullptr;
+
+  std::optional<std::string> n_opt;
+  if (n_chars) n_opt = std::string(n_chars);
+  std::optional<std::string> p_opt;
+  if (p_chars) p_opt = std::string(p_chars);
+
+  engine->GetClient()->UpdateGroup(eillance::GroupID(gid_chars), n_opt, p_opt);
+
+  env->ReleaseStringUTFChars(group_id, gid_chars);
+  if (name) env->ReleaseStringUTFChars(name, n_chars);
+  if (photo) env->ReleaseStringUTFChars(photo, p_chars);
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeGetGroupMembers(
