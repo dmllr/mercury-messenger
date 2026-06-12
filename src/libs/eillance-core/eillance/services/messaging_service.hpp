@@ -688,15 +688,9 @@ class MessagingService {
       p->last_activity_time = Time::SteadyNow();
     }
 
-    {
-      constexpr auto page_size = 50U;
-      auto [messages, total_messages] = history_->GetHistoryPage(topic_id, 0, page_size);
-      for (auto const& h_entry : messages) {
-        if (h_entry.id == message_id) {
-          QueueDeliveryReceipt(topic_id, message_id);
-          return;
-        }
-      }
+    if (history_->GetHistoryEntry(topic_id, message_id)) {
+      QueueDeliveryReceipt(topic_id, message_id);
+      return;
     }
 
     std::string content;
@@ -933,6 +927,10 @@ class MessagingService {
   void
   HandleChatProjection(TopicID const& topic_id, messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
     uint64_t message_id = json.value("message_id", 0ULL);
+
+    if (history_->GetHistoryEntry(topic_id, message_id)) {
+      return;
+    }
 
     auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
     if (ledger_ts < 10000000000ULL) {
