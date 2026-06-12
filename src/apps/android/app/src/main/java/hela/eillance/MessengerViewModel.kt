@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.core.content.edit
 
 data class SharedContent(
   val text: String? = null,
@@ -117,19 +118,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun ignoreBatteryOptimization() {
-    prefs.edit().putBoolean(PREF_IGNORE_BATTERY, true).apply()
+    prefs.edit { putBoolean(PREF_IGNORE_BATTERY, true) }
     _isBatteryIgnored.value = true
     MessengerService.instance?.nativeIgnoreBattery()
   }
 
   fun ignoreCallPermissions() {
-    prefs.edit().putBoolean(PREF_IGNORE_CALLS, true).apply()
+    prefs.edit { putBoolean(PREF_IGNORE_CALLS, true) }
     _isCallsIgnored.value = true
     MessengerService.instance?.nativeIgnoreCalls()
   }
 
   fun resetIgnoredPermissions() {
-    prefs.edit().putBoolean(PREF_IGNORE_BATTERY, false).putBoolean(PREF_IGNORE_CALLS, false).apply()
+    prefs.edit { putBoolean(PREF_IGNORE_BATTERY, false).putBoolean(PREF_IGNORE_CALLS, false) }
     _isBatteryIgnored.value = false
     _isCallsIgnored.value = false
     MessengerService.instance?.nativeResetIgnoredPermissions()
@@ -175,7 +176,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun markMigrationHandled() {
-    prefs.edit().putBoolean(PREF_MIGRATION_HANDLED, true).apply()
+    prefs.edit { putBoolean(PREF_MIGRATION_HANDLED, true) }
     _showMigrationDialog.value = false
   }
 
