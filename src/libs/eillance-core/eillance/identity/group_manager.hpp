@@ -97,6 +97,9 @@ class GroupManager {
       g.id = GroupID(entry.topic_id.Span());
       g.name = json.value("name", "");
       g.owner_id = ContactID(json.value("owner_id", ""));
+      if (json.contains("photo") && !json["photo"].is_null()) {
+        g.photo_base64 = json.value("photo", "");
+      }
       if (json.contains("members")) {
         for (auto const& m_json : json["members"]) {
           g.members.push_back({ContactID(m_json.value("contact_id", "")), m_json.value("role", 0)});
@@ -104,6 +107,19 @@ class GroupManager {
       }
       CreateGroupLocal(g);
       EventQueue::Instance().Push(EventGroupsStateUpdated{});
+    } else if (type == "group_update") {
+      auto g = GetGroup(GroupID(entry.topic_id.Span()));
+      if (g && g->owner_id == entry.author_id) {
+        if (json.contains("name")) g->name = json.value("name", "");
+        if (json.contains("photo")) {
+          if (json["photo"].is_null())
+            g->photo_base64 = std::nullopt;
+          else
+            g->photo_base64 = json.value("photo", "");
+        }
+        CreateGroupLocal(*g);
+        EventQueue::Instance().Push(EventGroupsStateUpdated{});
+      }
     } else if (type == "group_member_add") {
       auto g = GetGroup(GroupID(entry.topic_id.Span()));
       if (g && g->owner_id == entry.author_id) {

@@ -17,6 +17,7 @@ struct Group {
   GroupID id;
   std::string name;
   ContactID owner_id;
+  std::optional<std::string> photo_base64;
   std::vector<GroupMember> members;
 };
 

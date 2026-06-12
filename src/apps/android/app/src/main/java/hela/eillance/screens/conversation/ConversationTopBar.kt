@@ -27,8 +27,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
+import hela.eillance.components.ContactAvatar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
+import hela.eillance.viewmodels.ContactsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +70,7 @@ fun SelectionTopBar(
 fun ConversationDefaultTopBar(
   peerId: String,
   contact: Contact?,
+  contactsVM: ContactsViewModel,
   onBack: () -> Unit,
   onShowContactProfile: (String) -> Unit,
   onStartVoiceCall: () -> Unit,
@@ -82,10 +85,15 @@ fun ConversationDefaultTopBar(
         modifier = Modifier.clickable { onShowContactProfile(peerId) },
         verticalAlignment = Alignment.CenterVertically
       ) {
-        UserAvatar(
-          photoBase64 = contact?.photo,
-          modifier = Modifier.size(40.dp)
-        )
+        if (contact != null) {
+          ContactAvatar(
+            contact = contact,
+            contactsVM = contactsVM,
+            modifier = Modifier.size(40.dp)
+          )
+        } else {
+          UserAvatar(photoBase64 = null, modifier = Modifier.size(40.dp))
+        }
         Spacer(modifier = Modifier.width(8.dp))
         Text(
           text = contact?.displayName ?: peerId.take(8),

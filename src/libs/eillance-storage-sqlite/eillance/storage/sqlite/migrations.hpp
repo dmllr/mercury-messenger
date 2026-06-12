@@ -22,3 +22,4 @@
 #include "eillance/storage/sqlite/migrations/0014_channels.hpp"
 #include "eillance/storage/sqlite/migrations/0015_message_peer_statuses.hpp"
 #include "eillance/storage/sqlite/migrations/0016_message_author.hpp"
+#include "eillance/storage/sqlite/migrations/0017_group_photo.hpp"

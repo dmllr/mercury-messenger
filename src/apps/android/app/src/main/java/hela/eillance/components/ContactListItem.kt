@@ -41,6 +41,7 @@ import hela.eillance.ndkio.MessageStatus
 import hela.eillance.ndkio.PeerConnectionState
 import hela.eillance.theme.ListItem
 import hela.eillance.theme.extendedColors
+import hela.eillance.viewmodels.ContactsViewModel
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
@@ -51,6 +52,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ContactListItem(
   contact: Contact,
+  contactsVM: ContactsViewModel,
   onClick: () -> Unit,
   onShowProfile: () -> Unit,
   zoneId: ZoneId,
@@ -73,8 +75,9 @@ fun ContactListItem(
 
   ListItem(
     leadingContent = {
-      UserAvatar(
-        photoBase64 = contact.photo,
+      ContactAvatar(
+        contact = contact,
+        contactsVM = contactsVM,
         modifier = Modifier.size(48.dp),
         onClick = onShowProfile
       )

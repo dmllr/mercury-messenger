@@ -242,7 +242,7 @@ class ContactsViewModel {
               {.topic_id = TopicID(group.id),
                .display_name = group.name,
                .bio = "Group Chat",
-               .photo = std::nullopt,
+               .photo = group.photo_base64,
                .status = identity::ContactStatus::confirmed,
                .connection_state = group_state,
                .unread_count = 0,

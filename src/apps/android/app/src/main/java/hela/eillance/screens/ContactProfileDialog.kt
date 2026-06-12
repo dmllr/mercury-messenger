@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -41,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import hela.eillance.camera.R
+import hela.eillance.components.AvatarPicker
+import hela.eillance.components.ContactAvatar
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ContactStatus
@@ -155,11 +158,27 @@ private fun GroupProfileContent(
     modifier = Modifier.padding(24.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    UserAvatar(
-      photoBase64 = null,
-      modifier = Modifier.size(100.dp),
-      fallbackBackground = MaterialTheme.colorScheme.secondaryContainer
-    )
+    if (isOwner) {
+      AvatarPicker(
+        hasPhoto = !contact.photo.isNullOrEmpty(),
+        onPhotoPicked = { contactsVM.updateGroup(contact.peerId, null, it) },
+        onPhotoCleared = { contactsVM.updateGroup(contact.peerId, null, "") },
+        modifier = Modifier.size(100.dp),
+        fallbackContent = {
+          ContactAvatar(
+            contact = contact,
+            contactsVM = contactsVM,
+            modifier = Modifier.fillMaxSize()
+          )
+        }
+      )
+    } else {
+      ContactAvatar(
+        contact = contact,
+        contactsVM = contactsVM,
+        modifier = Modifier.size(100.dp)
+      )
+    }
 
     Spacer(modifier = Modifier.height(16.dp))
 
