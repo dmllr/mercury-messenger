@@ -209,16 +209,24 @@ class CallViewModel {
     }
 
     void ToggleMute() {
-      std::lock_guard<std::mutex> const lock(mutex);
-      state.is_muted = !state.is_muted;
-      EventQueue::Instance().Push(EventCmdSetMicrophoneMute{state.is_muted});
+      bool is_muted = false;
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state.is_muted = !state.is_muted;
+        is_muted = state.is_muted;
+      }
+      EventQueue::Instance().Push(EventCmdSetMicrophoneMute{is_muted});
       Notify();
     }
 
     void ToggleSpeaker() {
-      std::lock_guard<std::mutex> const lock(mutex);
-      state.is_speaker_on = !state.is_speaker_on;
-      EventQueue::Instance().Push(EventCmdSetSpeakerphone{state.is_speaker_on});
+      bool is_speaker_on = false;
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state.is_speaker_on = !state.is_speaker_on;
+        is_speaker_on = state.is_speaker_on;
+      }
+      EventQueue::Instance().Push(EventCmdSetSpeakerphone{is_speaker_on});
       Notify();
     }
 
