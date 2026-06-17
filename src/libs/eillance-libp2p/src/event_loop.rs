@@ -93,27 +93,45 @@ impl EventLoopState {
     }
 
     for b_addr in &self.bootstrap_addrs {
-      let mut relayed = b_addr.clone();
-      relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
-      relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
-      if !addrs.contains(&relayed) {
-        addrs.push(relayed);
+      if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+        let mut relayed = b_addr.clone();
+        relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+        relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
+        if !addrs.contains(&relayed) {
+          addrs.push(relayed);
+        }
       }
     }
 
-    crate::node_log!(callbacks, 5, "Dialing {} with addresses: {:?}", peer_val, addrs);
+    crate::node_log!(
+      callbacks,
+      4,
+      "do_dial: {} with {} active relays, {} bootstrap addrs, {} total addrs",
+      peer_val,
+      self.active_relay_peers.len(),
+      self.bootstrap_addrs.len(),
+      addrs.len()
+    );
 
-    let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
-      .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-      .addresses(addrs)
-      .build();
+    let opts = if !addrs.is_empty() {
+      libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
+        .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+        .addresses(addrs.clone())
+        .build()
+    } else {
+      libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
+        .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+        .build()
+    };
+
     match swarm.dial(opts) {
       Ok(_) => crate::node_log!(callbacks, 5, "Dial request submitted for {}", peer_val),
       Err(libp2p::swarm::DialError::NoAddresses) => crate::node_log!(
         callbacks,
-        4,
-        "DialError::NoAddresses for {}, waiting for DHT or relay",
-        peer_val
+        3,
+        "DialError::NoAddresses for {} (addrs.len = {})",
+        peer_val,
+        addrs.len()
       ),
       Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
         crate::node_log!(callbacks, 5, "DialError::DialPeerConditionFalse for {}", peer_val);
@@ -285,10 +303,12 @@ fn handle_command(
     Command::AddBootstrap(addr) => {
       let tx_clone = tx.clone();
       tokio::spawn(async move {
-        if let Some(resolved) = resolve_multiaddr(addr).await {
-          let _ = tx_clone.send(Command::AddBootstrapResolved(resolved));
-        } else {
-          eprintln!("Failed to resolve bootstrap node");
+        loop {
+          if let Some(resolved) = resolve_multiaddr(addr.clone()).await {
+            let _ = tx_clone.send(Command::AddBootstrapResolved(resolved));
+            break;
+          }
+          tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
       });
     }
