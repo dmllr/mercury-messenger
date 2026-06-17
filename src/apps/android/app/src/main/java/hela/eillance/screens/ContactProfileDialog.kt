@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -132,6 +133,7 @@ private fun GroupProfileContent(
 ) {
   var members by remember { mutableStateOf<List<GroupMember>>(emptyList()) }
   var showAddMemberDialog by remember { mutableStateOf(false) }
+  var showEditNameDialog by remember { mutableStateOf(false) }
 
   LaunchedEffect(contact.peerId) {
     members = contactsVM.getGroupMembers(contact.peerId)
@@ -150,6 +152,37 @@ private fun GroupProfileContent(
         contactsVM.addGroupMember(contact.peerId, cid)
         members = contactsVM.getGroupMembers(contact.peerId)
         showAddMemberDialog = false
+      }
+    )
+  }
+
+  if (showEditNameDialog) {
+    var newName by remember { mutableStateOf(contact.displayName) }
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { showEditNameDialog = false },
+      title = { Text(stringResource(id = R.string.action_edit)) },
+      text = {
+        OutlinedTextField(
+          value = newName,
+          onValueChange = { newName = it },
+          label = { Text(stringResource(id = R.string.group_name_label)) },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth()
+        )
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            if (newName.isNotBlank() && newName != contact.displayName) {
+              contactsVM.updateGroup(contact.peerId, newName, null)
+            }
+            showEditNameDialog = false
+          },
+          enabled = newName.isNotBlank()
+        ) { Text(stringResource(id = R.string.action_save)) }
+      },
+      dismissButton = {
+        TextButton(onClick = { showEditNameDialog = false }) { Text(stringResource(id = R.string.action_cancel)) }
       }
     )
   }
@@ -182,7 +215,26 @@ private fun GroupProfileContent(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    Text(text = contact.displayName, style = MaterialTheme.typography.headlineSmall)
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.Center
+    ) {
+      Text(text = contact.displayName, style = MaterialTheme.typography.headlineSmall)
+      if (isOwner) {
+        Spacer(modifier = Modifier.width(8.dp))
+        IconButton(
+          onClick = { showEditNameDialog = true },
+          modifier = Modifier.size(24.dp)
+        ) {
+          Icon(
+            Icons.Default.Edit,
+            contentDescription = stringResource(id = R.string.action_edit),
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary
+          )
+        }
+      }
+    }
     Text(text = contact.peerId, style = MaterialTheme.typography.bodyMedium)
 
     Spacer(modifier = Modifier.height(24.dp))
