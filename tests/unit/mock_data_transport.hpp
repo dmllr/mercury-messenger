@@ -23,6 +23,7 @@ class MockDataTransport : public DataTransport::Interface {
   std::vector<std::string> bootstrap_urls_;
 
   std::vector<std::pair<ContactID, nlohmann::json>> sent_jsons;
+  std::vector<std::pair<ContactID, std::vector<std::byte>>> sent_data;
 
   void SetId(ContactID const& id) override {
     id_ = id;
@@ -104,8 +105,9 @@ class MockDataTransport : public DataTransport::Interface {
   void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
   }
 
-  auto SendData(ContactID const&, std::span<std::byte const>) -> bool override {
-    return false;
+  auto SendData(ContactID const& peer_id, std::span<std::byte const> data) -> bool override {
+    sent_data.push_back({peer_id, std::vector<std::byte>(data.begin(), data.end())});
+    return true;
   }
   auto SendJson(ContactID const& peer_id, nlohmann::json const& msg) -> bool override {
     sent_jsons.push_back({peer_id, msg});

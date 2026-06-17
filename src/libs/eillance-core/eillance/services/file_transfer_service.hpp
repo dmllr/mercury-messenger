@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <span>
@@ -24,6 +25,7 @@
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
+#include "eillance/utils/time.hpp"
 
 namespace eillance::services {
 
@@ -483,6 +485,7 @@ class FileTransferService {
     auto const key = peer_id.ToString() + "_" + attachment.id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
+      unknown_attachments_.erase(attachment.id);
       if (active_downloads_.contains(key)) {
         return;
       }
@@ -904,6 +907,7 @@ class FileTransferService {
 
     if (!active_downloads_.contains(key)) {
       if (auto attachment = storage_->GetAttachment(file_id)) {
+        unknown_attachments_.erase(file_id);
         if (attachment->status == messaging::AttachmentStatus::paused) {
           lock.unlock();
           SendPause(peer_id, file_id);
@@ -925,8 +929,19 @@ class FileTransferService {
         StartDownloadInternal(peer_id, *attachment, 0, false);
         lock.lock();
       } else {
-        lock.unlock();
-        SendCancel(peer_id, file_id);
+        auto now = Time::SteadyNow();
+        if (!unknown_attachments_.contains(file_id)) {
+          unknown_attachments_[file_id] = now;
+          if (unknown_attachments_.size() > 100) {
+            std::erase_if(unknown_attachments_, [now](auto const& item) {
+              return now > item.second && (now - item.second) > 3600ULL * Time::uS;
+            });
+          }
+        }
+        if (now > unknown_attachments_[file_id] && (now - unknown_attachments_[file_id]) > 15ULL * Time::uS) {
+          lock.unlock();
+          SendCancel(peer_id, file_id);
+        }
         return;
       }
     }
@@ -997,13 +1012,24 @@ class FileTransferService {
     std::unique_lock<std::mutex> lock(transfers_mutex_);
     auto const iterator = active_downloads_.find(key);
     if (iterator == active_downloads_.end()) {
-      lock.unlock();
-      if (auto const attachment = storage_->GetAttachment(file_id);
-          attachment && attachment->status == messaging::AttachmentStatus::done) {
+      auto const attachment = storage_->GetAttachment(file_id);
+      if (attachment && attachment->status == messaging::AttachmentStatus::done) {
+        lock.unlock();
         SendDone(peer_id, file_id);
       } else if (attachment && attachment->status == messaging::AttachmentStatus::paused) {
+        lock.unlock();
         SendPause(peer_id, file_id);
+      } else if (!attachment) {
+        auto now = Time::SteadyNow();
+        if (!unknown_attachments_.contains(file_id)) {
+          unknown_attachments_[file_id] = now;
+        }
+        if (now > unknown_attachments_[file_id] && (now - unknown_attachments_[file_id]) > 15ULL * Time::uS) {
+          lock.unlock();
+          SendCancel(peer_id, file_id);
+        }
       } else {
+        lock.unlock();
         SendCancel(peer_id, file_id);
       }
       return;
@@ -1149,6 +1175,7 @@ class FileTransferService {
   std::map<std::string, TransferUploadState> active_uploads_;
   std::map<std::string, TransferDownloadState> active_downloads_;
   mutable std::mutex transfers_mutex_;
+  std::unordered_map<std::string, Time::Unit> unknown_attachments_;
 
   struct QueuedTransfer {
     ContactID peer_id;
