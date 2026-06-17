@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <thread>
 #include <tuple>
@@ -18,9 +19,15 @@ using namespace eillance;
 
 class ViewModelTest : public ::testing::Test {
  protected:
+  std::filesystem::path temp_dir_;
+
   void SetUp() override {
+    temp_dir_ = std::filesystem::temp_directory_path() / "view_model_tests";
+    std::error_code ec;
+    std::filesystem::create_directories(temp_dir_, ec);
+
     // Storage
-    auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
+    auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>((temp_dir_ / "mock_db_path").string());
     mock_storage_ = storage_impl.get();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
@@ -52,6 +59,8 @@ class ViewModelTest : public ::testing::Test {
       client_->Terminate();
       client_.reset();
     }
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir_, ec);
   }
 
   template <typename Func>
