@@ -345,7 +345,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
       node_->GetProviders(peer_id.ToString());
 
-      rx_queue_.DispatchAfter(std::chrono::seconds(15), [this, peer_id]() {
+      rx_queue_.DispatchAfter(std::chrono::seconds(60), [this, peer_id]() {
         std::lock_guard<std::mutex> const lock(peersMutex_);
         if (auto it = peers_.find(peer_id); it != peers_.end()) {
           if (it->second->is_connecting && !it->second->data_channel_is_open) {

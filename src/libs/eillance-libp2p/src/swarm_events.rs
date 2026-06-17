@@ -455,20 +455,50 @@ fn handle_kademlia(
                 }
               }
               for b_addr in &state.bootstrap_addrs {
-                let mut relayed = b_addr.clone();
-                relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
-                relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                if !addrs.contains(&relayed) {
-                  addrs.push(relayed);
+                if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+                  let mut relayed = b_addr.clone();
+                  relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                  relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
+                  if !addrs.contains(&relayed) {
+                    addrs.push(relayed);
+                  }
                 }
               }
-              let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-                .addresses(addrs)
-                .build();
+              for b_addr in &state.bootstrap_addrs {
+                if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+                  let mut relayed = b_addr.clone();
+                  relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                  relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
+                  if !addrs.contains(&relayed) {
+                    addrs.push(relayed);
+                  }
+                }
+              }
+
+              crate::node_log!(
+                callbacks,
+                4,
+                "kademlia dial fallback: {} with {} active relays, {} bootstrap addrs, {} total addrs",
+                peer,
+                state.active_relay_peers.len(),
+                state.bootstrap_addrs.len(),
+                addrs.len()
+              );
+
+              let opts = if !addrs.is_empty() {
+                libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
+                  .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+                  .addresses(addrs.clone())
+                  .build()
+              } else {
+                libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
+                  .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+                  .build()
+              };
+
               match swarm.dial(opts) {
                 Err(libp2p::swarm::DialError::NoAddresses) => {
-                  crate::node_log!(callbacks, 4, "Failed to discover addresses for {}", peer);
+                  crate::node_log!(callbacks, 3, "Failed to discover addresses for {} (addrs.len = {})", peer, addrs.len());
                   notify_disconnected(callbacks, swarm, &peer);
                 }
                 Err(e) => {
