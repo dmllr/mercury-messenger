@@ -138,7 +138,7 @@ fun ChannelConversationScreen(
     onShowContactProfile = onShowContactProfile,
     onNavigateToMedia = onNavigateToMedia,
     onMediaClick = onMediaClick,
-    showConnectionStatus = true,
+    showConnectionStatus = false,
     isGroupChat = false,
     showCallButtons = false
   )
