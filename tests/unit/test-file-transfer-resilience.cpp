@@ -33,7 +33,9 @@ class FileTransferResilienceTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_dt_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     (void)client_->GenerateNewIdentity();
@@ -87,6 +89,7 @@ class FileTransferResilienceTest : public ::testing::Test {
   std::filesystem::path attachments_dir_;
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
+  transport::MockDataTransport* mock_dt_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 
@@ -257,4 +260,68 @@ TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
   EventQueue::Instance().Unsubscribe(sub);
 
   EXPECT_TRUE(found_sequence) << "Status sequence should reach Transferring";
+}
+
+TEST_F(FileTransferResilienceTest, ChunkArrivesBeforeLedgerSyncDoesNotCancel) {
+  std::string att_id = "racing_attachment_id";
+
+  // Simulate receiving a chunk for an unknown attachment
+  auto chunk = CreateChunkPacket(att_id, 0, StringToBytes("chunk data"));
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
+
+  // Process the event
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
+
+  // Verify NO cancel was sent
+  bool cancel_sent = false;
+  for (auto const& [p, data] : mock_dt_->sent_data) {
+    if (p == peer1 && data.size() >= 2 && data[1] == std::byte{0x03}) {
+      cancel_sent = true;
+    }
+  }
+  EXPECT_FALSE(cancel_sent) << "Should not cancel unknown attachment immediately";
+
+  // Now simulate the ledger message arriving
+  messaging::Attachment att;
+  att.id = att_id;
+  att.type = messaging::AttachmentType::file;
+  att.mime_type = "text/plain";
+  att.size_bytes = 10;
+  att.hash = crypto::Sha256Hex("chunk data");
+  att.is_downloaded = false;
+
+  nlohmann::json payload_msg;
+  payload_msg["type"] = "chat";
+  payload_msg["message_id"] = 9002;
+  payload_msg["payload"] = {{"c", "msg"}, {"v", 2}};
+  payload_msg["attachments"] = nlohmann::json::array(
+      {{{"id", att_id},
+        {"type", static_cast<int>(att.type)},
+        {"mime", att.mime_type},
+        {"size", att.size_bytes},
+        {"hash", att.hash},
+        {"is_downloaded", false}}}
+  );
+
+  messaging::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  client_->Messaging()->ProjectMessage(entry, payload_msg, false);
+
+  // We expect the download to start and send a Missing request (Type 0x07)
+  bool missing_sent = false;
+  EventQueue::Instance().WaitFor(
+      [&]() {
+        for (auto const& [p, data] : mock_dt_->sent_data) {
+          if (p == peer1 && data.size() >= 2 && data[1] == std::byte{0x07}) {
+            missing_sent = true;
+            return true;
+          }
+        }
+        return false;
+      },
+      std::chrono::seconds(2)
+  );
+
+  EXPECT_TRUE(missing_sent) << "Should resume download and send Missing request after ledger sync";
 }
