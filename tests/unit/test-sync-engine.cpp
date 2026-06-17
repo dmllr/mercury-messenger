@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include "eillance/services/account_service.hpp"
+#include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/services/sync_engine.hpp"
@@ -407,6 +409,10 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   sm.group_manager = std::make_shared<identity::GroupManager>(A->storage);
   sm.channel_manager = std::make_shared<identity::ChannelManager>(A->storage);
 
+  sm.account = std::make_shared<services::AccountService>(&sm);
+  std::ignore = sm.account->GenerateNewIdentity();
+  sm.file_transfer = std::make_shared<services::FileTransferService>(&sm);
+
   auto messaging_service = std::make_shared<services::MessagingService>(&sm);
   sm.messaging = messaging_service;
 
@@ -416,7 +422,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   chat_entry.created_at = Timestamp{1000};
   chat_entry.type = messaging::LedgerActionType::Message;
 
-  nlohmann::json chat_json = {{"type", "chat"}, {"message_id", 100}, {"payload", {{"c", "Hello"}}}};
+  nlohmann::json const chat_json = {{"type", "chat"}, {"message_id", 100}, {"payload", {{"c", "Hello"}}}};
   messaging_service->ProjectMessage(chat_entry, chat_json, true, false);
 
   messaging::LedgerEntry read_entry;
@@ -424,7 +430,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   read_entry.author_id = idB_;
   read_entry.created_at = Timestamp{1001};
   read_entry.type = messaging::LedgerActionType::Message;
-  nlohmann::json read_json = {{"type", "message_read"}, {"message_ids", {100}}};
+  nlohmann::json const read_json = {{"type", "message_read"}, {"message_ids", {100}}};
   messaging_service->ProjectMessage(read_entry, read_json, false, false);
 
   messaging::LedgerEntry delivered_entry;
@@ -432,7 +438,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   delivered_entry.author_id = idB_;
   delivered_entry.created_at = Timestamp{1002};
   delivered_entry.type = messaging::LedgerActionType::Message;
-  nlohmann::json delivered_json = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", {100}}};
+  nlohmann::json const delivered_json = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", {100}}};
   messaging_service->ProjectMessage(delivered_entry, delivered_json, false, false);
 
   auto entry = A->storage->GetHistoryEntry(TopicID(idB_), 100);
