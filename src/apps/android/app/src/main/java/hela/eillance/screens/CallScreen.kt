@@ -82,7 +82,7 @@ fun CallScreen(
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(Color.Black)
+      .background(MaterialTheme.colorScheme.background)
   ) {
 
     // --- VIDEO LAYER (Only if Active Video) ---
@@ -124,14 +124,14 @@ fun CallScreen(
           androidx.compose.material3.Text(
             text = contactName ?: stringResource(id = R.string.unknown),
             style = MaterialTheme.typography.headlineSmall, // Similar to CallUserInfo but Small to save space
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
           )
           androidx.compose.material3.Text(
             text = statusText,
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.8f)
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f)
           )
         }
       }
@@ -174,7 +174,7 @@ fun CallScreen(
           Icon(
             if (callState.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
             contentDescription = stringResource(id = R.string.action_mute),
-            tint = if (callState.isMuted) MaterialTheme.extendedColors.warning else Color.White,
+            tint = if (callState.isMuted) MaterialTheme.extendedColors.warning else MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.size(32.dp)
           )
         }
@@ -188,7 +188,7 @@ fun CallScreen(
           Icon(
             Icons.Default.CallEnd,
             contentDescription = stringResource(id = R.string.action_hangup),
-            tint = Color.White,
+            tint = MaterialTheme.colorScheme.onError,
             modifier = Modifier.size(32.dp)
           )
         }
@@ -197,7 +197,7 @@ fun CallScreen(
           Icon(
             Icons.AutoMirrored.Filled.VolumeUp,
             contentDescription = stringResource(id = R.string.action_speaker),
-            tint = if (callState.isSpeakerOn) MaterialTheme.extendedColors.warning else Color.White,
+            tint = if (callState.isSpeakerOn) MaterialTheme.extendedColors.warning else MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.size(32.dp)
           )
         }

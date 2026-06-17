@@ -82,7 +82,7 @@ fun IncomingCallScreen(
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .background(Color.Black)
+      .background(MaterialTheme.colorScheme.background)
   ) {
     Column(
       modifier = Modifier
@@ -159,7 +159,7 @@ fun IncomingCallScreen(
             Icon(
               Icons.Default.CallEnd,
               contentDescription = stringResource(id = R.string.action_reject),
-              tint = Color.White,
+              tint = MaterialTheme.colorScheme.onError,
               modifier = Modifier.size(32.dp)
             )
           }
@@ -167,27 +167,27 @@ fun IncomingCallScreen(
           Text(
             stringResource(id = R.string.action_decline),
             style = MaterialTheme.typography.labelLarge,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onBackground
           )
         }
 
         // Accept Button
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           val containerColor =
-            if (canAccept) MaterialTheme.extendedColors.success else Color.Gray.copy(alpha = 0.5f)
+            if (canAccept) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.surfaceVariant
           IconButton(
             onClick = { if (canAccept) onAccept() },
             modifier = Modifier.size(72.dp),
             enabled = canAccept,
             colors = IconButtonDefaults.iconButtonColors(
               containerColor = containerColor,
-              disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+              disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
             )
           ) {
             Icon(
               Icons.Default.Call,
               contentDescription = stringResource(id = R.string.action_accept),
-              tint = if (canAccept) Color.White else Color.White.copy(alpha = 0.5f),
+              tint = if (canAccept) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.size(32.dp)
             )
           }
@@ -195,7 +195,7 @@ fun IncomingCallScreen(
           Text(
             stringResource(id = R.string.action_accept),
             style = MaterialTheme.typography.labelLarge,
-            color = if (canAccept) Color.White else Color.White.copy(alpha = 0.5f)
+            color = if (canAccept) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
           )
         }
       }
