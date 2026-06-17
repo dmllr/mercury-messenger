@@ -113,6 +113,8 @@ class MediaCallService {
       return;
     }
 
+    StartMediaConnection(peer_id, current_call_->is_video, false);
+
     SetCallState(CallState::active);
 
     Json const msg = {{"type", "call_accept"}, {"call_id", current_call_->call_id.ToString()}};
@@ -122,8 +124,6 @@ class MediaCallService {
     }
 
     EventQueue::Instance().Push(EventCallAccepted{peer_id});
-
-    StartMediaConnection(peer_id, current_call_->is_video, false);
   }
 
   void RejectCall(ContactID const& peer_id) {
