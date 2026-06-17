@@ -18,7 +18,7 @@
 namespace eillance::identity {
 
 enum class RequestStatus {
-  New,        // A new, valid request that should be processed.
+  New,        // A new, valid request that should be processed. NOLINT(*-identifier-naming)
   duplicate,  // A resent request for one already awaiting approval.
   ignored     // The request was ignored (contact is already confirmed or was rejected).
 };
