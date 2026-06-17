@@ -184,7 +184,7 @@ fun ContactListItem(
         }
         if (contact.unreadCount > 0) {
           Badge { Text(contact.unreadCount.toString()) }
-        } else if (contact.connectionState == PeerConnectionState.Connected.value) {
+        } else if (!contact.isGroup && !contact.isChannel && contact.connectionState == PeerConnectionState.Connected.value) {
           Box(
             modifier = Modifier
               .size(8.dp)
