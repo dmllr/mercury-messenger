@@ -498,7 +498,13 @@ fn handle_kademlia(
 
               match swarm.dial(opts) {
                 Err(libp2p::swarm::DialError::NoAddresses) => {
-                  crate::node_log!(callbacks, 3, "Failed to discover addresses for {} (addrs.len = {})", peer, addrs.len());
+                  crate::node_log!(
+                    callbacks,
+                    3,
+                    "Failed to discover addresses for {} (addrs.len = {})",
+                    peer,
+                    addrs.len()
+                  );
                   notify_disconnected(callbacks, swarm, &peer);
                 }
                 Err(e) => {
