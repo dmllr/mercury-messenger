@@ -52,7 +52,7 @@ pub fn build_behaviour(
   }
 
   let mut mdns_config = mdns::Config::default();
-  mdns_config.query_interval = Duration::from_secs(3600);
+  mdns_config.query_interval = Duration::from_secs(300);
   let mdns = mdns::tokio::Behaviour::new(mdns_config, peer_id).expect("mDNS valid");
 
   let chat = request_response::cbor::Behaviour::new(
@@ -70,7 +70,7 @@ pub fn build_behaviour(
 
   let mut autonat_config = autonat::Config::default();
   autonat_config.retry_interval = Duration::from_secs(90);
-  autonat_config.refresh_interval = Duration::from_secs(3600);
+  autonat_config.refresh_interval = Duration::from_secs(900);
   autonat_config.boot_delay = Duration::from_secs(15);
   let autonat = autonat::Behaviour::new(peer_id, autonat_config);
 

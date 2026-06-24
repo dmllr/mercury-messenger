@@ -43,6 +43,10 @@ struct MercuryAuthHandler {
 
 impl turn::auth::AuthHandler for MercuryAuthHandler {
   fn auth_handle(&self, username: &str, realm: &str, src_addr: std::net::SocketAddr) -> Result<Vec<u8>, turn::Error> {
+    {
+      let mut lock = self.auth.users.lock().unwrap();
+      lock.retain(|_, (_, time)| time.elapsed() < Duration::from_secs(86400));
+    }
     crate::node_log!(
       &self.auth.callbacks,
       5,
