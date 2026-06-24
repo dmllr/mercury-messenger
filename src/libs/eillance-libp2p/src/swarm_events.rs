@@ -60,8 +60,9 @@ pub(crate) fn handle_swarm_event(
       ..
     } => {
       crate::node_log!(callbacks, 5, "Outgoing connection error to {}: {:?}", peer_id, error);
-      state.pending_dials.remove(&peer_id);
-      notify_disconnected(callbacks, swarm, &peer_id);
+      if !state.pending_dials.contains(&peer_id) {
+        notify_disconnected(callbacks, swarm, &peer_id);
+      }
     }
     SwarmEvent::OutgoingConnectionError {
       peer_id: None, error, ..
@@ -442,69 +443,28 @@ fn handle_kademlia(
         if let Ok(peer) = PeerId::from_bytes(&key) {
           if step.last && state.pending_dials.remove(&peer) {
             if !swarm.is_connected(&peer) {
-              let mut addrs = Vec::new();
-              if let Some(known) = state.known_addresses.get(&peer) {
-                addrs.extend(known.iter().cloned());
-              }
               for (_, relay_addr) in &state.active_relay_peers {
                 let mut relayed = relay_addr.clone();
                 relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
                 relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                if !addrs.contains(&relayed) {
-                  addrs.push(relayed);
-                }
+                swarm.behaviour_mut().kademlia.add_address(&peer, relayed);
               }
               for b_addr in &state.bootstrap_addrs {
                 if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
                   let mut relayed = b_addr.clone();
                   relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
                   relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                  if !addrs.contains(&relayed) {
-                    addrs.push(relayed);
-                  }
-                }
-              }
-              for b_addr in &state.bootstrap_addrs {
-                if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
-                  let mut relayed = b_addr.clone();
-                  relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
-                  relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                  if !addrs.contains(&relayed) {
-                    addrs.push(relayed);
-                  }
+                  swarm.behaviour_mut().kademlia.add_address(&peer, relayed);
                 }
               }
 
-              crate::node_log!(
-                callbacks,
-                4,
-                "kademlia dial fallback: {} with {} active relays, {} bootstrap addrs, {} total addrs",
-                peer,
-                state.active_relay_peers.len(),
-                state.bootstrap_addrs.len(),
-                addrs.len()
-              );
-
-              let opts = if !addrs.is_empty() {
-                libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                  .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-                  .addresses(addrs.clone())
-                  .build()
-              } else {
-                libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                  .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-                  .build()
-              };
+              let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
+                .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+                .build();
 
               match swarm.dial(opts) {
                 Err(libp2p::swarm::DialError::NoAddresses) => {
-                  crate::node_log!(
-                    callbacks,
-                    3,
-                    "Failed to discover addresses for {} (addrs.len = {})",
-                    peer,
-                    addrs.len()
-                  );
+                  crate::node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
                   notify_disconnected(callbacks, swarm, &peer);
                 }
                 Err(e) => {
