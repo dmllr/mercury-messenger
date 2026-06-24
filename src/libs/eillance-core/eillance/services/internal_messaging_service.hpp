@@ -213,7 +213,7 @@ class InternalMessagingService {
     } else if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       HandleSdp(master_id, type, message);
     } else if (type == "termination") {
-      data_transport_->RemovePeer(master_id);
+      data_transport_->RemovePeer(network_id);
     } else if (type.starts_with("sync_")) {
       CheckPeerVersion(
           network_id,
