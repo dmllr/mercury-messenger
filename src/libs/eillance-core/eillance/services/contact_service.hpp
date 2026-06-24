@@ -193,8 +193,12 @@ class ContactService {
     }
 
     sm_->media_transport->Disconnect(peer_id);
-    transport_->Disconnect(peer_id);
-    transport_->RemovePeer(peer_id);
+    for (auto const& [net_id, peer] : transport_->GetPeers()) {
+      if (transport_->GetMasterId(net_id) == peer_id) {
+        transport_->Disconnect(net_id);
+        transport_->RemovePeer(net_id);
+      }
+    }
     manager_->BlockContact(peer_id);
   }
 

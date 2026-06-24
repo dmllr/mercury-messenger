@@ -74,7 +74,11 @@ class DeliveryService {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
       if (e.is_unwilling) {
         unwilling_contacts_.insert(e.peer_id);
-        transport_->Disconnect(e.peer_id);
+        for (auto const& [net_id, peer] : transport_->GetPeers()) {
+          if (transport_->GetMasterId(net_id) == e.peer_id) {
+            transport_->Disconnect(net_id);
+          }
+        }
       } else {
         unwilling_contacts_.erase(e.peer_id);
       }
