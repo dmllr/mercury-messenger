@@ -60,7 +60,7 @@ pub(crate) fn handle_swarm_event(
       ..
     } => {
       crate::node_log!(callbacks, 5, "Outgoing connection error to {}: {:?}", peer_id, error);
-      if !state.pending_dials.contains(&peer_id) {
+      if !state.pending_dials.contains_key(&peer_id) {
         notify_disconnected(callbacks, swarm, &peer_id);
       }
     }
@@ -306,7 +306,7 @@ fn handle_identify(
         }
       }
     }
-    if state.pending_dials.contains(&peer_id) {
+    if state.pending_dials.contains_key(&peer_id) {
       state.do_dial(peer_id, swarm, callbacks);
     }
   }
@@ -391,7 +391,7 @@ fn handle_new_external_addr_of_peer(
       .or_default()
       .insert(address.clone());
     swarm.behaviour_mut().kademlia.add_address(&peer_id, address);
-    if state.pending_dials.contains(&peer_id) {
+    if state.pending_dials.contains_key(&peer_id) {
       state.do_dial(peer_id, swarm, callbacks);
     }
   }
@@ -407,7 +407,7 @@ fn handle_mdns(
     for (peer_id, addr) in list {
       state.known_addresses.entry(peer_id).or_default().insert(addr.clone());
       swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
-      if state.pending_dials.contains(&peer_id) {
+      if state.pending_dials.contains_key(&peer_id) {
         state.do_dial(peer_id, swarm, callbacks);
       }
     }
@@ -441,7 +441,7 @@ fn handle_kademlia(
       };
       if let Some(key) = key {
         if let Ok(peer) = PeerId::from_bytes(&key) {
-          if step.last && state.pending_dials.remove(&peer) {
+          if step.last && state.pending_dials.remove(&peer).is_some() {
             if !swarm.is_connected(&peer) {
               for (_, relay_addr) in &state.active_relay_peers {
                 let mut relayed = relay_addr.clone();
@@ -539,7 +539,7 @@ fn handle_kademlia(
           state.known_addresses.entry(peer).or_default().insert(addr.clone());
         }
       }
-      if state.pending_dials.contains(&peer) {
+      if state.pending_dials.contains_key(&peer) {
         state.do_dial(peer, swarm, callbacks);
       }
     }
