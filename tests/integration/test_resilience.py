@@ -32,6 +32,7 @@ def test_receiver_crash(test_environment):
 
   def restart_logic():
       time.sleep(10)
+      test_environment.restart_process("app-b")
 
   t = threading.Thread(target=restart_logic)
   t.start()

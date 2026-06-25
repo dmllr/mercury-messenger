@@ -146,7 +146,7 @@ class InternalMessagingService {
     }
 
     if (type.starts_with("crcp_")) {
-      sm_->contact->ProcessCrcpMessage(master_id, message);
+      sm_->contact->ProcessCrcpMessage(master_id, network_id, message);
       return;
     }
 
@@ -164,6 +164,7 @@ class InternalMessagingService {
 
     if (!is_confirmed && type != "call_reject" && type != "hangup") {
       LGE << "CRCP Enforcement: Dropped message from unconfirmed or unverified peer";
+      sm_->sync_engine->AbortSync(master_id);
       if (type == "call_request") {
         Json const reject_msg = {
             {"type", "call_reject"},
@@ -180,18 +181,21 @@ class InternalMessagingService {
 
     if (!peer || !peer->crcp_verified) {
       LGE << "CRCP Enforcement: Dropped message from unconfirmed or unverified peer";
+      sm_->sync_engine->AbortSync(master_id);
       return;
     }
 
     if (type != "call_reject" && type != "hangup" && !is_self) {
       if (!contact || !contact->signature_from_them) {
         LGE << "CRCP Enforcement: No signature stored for peer: " << master_id.ToString();
+        sm_->sync_engine->AbortSync(master_id);
         return;
       }
 
       auto const sig = *contact->signature_from_them;
       if (!crypto::Identity::Verify(master_id.Span(), sm_->account->GetId().Span(), sig)) {
         LGE << "CRCP Enforcement: Cryptographic validation failed for peer: " << master_id.ToString();
+        sm_->sync_engine->AbortSync(master_id);
         return;
       }
     }
