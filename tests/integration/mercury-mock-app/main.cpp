@@ -115,25 +115,24 @@ auto main(int argc, char** argv) -> int {
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) -> void {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
-      if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
-        auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
+      if (auto const* content = eillance::messaging::GetMessageContent(e.message.data)) {
         if (e.message.kind != eillance::messaging::HistoryEntryKind::systemMessage) {
-          LGI << "[mock] Message from " << e.peer_id.ToString() << " received: " << message.content;
-          if (message.reply_to_id > 0) {
-            LGI << "[mock] Message is a reply to: " << message.reply_to_id;
+          LGI << "[mock] Message from " << e.topic_id.ToString() << " received: " << content->content;
+          if (content->reply_to_id > 0) {
+            LGI << "[mock] Message is a reply to: " << content->reply_to_id;
           }
         }
       } else if (std::holds_alternative<eillance::messaging::CallEntry>(e.message.data)) {
-        LGI << "[mock] Missing call message from " << e.peer_id.ToString();
+        LGI << "[mock] Missing call message from " << e.topic_id.ToString();
       }
     }
   });
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventMessageStatusChanged>([](auto const& e) -> void {
     if (e.status == eillance::messaging::MessageStatus::delivered) {
-      LGI << "[mock] Message to " << e.peer_id.ToString() << " delivered";
+      LGI << "[mock] Message to " << e.topic_id.ToString() << " delivered";
     } else if (e.status == eillance::messaging::MessageStatus::read) {
-      LGI << "[mock] Message to " << e.peer_id.ToString() << " read";
+      LGI << "[mock] Message to " << e.topic_id.ToString() << " read";
     }
   });
 
@@ -146,7 +145,7 @@ auto main(int argc, char** argv) -> int {
   });
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentDownloaded>([](auto const& e) -> void {
-    LGI << "[mock] Attachment " << e.attachment_id << " downloaded from " << e.peer_id.ToString();
+    LGI << "[mock] Attachment " << e.attachment_id << " downloaded from " << e.topic_id.ToString();
   });
 
   eillance::EventQueue::Instance().Subscribe<eillance::EventTransferProgress>([](auto const& e) -> void {
@@ -321,7 +320,7 @@ auto main(int argc, char** argv) -> int {
           );
         }
 
-        std::ignore = client->Messaging()->SendChatMessage(peer_id, content, atts);
+        std::ignore = client->Messaging()->SendChatMessage(eillance::TopicID(peer_id), content, atts);
         LGI << "[mock] Message with " << atts.size() << " attachments sent to " << peer_hex;
       }
     } else if (cmd.starts_with("message")) {
@@ -332,7 +331,7 @@ auto main(int argc, char** argv) -> int {
 
         std::ignore = client->AddContact(peer_id, std::nullopt);
 
-        std::ignore = client->SendChatMessage(peer_id, content);
+        std::ignore = client->SendChatMessage(eillance::TopicID(peer_id), content);
         LGI << "[mock] Message to " << peer_hex << " sent";
       } else {
         LGE << "Invalid message command format: " << cmd;
@@ -345,7 +344,7 @@ auto main(int argc, char** argv) -> int {
 
         std::ignore = client->AddContact(peer_id, std::nullopt);
 
-        auto page = client->GetMessageHistoryPage(peer_id, 0, 10);
+        auto page = client->GetMessageHistoryPage(eillance::TopicID(peer_id), 0, 10);
         uint64_t reply_id = 0;
         for (auto& m : page.messages) {
           if (m.direction == eillance::messaging::MessageDirection::received) {
@@ -353,7 +352,7 @@ auto main(int argc, char** argv) -> int {
             break;
           }
         }
-        std::ignore = client->Messaging()->SendChatMessage(peer_id, content, {}, reply_id);
+        std::ignore = client->Messaging()->SendChatMessage(eillance::TopicID(peer_id), content, {}, reply_id);
         LGI << "[mock] Reply to " << peer_hex << " sent";
       } else {
         LGE << "Invalid reply command format: " << cmd;
