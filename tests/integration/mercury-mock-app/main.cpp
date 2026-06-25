@@ -61,7 +61,9 @@ auto main(int argc, char** argv) -> int {
 
   // --- Utility Mode: Generate Identity ---
   if (args.Has("--gen-identity")) {
-    auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>("/tmp/identity_gen.db");
+    auto const timestamp = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    std::string const db_path = "/tmp/identity_gen_" + std::to_string(timestamp) + ".db";
+    auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(db_path);
     auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
     std::ignore = storage->Open();
 
@@ -80,6 +82,11 @@ auto main(int argc, char** argv) -> int {
 
     std::cout << "MNEMONIC: " << mnemonic << std::endl;
     std::cout << "ID: " << id << std::endl;
+
+    std::error_code ec;
+    std::filesystem::remove(db_path, ec);
+    std::filesystem::remove(db_path + "-wal", ec);
+    std::filesystem::remove(db_path + "-shm", ec);
     return 0;
   }
 

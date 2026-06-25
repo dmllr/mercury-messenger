@@ -1,6 +1,6 @@
 use crate::behaviour::MercuryBehaviour;
 use crate::types::{Callbacks, Command, NodeRole};
-use crate::utils::{resolve_multiaddr};
+use crate::utils::resolve_multiaddr;
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use std::collections::{HashMap, HashSet};

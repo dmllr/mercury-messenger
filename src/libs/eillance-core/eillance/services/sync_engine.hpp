@@ -89,6 +89,11 @@ class SyncEngine {
           return;
         }
 
+        auto contact = storage_->GetContact(master_id);
+        if (!contact || contact->status != identity::ContactStatus::confirmed) {
+          return;
+        }
+
         for (auto const& dev_id : active_devices) {
           ProposeSync(TopicID(master_id), dev_id);
         }
@@ -389,6 +394,11 @@ class SyncEngine {
   SendSyncRequestsToMembers(TopicID const& topic_id, ContactID const& my_id, std::vector<MemberType> const& members) {
     for (auto const& member : members) {
       if (member.contact_id != my_id) {
+        auto contact = storage_->GetContact(member.contact_id);
+        if (!contact || contact->status != identity::ContactStatus::confirmed) {
+          continue;
+        }
+
         storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
         bool proposed = false;
         for (auto const& [net_id, peer] : transport_->GetPeers()) {
@@ -411,6 +421,11 @@ class SyncEngine {
   ForwardToMembers(TopicID const& topic_id, ContactID const& from_master_id, std::vector<MemberType> const& members) {
     for (auto const& member : members) {
       if (member.contact_id != my_id_ && member.contact_id != from_master_id) {
+        auto contact = storage_->GetContact(member.contact_id);
+        if (!contact || contact->status != identity::ContactStatus::confirmed) {
+          continue;
+        }
+
         storage_->AddSyncRequest({topic_id, member.contact_id, Timestamp::Now(), Timestamp{0}});
         bool proposed = false;
         for (auto const& [net_id, peer] : transport_->GetPeers()) {
