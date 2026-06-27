@@ -443,19 +443,27 @@ fn handle_kademlia(
         if let Ok(peer) = PeerId::from_bytes(&key) {
           if step.last && state.pending_dials.remove(&peer).is_some() {
             if !swarm.is_connected(&peer) {
+              let mut explicit_addrs = Vec::new();
               for (_, relay_addr) in &state.active_relay_peers {
                 let mut relayed = relay_addr.clone();
                 relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
                 relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                swarm.behaviour_mut().kademlia.add_address(&peer, relayed);
+                explicit_addrs.push(relayed);
               }
               for b_addr in &state.bootstrap_addrs {
                 if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
                   let mut relayed = b_addr.clone();
                   relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
                   relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                  swarm.behaviour_mut().kademlia.add_address(&peer, relayed);
+                  explicit_addrs.push(relayed);
                 }
+              }
+              explicit_addrs.sort();
+              explicit_addrs.dedup();
+
+              for relayed in explicit_addrs {
+                let opts = libp2p::swarm::dial_opts::DialOpts::unknown_peer_id().address(relayed).build();
+                let _ = swarm.dial(opts);
               }
 
               let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
