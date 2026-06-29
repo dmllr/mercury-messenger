@@ -58,7 +58,7 @@ while IFS= read -r NODE || [[ -n "$NODE" ]]; do
     scp $SSH_OPTS "$BINARY" "${NODE}:/var/app/mercury-bootstrap/mercury-bootstrap"
 
     echo "  Launching new process in tmux..."
-    ssh -n $SSH_OPTS "$NODE" "tmux kill-session -t mercury_bootstrap 2>/dev/null || true; tmux new-session -d -s mercury_bootstrap '/var/app/mercury-bootstrap/mercury-bootstrap --port=10807 --log-level=info'"
+    ssh -n $SSH_OPTS "$NODE" "tmux kill-session -t mercury_bootstrap 2>/dev/null || true; tmux new-session -d -s mercury_bootstrap '/var/app/mercury-bootstrap/mercury-bootstrap --port=10807 --log-level=info --identity-file=/var/app/mercury-bootstrap/bootstrap_identity.key'"
 
     # If it's not the last node, wait for the DHT to stabilize
     if [[ $CURRENT_NODE -lt $TOTAL_NODES ]]; then
