@@ -481,37 +481,40 @@ class Client final {
   }
 
   auto AddGroupMember(GroupID const& gid, ContactID const& member_id) -> bool {
-    auto g = sm_->group_manager->GetGroup(gid);
-    if (!g || g->owner_id != sm_->account->GetId()) return false;
+    if (auto const group = sm_->group_manager->GetGroup(gid); !group || group->owner_id != sm_->account->GetId()) {
+      return false;
+    }
     sm_->group_manager->AddMemberLocal(gid, member_id, 0);
-    Json payload = {{"type", "group_member_add"}, {"contact_id", member_id.ToString()}, {"role", 0}};
+    Json const payload = {{"type", "group_member_add"}, {"contact_id", member_id.ToString()}, {"role", 0}};
     sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
     return true;
   }
 
   auto RemoveGroupMember(GroupID const& gid, ContactID const& member_id) -> bool {
-    auto g = sm_->group_manager->GetGroup(gid);
-    if (!g || g->owner_id != sm_->account->GetId()) return false;
+    if (auto const group = sm_->group_manager->GetGroup(gid); !group || group->owner_id != sm_->account->GetId()) {
+      return false;
+    }
     sm_->group_manager->RemoveMemberLocal(gid, member_id);
-    Json payload = {{"type", "group_member_remove"}, {"contact_id", member_id.ToString()}};
+    Json const payload = {{"type", "group_member_remove"}, {"contact_id", member_id.ToString()}};
     sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
     return true;
   }
 
   void LeaveGroup(GroupID const& gid) {
-    auto g = sm_->group_manager->GetGroup(gid);
-    if (!g) return;
+    if (auto const group = sm_->group_manager->GetGroup(gid); !group) {
+      return;
+    }
     sm_->group_manager->RemoveMemberLocal(gid, sm_->account->GetId());
-    Json payload = {{"type", "group_member_remove"}, {"contact_id", sm_->account->GetId().ToString()}};
+    Json const payload = {{"type", "group_member_remove"}, {"contact_id", sm_->account->GetId().ToString()}};
     sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
   }
 
   [[nodiscard]] auto GetGroupMembers(GroupID const& gid) const -> std::vector<identity::GroupMember> {
-    if (auto g = sm_->group_manager->GetGroup(gid)) {
-      return g->members;
+    if (auto group = sm_->group_manager->GetGroup(gid)) {
+      return group->members;
     }
     return {};
   }
@@ -521,7 +524,7 @@ class Client final {
   }
 
   auto CreateChannel(std::string const& name, std::string const& description) -> ChannelID {
-    auto cid = identity::ChannelManager::GenerateChannelID();
+    auto const cid = identity::ChannelManager::GenerateChannelID();
     identity::Channel c;
     c.id = cid;
     c.name = name;
@@ -529,7 +532,7 @@ class Client final {
     c.owner_id = sm_->account->GetId();
     c.members.push_back({c.owner_id, 1});
     sm_->channel_manager->CreateChannelLocal(c);
-    Json payload =
+    Json const payload =
         {{"type", "channel_create"}, {"name", name}, {"description", description}, {"owner_id", c.owner_id.ToString()}};
     sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
@@ -551,7 +554,7 @@ class Client final {
   }
   void UnsubscribeChannel(ChannelID const& cid) {
     sm_->channel_manager->RemoveMemberLocal(cid, sm_->account->GetId());
-    Json payload = {{"type", "channel_unsubscribe"}, {"contact_id", sm_->account->GetId().ToString()}};
+    Json const payload = {{"type", "channel_unsubscribe"}, {"contact_id", sm_->account->GetId().ToString()}};
     sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
   }
@@ -572,8 +575,9 @@ class Client final {
     return true;
   }
   auto RemoveChannelMember(ChannelID const& cid, ContactID const& member_id) -> bool {
-    auto c = sm_->channel_manager->GetChannel(cid);
-    if (!c || c->owner_id != sm_->account->GetId()) return false;
+    if (auto const channel = sm_->channel_manager->GetChannel(cid);
+        !channel || channel->owner_id != sm_->account->GetId())
+      return false;
     sm_->channel_manager->RemoveMemberLocal(cid, member_id);
     Json payload = {{"type", "channel_member_remove"}, {"contact_id", member_id.ToString()}};
     sm_->sync_engine->AppendAction(TopicID(cid), messaging::LedgerActionType::ChannelState, payload);
