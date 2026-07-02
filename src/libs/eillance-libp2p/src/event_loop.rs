@@ -415,6 +415,15 @@ fn handle_command(
       for peer in peers {
         let _ = swarm.disconnect_peer_id(peer);
       }
+      let mut to_remove = Vec::new();
+      for bucket in swarm.behaviour_mut().kademlia.kbuckets() {
+        for entry in bucket.iter() {
+          to_remove.push(entry.node.key.preimage().clone());
+        }
+      }
+      for peer in to_remove {
+        swarm.behaviour_mut().kademlia.remove_peer(&peer);
+      }
       state.pending_dials.clear();
       state.active_relay_listeners.clear();
       state.active_relay_peers.clear();
