@@ -217,7 +217,7 @@ fn handle_connection_established(
   crate::node_log!(callbacks, 3, "Connection established with {}", peer_id);
 
   let mut is_bootstrap = state.explicit_bootstrap_peers.contains(&peer_id);
-  if !is_bootstrap && !is_circuit {
+  if !is_circuit {
     let mut new_b_addrs = Vec::new();
     for b_addr in &state.bootstrap_addrs {
       let b_addr_len = b_addr
