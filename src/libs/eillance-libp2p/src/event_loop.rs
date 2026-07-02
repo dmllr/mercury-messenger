@@ -173,7 +173,7 @@ pub async fn run_event_loop(
                 }
             }
 
-            let connected_peers = swarm.network_info().connection_counters().num_established();
+            let connected_peers = swarm.connected_peers().count();
             let mut bootstrap_connected = 0;
             for b in &state.explicit_bootstrap_peers {
                 if swarm.is_connected(b) {
