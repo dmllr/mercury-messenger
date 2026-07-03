@@ -322,11 +322,11 @@ fn handle_identify(
     if !state.has_bootstrapped {
       if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
         crate::node_log!(callbacks, 5, "Kademlia bootstrap not ready: {:?}", e);
-              } else {
-                state.has_bootstrapped = true;
-                crate::node_log!(callbacks, 3, "Kademlia bootstrap initiated");
-              }
-            }
+      } else {
+        state.has_bootstrapped = true;
+        crate::node_log!(callbacks, 3, "Kademlia bootstrap initiated");
+      }
+    }
     if state.pending_dials.contains_key(&peer_id) {
       state.do_dial(peer_id, swarm, callbacks);
     }
@@ -382,7 +382,11 @@ fn handle_external_addr_confirmed(
   crate::node_log!(callbacks, 3, "External address confirmed: {}", address);
   check_and_update_public_ip(address, state, callbacks, role, tx);
 
-  crate::node_log!(callbacks, 3, "Re-publishing provider records due to external address confirmation.");
+  crate::node_log!(
+    callbacks,
+    3,
+    "Re-publishing provider records due to external address confirmation."
+  );
   for key_bytes in &state.providing_keys {
     let key = libp2p::kad::RecordKey::new(key_bytes);
     let _ = swarm.behaviour_mut().kademlia.start_providing(key);
@@ -474,56 +478,56 @@ fn handle_kademlia(
               if !swarm.is_connected(&peer) {
                 let mut explicit_addrs = Vec::new();
 
-              if let Some(addrs) = state.known_addresses.get(&peer) {
-                for mut addr in addrs.clone() {
-                  let has_target_p2p = addr.iter().any(|p| {
-                    if let libp2p::multiaddr::Protocol::P2p(id) = p {
-                      id == peer
-                    } else {
-                      false
+                if let Some(addrs) = state.known_addresses.get(&peer) {
+                  for mut addr in addrs.clone() {
+                    let has_target_p2p = addr.iter().any(|p| {
+                      if let libp2p::multiaddr::Protocol::P2p(id) = p {
+                        id == peer
+                      } else {
+                        false
+                      }
+                    });
+                    if !has_target_p2p {
+                      addr.push(libp2p::multiaddr::Protocol::P2p(peer));
                     }
-                  });
-                  if !has_target_p2p {
-                    addr.push(libp2p::multiaddr::Protocol::P2p(peer));
+                    explicit_addrs.push(addr);
                   }
-                  explicit_addrs.push(addr);
                 }
-              }
 
-              for (_, relay_addr) in &state.active_relay_peers {
-                let mut relayed = relay_addr.clone();
-                relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
-                relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
-                explicit_addrs.push(relayed);
-              }
-              for b_addr in &state.bootstrap_addrs {
-                if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
-                  let mut relayed = b_addr.clone();
+                for (_, relay_addr) in &state.active_relay_peers {
+                  let mut relayed = relay_addr.clone();
                   relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
                   relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
                   explicit_addrs.push(relayed);
                 }
-              }
-              explicit_addrs.sort();
-              explicit_addrs.dedup();
+                for b_addr in &state.bootstrap_addrs {
+                  if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+                    let mut relayed = b_addr.clone();
+                    relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+                    relayed.push(libp2p::multiaddr::Protocol::P2p(peer));
+                    explicit_addrs.push(relayed);
+                  }
+                }
+                explicit_addrs.sort();
+                explicit_addrs.dedup();
 
-              let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                .addresses(explicit_addrs)
-                .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-                .build();
+                let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
+                  .addresses(explicit_addrs)
+                  .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+                  .build();
 
-              match swarm.dial(opts) {
-                Err(libp2p::swarm::DialError::NoAddresses) => {
-                  crate::node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
-                }
-                Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
-                  // Already connected
-                }
-                Err(e) => {
-                  crate::node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
-                }
-                Ok(_) => {
-                  crate::node_log!(callbacks, 4, "Fallback dial submitted for {}", peer);
+                match swarm.dial(opts) {
+                  Err(libp2p::swarm::DialError::NoAddresses) => {
+                    crate::node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
+                  }
+                  Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
+                    // Already connected
+                  }
+                  Err(e) => {
+                    crate::node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
+                  }
+                  Ok(_) => {
+                    crate::node_log!(callbacks, 4, "Fallback dial submitted for {}", peer);
                   }
                 }
               }
@@ -585,9 +589,19 @@ fn handle_kademlia(
       step,
       ..
     } => {
-      crate::node_log!(callbacks, 4, "Kademlia Bootstrap progressed: step={:?} res={:?}", step, res);
+      crate::node_log!(
+        callbacks,
+        4,
+        "Kademlia Bootstrap progressed: step={:?} res={:?}",
+        step,
+        res
+      );
       if step.last {
-        crate::node_log!(callbacks, 3, "Kademlia bootstrap finished. Publishing provider records.");
+        crate::node_log!(
+          callbacks,
+          3,
+          "Kademlia bootstrap finished. Publishing provider records."
+        );
         for key_bytes in &state.providing_keys {
           let key = libp2p::kad::RecordKey::new(key_bytes);
           let _ = swarm.behaviour_mut().kademlia.start_providing(key);
@@ -599,7 +613,13 @@ fn handle_kademlia(
       step,
       ..
     } => {
-      crate::node_log!(callbacks, 4, "Kademlia StartProviding progressed: step={:?} res={:?}", step, res);
+      crate::node_log!(
+        callbacks,
+        4,
+        "Kademlia StartProviding progressed: step={:?} res={:?}",
+        step,
+        res
+      );
     }
     kad::Event::RoutingUpdated { peer, addresses, .. } => {
       crate::node_log!(callbacks, 5, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);

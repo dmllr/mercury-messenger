@@ -529,7 +529,9 @@ fn handle_command(
       }
     }
     Command::GetProviders(key_bytes) => {
-      state.pending_provider_queries.insert(key_bytes.clone(), std::time::Instant::now());
+      state
+        .pending_provider_queries
+        .insert(key_bytes.clone(), std::time::Instant::now());
       let key = libp2p::kad::RecordKey::new(&key_bytes);
       swarm.behaviour_mut().kademlia.get_providers(key);
     }
