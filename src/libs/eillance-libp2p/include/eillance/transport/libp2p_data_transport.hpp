@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -123,65 +124,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
       node_->SetOnMessage([this](ContactID const& peer_id, std::span<std::byte const> data) -> void {
         std::vector<std::byte> payload(data.begin(), data.end());
         rx_queue_.Dispatch([this, peer_id, payload = std::move(payload)]() mutable -> void {
-          if (!payload.empty() && payload[0] != std::byte{0xFE}) {
-            try {
-              std::string const json_str(reinterpret_cast<char const*>(payload.data()), payload.size());
-              auto parsed = Json::parse(json_str);
-              if (parsed.contains("s") && parsed.contains("m")) {
-                uint64_t const seq = parsed["s"];
-                auto inner_msg = parsed["m"];
-                if (auto peer = this->GetPeer(peer_id)) {
-                  std::lock_guard<std::mutex> const lock(peer->queue_mutex);
-
-                  bool is_new_session = false;
-                  if (inner_msg.is_object() && inner_msg.value("type", "") == "key_exchange") {
-                    if (!inner_msg.value("is_reply", false)) {
-                      is_new_session = true;
-                    }
-                  }
-
-                  if (is_new_session && (seq < peer->rx_seq || peer->crcp_verified.load())) {
-                    LGW << "Peer " << peer_id.ToString() << " initiated a new session. Resetting sequences.";
-                    peer->rx_seq = seq;
-                    peer->tx_seq = 0;
-                    peer->out_of_order_queue.clear();
-                  }
-
-                  if (seq >= peer->rx_seq) {
-                    peer->out_of_order_queue[seq] = inner_msg;
-
-                    if (peer->out_of_order_queue.size() > 32) {
-                      LGW << "Out-of-order queue exceeded limit for " << peer_id.ToString()
-                          << ", advancing rx_seq to prevent stall.";
-                      peer->rx_seq = peer->out_of_order_queue.begin()->first;
-                    }
-
-                    while (!peer->out_of_order_queue.empty()) {
-                      auto it = peer->out_of_order_queue.begin();
-                      if (it->first == peer->rx_seq) {
-                        auto msg_to_process = it->second;
-                        peer->rx_seq++;
-                        peer->out_of_order_queue.erase(it);
-
-                        std::string const inner_str = msg_to_process.dump();
-                        std::vector<std::byte> inner_payload(inner_str.size());
-                        std::memcpy(inner_payload.data(), inner_str.data(), inner_str.size());
-                        EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(inner_payload)});
-                      } else {
-                        break;
-                      }
-                    }
-                  } else {
-                    LGE << "Received stale sequence number: " << seq << " (expected >= " << peer->rx_seq << ")";
-                  }
-                  return;
-                }
-              }
-            } catch (...) {
-              // Fallback to direct dispatch for unsequenced/legacy messages
-            }
-          }
-          EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
+          HandleMessage(peer_id, std::move(payload));
         });
       });
 
@@ -486,6 +429,98 @@ class Libp2pDataTransport : public DataTransport::Interface {
     if (node_) {
       node_->SetTurnEligibility(eligible);
     }
+  }
+
+ private:
+  static constexpr auto binaryMagicByte = std::byte{0xFE};
+  static constexpr size_t maxOutOfOrderQueueSize = 32;
+
+  void HandleMessage(ContactID const& peer_id, std::vector<std::byte> payload) {
+    if (!payload.empty() && payload[0] != binaryMagicByte) {
+      if (TryHandleSequencedJson(peer_id, payload)) {
+        return;
+      }
+    }
+    // Fallback or binary message
+    EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
+  }
+
+  auto TryHandleSequencedJson(ContactID const& peer_id, std::vector<std::byte> const& payload) -> bool {
+    try {
+      std::string_view const json_str(reinterpret_cast<char const*>(payload.data()), payload.size());
+      auto const parsed = Json::parse(json_str);
+      if (parsed.contains("s") && parsed.contains("m")) {
+        uint64_t const seq = parsed["s"];
+        auto const inner_msg = parsed["m"];
+        if (auto peer = GetPeer(peer_id)) {
+          ProcessSequencedMessage(peer_id, peer, seq, inner_msg);
+          return true;
+        }
+      }
+    } catch (...) {
+      // Parsing failed, fallback to direct dispatch
+    }
+    return false;
+  }
+
+  void ProcessSequencedMessage(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, uint64_t seq, Json const& inner_msg) {
+    std::lock_guard<std::mutex> const lock(peer->queue_mutex);
+
+    if (IsNewSession(inner_msg)) {
+      HandleNewSession(peer_id, peer, seq);
+    }
+
+    if (seq >= peer->rx_seq) {
+      EnqueueSequencedMessage(peer_id, peer, seq, inner_msg);
+      FlushSequencedMessages(peer_id, peer);
+    } else {
+      LGE << "Received stale sequence number: " << seq << " (expected >= " << peer->rx_seq << ")";
+    }
+  }
+
+  [[nodiscard]] auto IsNewSession(Json const& msg) const -> bool {
+    return msg.is_object() && msg.value("type", "") == "key_exchange" && !msg.value("is_reply", false);
+  }
+
+  void HandleNewSession(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, uint64_t seq) const {
+    if (seq < peer->rx_seq || peer->crcp_verified.load()) {
+      LGW << "Peer " << peer_id.ToString() << " initiated a new session. Resetting sequences.";
+      peer->rx_seq = seq;
+      peer->tx_seq = 0;
+      peer->out_of_order_queue.clear();
+    }
+  }
+
+  void EnqueueSequencedMessage(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, uint64_t seq, Json const& msg) const {
+    peer->out_of_order_queue[seq] = msg;
+
+    if (peer->out_of_order_queue.size() > maxOutOfOrderQueueSize) {
+      LGW << "Out-of-order queue exceeded limit for " << peer_id.ToString()
+          << ", advancing rx_seq to prevent stall.";
+      peer->rx_seq = peer->out_of_order_queue.begin()->first;
+    }
+  }
+
+  void FlushSequencedMessages(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) const {
+    while (!peer->out_of_order_queue.empty()) {
+      auto it = peer->out_of_order_queue.begin();
+      if (it->first == peer->rx_seq) {
+        auto msg_to_process = it->second;
+        peer->rx_seq++;
+        peer->out_of_order_queue.erase(it);
+
+        DispatchInnerMessage(peer_id, msg_to_process);
+      } else {
+        break;
+      }
+    }
+  }
+
+  void DispatchInnerMessage(ContactID const& peer_id, Json const& msg) const {
+    std::string const inner_str = msg.dump();
+    std::vector<std::byte> inner_payload(inner_str.size());
+    std::memcpy(inner_payload.data(), inner_str.data(), inner_str.size());
+    EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(inner_payload)});
   }
 };
 
