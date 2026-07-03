@@ -44,6 +44,7 @@ pub struct EventLoopState {
   pub tick_counter: u64,
   pub has_bootstrapped: bool,
   pub providing_keys: HashSet<Vec<u8>>,
+  pub pending_provider_queries: HashMap<Vec<u8>, std::time::Instant>,
 }
 
 impl EventLoopState {
@@ -66,6 +67,7 @@ impl EventLoopState {
       tick_counter: 0,
       has_bootstrapped: false,
       providing_keys: HashSet::new(),
+      pending_provider_queries: HashMap::new(),
     }
   }
 
@@ -148,11 +150,20 @@ pub async fn run_event_loop(
   let mut state = EventLoopState::new(role, callbacks.clone());
   let mut keepalive_interval = tokio::time::interval(Duration::from_secs(60));
   let mut stats_interval = tokio::time::interval(Duration::from_secs(15));
+  let mut provider_retry_interval = tokio::time::interval(Duration::from_secs(10));
 
   loop {
     tokio::select! {
         _ = keepalive_interval.tick() => {
             handle_keepalive(&mut state, &mut swarm, &callbacks);
+        }
+        _ = provider_retry_interval.tick() => {
+            let now = std::time::Instant::now();
+            state.pending_provider_queries.retain(|_, time| now.duration_since(*time).as_secs() < 60);
+            for (key_bytes, _) in &state.pending_provider_queries {
+                let key = libp2p::kad::RecordKey::new(key_bytes);
+                let _ = swarm.behaviour_mut().kademlia.get_providers(key);
+            }
         }
         _ = stats_interval.tick() => {
             let now = std::time::Instant::now();
@@ -425,6 +436,7 @@ fn handle_command(
         swarm.behaviour_mut().kademlia.remove_peer(&peer);
       }
       state.pending_dials.clear();
+      state.pending_provider_queries.clear();
       state.active_relay_listeners.clear();
       state.active_relay_peers.clear();
       state.bootstrap_addrs.clear();
@@ -503,6 +515,7 @@ fn handle_command(
       }
     }
     Command::GetProviders(key_bytes) => {
+      state.pending_provider_queries.insert(key_bytes.clone(), std::time::Instant::now());
       let key = libp2p::kad::RecordKey::new(&key_bytes);
       swarm.behaviour_mut().kademlia.get_providers(key);
     }
