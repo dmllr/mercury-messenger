@@ -132,6 +132,21 @@ class Libp2pDataTransport : public DataTransport::Interface {
                 auto inner_msg = parsed["m"];
                 if (auto peer = this->GetPeer(peer_id)) {
                   std::lock_guard<std::mutex> const lock(peer->queue_mutex);
+
+                  bool is_new_session = false;
+                  if (inner_msg.is_object() && inner_msg.value("type", "") == "key_exchange") {
+                    if (!inner_msg.value("is_reply", false)) {
+                      is_new_session = true;
+                    }
+                  }
+
+                  if (is_new_session && (seq < peer->rx_seq || peer->crcp_verified.load())) {
+                    LGW << "Peer " << peer_id.ToString() << " initiated a new session. Resetting sequences.";
+                    peer->rx_seq = seq;
+                    peer->tx_seq = 0;
+                    peer->out_of_order_queue.clear();
+                  }
+
                   if (seq >= peer->rx_seq) {
                     peer->out_of_order_queue[seq] = inner_msg;
 

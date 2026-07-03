@@ -159,7 +159,21 @@ pub async fn run_event_loop(
         }
         _ = provider_retry_interval.tick() => {
             let now = std::time::Instant::now();
-            state.pending_provider_queries.retain(|_, time| now.duration_since(*time).as_secs() < 60);
+            state.pending_provider_queries.retain(|key_bytes, time| {
+                if now.duration_since(*time).as_secs() >= 60 {
+                    return false;
+                }
+                let mut arr = [0u8; 32];
+                if key_bytes.len() == 32 {
+                    arr.copy_from_slice(key_bytes);
+                    if let Some(peer_id) = crate::utils::pubkey_to_peerid(&arr) {
+                        if swarm.is_connected(&peer_id) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            });
             for (key_bytes, _) in &state.pending_provider_queries {
                 let key = libp2p::kad::RecordKey::new(key_bytes);
                 let _ = swarm.behaviour_mut().kademlia.get_providers(key);
