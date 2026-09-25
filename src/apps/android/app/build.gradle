@@ -144,7 +144,7 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.core:core-ktx:1.19.0'
+    implementation 'androidx.core:core-ktx:1.19.1'
     implementation 'com.google.android.material:material:1.14.0'
     implementation 'androidx.appcompat:appcompat:1.8.0'
     implementation 'androidx.preference:preference-ktx:1.2.1'
@@ -180,7 +180,7 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.11.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0'
-    implementation 'androidx.navigation:navigation-compose:2.10.1'
+    implementation 'androidx.navigation:navigation-compose:2.10.2'
 
     // Serialization
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0"
