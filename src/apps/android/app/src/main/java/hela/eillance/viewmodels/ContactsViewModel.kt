@@ -8,11 +8,13 @@ import hela.eillance.MessengerService
 import hela.eillance.camera.R
 import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.Contact
+import hela.eillance.ndkio.ContactStatus
 import hela.eillance.ndkio.GlobalSearchResult
 import hela.eillance.ndkio.HistoryEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -189,8 +191,8 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
 
   fun sendFeedback(onContactReady: (String) -> Unit) {
     val feedbackId = "ba5fc552e3e16a7604e3ec74ad65370ba1b36345ffcfe7d726e217e85295b382"
-    val exists = _contacts.value.any { it.peerId == feedbackId }
-    if (!exists) {
+    val existing = _contacts.value.find { it.peerId == feedbackId }
+    if (existing == null) {
       val success = if (nativePtr != 0L) nativeAddContact(nativePtr, feedbackId, null) else false
       if (!success) {
         viewModelScope.launch {
@@ -198,8 +200,19 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         }
         return
       }
+      viewModelScope.launch {
+        _contacts.first { list -> list.any { it.peerId == feedbackId } }
+        onContactReady(feedbackId)
+      }
+    } else if (existing.status == ContactStatus.rejected) {
+      unblockContact(feedbackId)
+      viewModelScope.launch {
+        _contacts.first { list -> list.any { it.peerId == feedbackId && it.status != ContactStatus.rejected } }
+        onContactReady(feedbackId)
+      }
+    } else {
+      onContactReady(feedbackId)
     }
-    onContactReady(feedbackId)
   }
 
   fun getUnreadMessages(peerId: String): List<HistoryEntry> {
