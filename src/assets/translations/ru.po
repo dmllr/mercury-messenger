@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Профиль обновлен"
 msgid "sys_unsupported"
 msgstr "Формат не поддерживается. Обновите приложение."
+msgid "sys_group_created"
+msgstr "Групповой чат создан"
 msgid "sys_default"
 msgstr "Системное сообщение"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "Контакт недоступен. Сообщения не доставлены более 24 часов."
 msgid "contact_unwilling"
 msgstr "Контакт отклонил соединение"
+msgid "message_read_by"
+msgstr "Доставлено|Прочитано"
 
 # Versioning
 msgid "version_we_need_update"

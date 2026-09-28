@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "个人资料已更新"
 msgid "sys_unsupported"
 msgstr "不支持的消息格式。请更新应用。"
+msgid "sys_group_created"
+msgstr "群聊已创建"
 msgid "sys_default"
 msgstr "系统消息"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "无法联系到该联系人。消息超过 24 小时未送达。"
 msgid "contact_unwilling"
 msgstr "联系人拒绝通信"
+msgid "message_read_by"
+msgstr "已接收|已读"
 
 # Versioning
 msgid "version_we_need_update"

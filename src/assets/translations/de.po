@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Profil aktualisiert"
 msgid "sys_unsupported"
 msgstr "Nicht unterstütztes Nachrichtenformat. Bitte aktualisiere die App."
+msgid "sys_group_created"
+msgstr "Gruppenchat erstellt"
 msgid "sys_default"
 msgstr "Systemnachricht"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "Kontakt nicht erreichbar. Nachrichten seit über 24 Stunden nicht zugestellt."
 msgid "contact_unwilling"
 msgstr "Kontakt hat die Kommunikation abgelehnt"
+msgid "message_read_by"
+msgstr "Empfangen|Gelesen von"
 
 # Versioning
 msgid "version_we_need_update"
