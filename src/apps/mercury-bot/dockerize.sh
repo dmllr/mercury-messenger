@@ -40,25 +40,8 @@ run_in_devenv() {
     ' bash "$@"
 }
 
-# --- Version Parsing ---
-if [[ ! -f "${VERSION_FILE}" ]]; then
-  error "Version file not found at ${VERSION_FILE}"
-  exit 1
-fi
-
-# Extract number after VERSION_CODE=, removing whitespace
-VERSION_CODE=$(grep "^VERSION_CODE=" "${VERSION_FILE}" | cut -d'=' -f2 | tr -d '[:space:]')
-
-if [[ -z "${VERSION_CODE}" ]]; then
-  error "Could not parse VERSION_CODE from ${VERSION_FILE}"
-  exit 1
-fi
-
-info "Detected Version Code: ${VERSION_CODE}"
-
 # Define final tags
 readonly FINAL_IMAGE_LATEST="${IMAGE_NAME_BASE}:latest"
-readonly FINAL_IMAGE_VERSIONED="${IMAGE_NAME_BASE}:${VERSION_CODE}"
 
 # --- Argument Parsing ---
 PACK_IMAGE=false
@@ -109,26 +92,18 @@ fi
 cp "${BIN_SOURCE}" "${BIN_DEST}"
 
 # 4. Build the final runtime Docker image
-info "Building runtime Docker image '${FINAL_IMAGE_VERSIONED}'..."
-
 # We use APP_DIR as context here, assuming it only contains the Dockerfile and the binary
 docker build \
   -t "${FINAL_IMAGE_LATEST}" \
-  -t "${FINAL_IMAGE_VERSIONED}" \
   -f "${APP_DIR}/Dockerfile" \
   "${APP_DIR}"
 
 # 5. Cleanup
 rm "${BIN_DEST}"
-success "Docker image '${FINAL_IMAGE_VERSIONED}' created successfully."
+success "Docker image '${FINAL_IMAGE_LATEST}' created successfully."
 
 # 6. Pack (if requested)
 if [[ "${PACK_IMAGE}" == "true" ]]; then
-  EXPORT_FILE="${PROJECT_ROOT}/mercury-bot-${VERSION_CODE}.tar.gz"
-  info "Packing image for Synology NAS (saving to ${EXPORT_FILE})..."
-
-  docker save "${FINAL_IMAGE_VERSIONED}" | gzip > "${EXPORT_FILE}"
-
   EXPORT_FILE="${PROJECT_ROOT}/mercury-bot-latest.tar.gz"
   info "Packing image for Synology NAS (saving to ${EXPORT_FILE})..."
 
