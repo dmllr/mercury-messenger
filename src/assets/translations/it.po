@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Profilo aggiornato"
 msgid "sys_unsupported"
 msgstr "Formato messaggio non supportato. Aggiorna l'app."
+msgid "sys_group_created"
+msgstr "Chat di gruppo creata"
 msgid "sys_default"
 msgstr "Messaggio di sistema"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "Contatto irraggiungibile. Messaggi non consegnati da oltre 24 ore."
 msgid "contact_unwilling"
 msgstr "Il contatto ha rifiutato la comunicazione"
+msgid "message_read_by"
+msgstr "Ricevuto|Letto da"
 
 # Versioning
 msgid "version_we_need_update"

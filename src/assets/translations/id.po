@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Profil Diperbarui"
 msgid "sys_unsupported"
 msgstr "Format pesan tidak didukung. Harap perbarui aplikasi."
+msgid "sys_group_created"
+msgstr "Obrolan grup dibuat"
 msgid "sys_default"
 msgstr "Pesan Sistem"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "Kontak tidak dapat dihubungi. Pesan tidak terkirim selama lebih dari 24 jam."
 msgid "contact_unwilling"
 msgstr "Kontak menolak komunikasi"
+msgid "message_read_by"
+msgstr "Diterima|Dibaca oleh"
 
 # Versioning
 msgid "version_we_need_update"

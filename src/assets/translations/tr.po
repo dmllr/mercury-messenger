@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Profil Güncellendi"
 msgid "sys_unsupported"
 msgstr "Desteklenmeyen mesaj formatı. Lütfen uygulamayı güncelleyin."
+msgid "sys_group_created"
+msgstr "Grup sohbeti oluşturuldu"
 msgid "sys_default"
 msgstr "Sistem Mesajı"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "Kişiye ulaşılamıyor. Mesajlar 24 saatten uzun süredir iletilemedi."
 msgid "contact_unwilling"
 msgstr "Kişi iletişimi reddetti"
+msgid "message_read_by"
+msgstr "Alındı|Okuyan"
 
 # Versioning
 msgid "version_we_need_update"
