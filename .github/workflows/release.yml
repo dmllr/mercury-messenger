@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-native:
+    name: Build linux binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Bootstrap Node
+        run: |
+          mkdir -p ~/.ssh
+          chmod +x src/apps/mercury-bootstrap/dockerize.sh
+          ./src/apps/mercury-bootstrap/dockerize.sh --pack
+
+      - name: Bot
+        run: |
+          mkdir -p ~/.ssh
+          chmod +x src/apps/mercury-bot/dockerize.sh
+          ./src/apps/mercury-bot/dockerize.sh --pack
+
+      - name: Package and rename artifacts
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          cp mercury-bootstrap mercury-bootstrap-node
+          tar -czf "binary_mercury-bootstrap-node_linux-x86_64_${VERSION}.tar.gz" mercury-bootstrap-node
+          mv mercury-bootstrap-latest.tar.gz "docker_mercury-bootstrap-node_latest_${VERSION}.tar.gz"
+          mv mercury-bot-latest.tar.gz "docker_mercury-bot_latest_${VERSION}.tar.gz"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-native
+          path: |
+            binary_mercury-bootstrap-node_linux-x86_64_${{ github.ref_name }}.tar.gz
+            docker_mercury-bootstrap-node_latest_${{ github.ref_name }}.tar.gz
+            docker_mercury-bot_latest_${{ github.ref_name }}.tar.gz
+          retention-days: 1
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Rust targets for Android
+        run: |
+          rustup target add \
+            aarch64-linux-android \
+            armv7-linux-androideabi \
+            i686-linux-android \
+            x86_64-linux-android
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android NDK and SDK Components
+        run: |
+          sudo chown -R $USER:$USER "$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME/licenses"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses || true
+          yes | "$SDKMANAGER" --channel=3 "ndk;29.0.13113456"
+          yes | "$SDKMANAGER" --channel=3 "platforms;android-37.0" || yes | "$SDKMANAGER" --channel=3 "platforms;android-37" || true
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
+          elif [ -d "$ANDROID_HOME/platforms/android-37" ] && [ ! -e "$ANDROID_HOME/platforms/android-37.0" ]; then
+            ln -s "$ANDROID_HOME/platforms/android-37" "$ANDROID_HOME/platforms/android-37.0"
+          fi
+          echo "sdk.dir=$ANDROID_HOME" > src/apps/android/local.properties
+          echo "ndk.dir=$ANDROID_HOME/ndk/29.0.13113456" >> src/apps/android/local.properties
+          cp src/apps/android/local.properties src/apps/android/app/local.properties
+
+      - name: Prepare keystores
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "${GITHUB_WORKSPACE}/release.keystore"
+            printf "storeFile=%s/release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n" \
+              "$GITHUB_WORKSPACE" "$KEYSTORE_PASSWORD" "$KEYSTORE_ALIAS" "$KEY_PASSWORD" > "${GITHUB_WORKSPACE}/keystore.config"
+          else
+            keytool -genkeypair -v -keystore "${GITHUB_WORKSPACE}/release.keystore" -alias mercury \
+              -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android \
+              -dname "CN=Mercury, OU=Mercury, O=Mercury, L=Unknown, S=Unknown, C=US"
+            printf "storeFile=%s/release.keystore\nstorePassword=android\nkeyAlias=mercury\nkeyPassword=android\n" \
+              "$GITHUB_WORKSPACE" > "${GITHUB_WORKSPACE}/keystore.config"
+          fi
+          cp "${GITHUB_WORKSPACE}/keystore.config" src/apps/android/app/keystore.config
+
+      - name: Build Release APK
+        working-directory: src/apps/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease
+
+      - name: Rename release APK
+        run: |
+          mv src/apps/android/app/build/outputs/apk/release/*.apk \
+            "src/apps/android/app/build/outputs/apk/release/android_Mercury-Messenger_hela.eillance_${GITHUB_REF_NAME}.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: src/apps/android/app/build/outputs/apk/release/android_Mercury-Messenger_hela.eillance_${{ github.ref_name }}.apk
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-native, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "release-artifacts/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
+          removeArtifacts: false
+          artifactErrorsFailBuild: true

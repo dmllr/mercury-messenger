@@ -67,8 +67,9 @@ mkdir -p /var/app/signaling-server/certs \
 
 ### Prerequisites
 
--   Android SDK
--   Android NDK version `29.0.13113456 rc1` (as specified in `build.gradle`)
+- Android SDK
+- Android NDK
+- Rust
 
 ### Keystore Setup
 
