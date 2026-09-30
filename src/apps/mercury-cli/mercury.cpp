@@ -63,7 +63,7 @@ std::vector<std::string> GetContactMenuEntries(
     }
 
     std::string conn_status_str;
-    if (call_state.peer_id == contact.peer_id &&
+    if (contact.topic_id == eillance::TopicID(call_state.peer_id) &&
         (call_state.is_connecting || call_state.is_ringing || call_state.is_in_call)) {
       if (call_state.is_connecting) {
         conn_status_str = " (Calling)";
@@ -326,10 +326,11 @@ auto main(int argc, char** argv) -> int {
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
             prefix = "[you]: ";
           } else {
+            auto const target_topic =
+                entry.author_id.IsEmpty() ? conv_state.topic_id : eillance::TopicID(entry.author_id);
             auto const iter =
-                std::ranges::find_if(contacts, [&](auto const& c) { return c.peer_id == conv_state.peer_id; });
-            std::string const display_id =
-                (iter != contacts.end()) ? iter->display_name : conv_state.peer_id.ToString();
+                std::ranges::find_if(contacts, [&](auto const& c) { return c.topic_id == target_topic; });
+            std::string const display_id = (iter != contacts.end()) ? iter->display_name : target_topic.ToString();
             prefix = "[" + display_id + "]: ";
           }
           if (entry.direction == eillance::messaging::MessageDirection::sent) {
@@ -347,7 +348,9 @@ auto main(int argc, char** argv) -> int {
                 break;
             }
           }
-          content = std::get<eillance::messaging::MessageEntry>(entry.data).content;
+          if (auto const* msg_content = eillance::messaging::GetMessageContent(entry.data)) {
+            content = msg_content->content;
+          }
           if (entry.is_truncated) {
             content +=
                 "...[truncated, ID: " + std::to_string(entry.id) + " - use /load " + std::to_string(entry.id) + "]";
@@ -443,9 +446,9 @@ auto main(int argc, char** argv) -> int {
     contact_menu_entries = GetContactMenuEntries(contacts, call_state);
 
     if (contact_menu_selected < contacts.size()) {
-      auto const& selected_peer = contacts[contact_menu_selected].peer_id;
-      if (!conversation_vm || conversation_vm->GetState().peer_id != selected_peer) {
-        conversation_vm = std::make_shared<eillance::view_model::ConversationViewModel>(selected_peer, client);
+      auto const& selected_topic = contacts[contact_menu_selected].topic_id;
+      if (!conversation_vm || conversation_vm->GetState().topic_id != selected_topic) {
+        conversation_vm = std::make_shared<eillance::view_model::ConversationViewModel>(selected_topic, client);
       }
     } else {
       conversation_vm = nullptr;
