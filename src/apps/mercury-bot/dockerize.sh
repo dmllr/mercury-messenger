@@ -26,6 +26,7 @@ error() { echo -e "${COLOR_RED}ERROR:${COLOR_NONE} $1"; }
 run_in_devenv() {
   # Mounts project root to /workspace (matching your manual habits)
   # Mounts SSH keys for git operations
+  mkdir -p "${HOME}/.ssh"
   docker run --rm \
     --user "$(id -u):$(id -g)" \
     -v "${PROJECT_ROOT}:/workspace" \
