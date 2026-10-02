@@ -166,7 +166,7 @@ struct EventAppForegrounded {};
 struct EventAppBackgrounded {};
 
 // Permissions Integration
-enum class PermissionBannerType : uint8_t { none = 0, notification = 1, battery = 2, callPermissions = 3 };
+enum class PermissionBannerType : std::uint8_t { none = 0, notification = 1, battery = 2, callPermissions = 3 };
 struct EventPermissionBannerChanged {
   PermissionBannerType type;
 };
@@ -178,7 +178,7 @@ struct EventTurnEligibilityChanged {
 // Explicit Notification Triggers
 struct EventNotifyNewMessage {
   TopicID topic_id;
-  uint64_t message_id;
+  std::uint64_t message_id;
   std::string contact_name;
   std::vector<messaging::HistoryEntryRecord> unread_messages;
 };
@@ -199,7 +199,7 @@ struct EventTurnAuthResult {
   ContactID peer_id;
   bool success;
   std::string public_ip;
-  uint16_t port;
+  std::uint16_t port;
   std::string username;
   std::string credential;
 };
@@ -211,8 +211,8 @@ struct EventSyncStateChanged {
 };
 
 // Explicit Hardware / OS Orchestration Commands
-enum class AudioRoutingMode : uint8_t { normal = 0, inCall = 1 };
-enum class SoundType : uint8_t { ringing = 0, ringback = 1, connecting = 2 };
+enum class AudioRoutingMode : std::uint8_t { normal = 0, inCall = 1 };
+enum class SoundType : std::uint8_t { ringing = 0, ringback = 1, connecting = 2 };
 
 struct EventCmdProcessIncomingTelecomCall {
   ContactID peer_id;

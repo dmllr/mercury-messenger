@@ -67,7 +67,7 @@ auto main(int argc, char* argv[]) -> int {
   auto const log_level = ParseLogLevel(log_level_str);
   plog::init<logInstanceId>(log_level, &appender);
 
-  uint16_t const port = static_cast<uint16_t>(args.GetInt("--port").value_or(10807));
+  std::uint16_t const port = static_cast<std::uint16_t>(args.GetInt("--port").value_or(10807));
   std::string const identity_file = args.Get("--identity-file").value_or("bootstrap_identity.key");
 
   LGD << "Starting bootstrap node on 0.0.0.0:" << port;

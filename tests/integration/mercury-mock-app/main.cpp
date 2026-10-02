@@ -352,7 +352,7 @@ auto main(int argc, char** argv) -> int {
         std::ignore = client->AddContact(peer_id, std::nullopt);
 
         auto page = client->GetMessageHistoryPage(eillance::TopicID(peer_id), 0, 10);
-        uint64_t reply_id = 0;
+        std::uint64_t reply_id = 0;
         for (auto& m : page.messages) {
           if (m.direction == eillance::messaging::MessageDirection::received) {
             reply_id = m.id;

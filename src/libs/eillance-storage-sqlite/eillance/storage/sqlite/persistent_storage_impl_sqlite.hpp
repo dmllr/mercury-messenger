@@ -72,7 +72,7 @@ void RegisterCustomLower(sqlite3* db) {
               i++;
               continue;
             }
-            uint32_t wc = ((c & 0x1F) << 6) | (text[i + 1] & 0x3F);
+            std::uint32_t wc = ((c & 0x1F) << 6) | (text[i + 1] & 0x3F);
 
             // Basic Case Folding for common ranges
             // Latin-1 Supplement (U+00C0..U+00DE) -> +0x20, exclude multiplication sign 0xD7
@@ -556,7 +556,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
     std::vector<messaging::LedgerEntry> entries;
 
-    uint64_t start_seq = 0;
+    std::uint64_t start_seq = 0;
     if (!hash.IsEmpty()) {
       SQLiteStatement const s_seq(db_, "SELECT seq_id FROM ledger_entries WHERE topic_id = ? AND hash = ?;");
       BindText(s_seq.Get(), 1, topic_id.ToString());
@@ -633,7 +633,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     BindText(s_seq.Get(), 1, topic_id.ToString());
     BindText(s_seq.Get(), 2, hash.ToString());
     if (sqlite3_step(s_seq.Get()) == SQLITE_ROW) {
-      uint64_t const start_seq = sqlite3_column_int64(s_seq.Get(), 0);
+      std::uint64_t const start_seq = sqlite3_column_int64(s_seq.Get(), 0);
       SQLiteStatement const s_del(db_, "DELETE FROM ledger_entries WHERE topic_id = ? AND seq_id > ?;");
       BindText(s_del.Get(), 1, topic_id.ToString());
       sqlite3_bind_int64(s_del.Get(), 2, start_seq);
@@ -703,7 +703,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       BindText(s_seq.Get(), 1, topic_id.ToString());
       BindText(s_seq.Get(), 2, lca_hash.ToString());
       if (sqlite3_step(s_seq.Get()) == SQLITE_ROW) {
-        uint64_t const start_seq = sqlite3_column_int64(s_seq.Get(), 0);
+        std::uint64_t const start_seq = sqlite3_column_int64(s_seq.Get(), 0);
         SQLiteStatement const s_del(db_, "DELETE FROM ledger_entries WHERE topic_id = ? AND seq_id > ?;");
         BindText(s_del.Get(), 1, topic_id.ToString());
         sqlite3_bind_int64(s_del.Get(), 2, start_seq);
@@ -978,7 +978,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
-  void UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) override {
+  void
+  UpdateMessageStatus(TopicID const& topic_id, std::uint64_t message_id, messaging::MessageStatus new_status) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id=?;");
@@ -990,7 +991,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void UpdateMessagePeerStatus(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& peer_id,
       messaging::MessageStatus new_status
   ) override {
@@ -1026,7 +1027,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(s.Get());
   }
 
-  void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) override {
+  void
+  UpdateMessageContent(TopicID const& topic_id, std::uint64_t message_id, std::string const& new_content) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -1047,7 +1049,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(del_large.Get());
   }
 
-  void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) override {
+  void MarkMessageDeleted(TopicID const& topic_id, std::uint64_t message_id) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -1072,7 +1074,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
   void ToggleReaction(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
   ) override {
@@ -1185,7 +1187,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
           .note = ColumnString(stmt.Get(), 9),
           .file_name = ColumnString(stmt.Get(), 10)
       };
-      uint64_t ts = static_cast<uint64_t>(sqlite3_column_int64(stmt.Get(), 11));
+      std::uint64_t ts = static_cast<uint64_t>(sqlite3_column_int64(stmt.Get(), 11));
       results.push_back({std::move(att), ts});
     }
     return results;
@@ -1252,7 +1254,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetHistoryEntry(TopicID const& topic_id, uint64_t message_id)
+  auto GetHistoryEntry(TopicID const& topic_id, std::uint64_t message_id)
       -> std::optional<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);

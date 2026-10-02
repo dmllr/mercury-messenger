@@ -41,7 +41,7 @@ struct PeerNode {
     peer_for_other->session_cipher->ComputeSharedSecret(pub);
   }
 
-  void InjectEntry(TopicID const& topic, std::string const& payload, uint64_t ts, ContactID const& author) const {
+  void InjectEntry(TopicID const& topic, std::string const& payload, std::uint64_t ts, ContactID const& author) const {
     messaging::LedgerEntry entry;
     entry.topic_id = topic;
     entry.author_id = author;

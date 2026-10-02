@@ -332,7 +332,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
-  void UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) override {
+  void
+  UpdateMessageStatus(TopicID const& topic_id, std::uint64_t message_id, messaging::MessageStatus new_status) override {
     std::lock_guard const lock(mutex_);
     if (auto const itr = history_.find(topic_id); itr != history_.end()) {
       for (auto& entry : itr->second) {
@@ -361,7 +362,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
   void UpdateMessagePeerStatus(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& peer_id,
       messaging::MessageStatus new_status
   ) override {
@@ -388,7 +389,8 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
-  void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) override {
+  void
+  UpdateMessageContent(TopicID const& topic_id, std::uint64_t message_id, std::string const& new_content) override {
     std::lock_guard const lock(mutex_);
     if (auto const itr = history_.find(topic_id); itr != history_.end()) {
       for (auto& entry : itr->second) {
@@ -403,7 +405,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     }
   }
 
-  void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) override {
+  void MarkMessageDeleted(TopicID const& topic_id, std::uint64_t message_id) override {
     std::lock_guard const lock(mutex_);
     if (auto const itr = history_.find(topic_id); itr != history_.end()) {
       for (auto& entry : itr->second) {
@@ -421,7 +423,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
 
   void ToggleReaction(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
   ) override {
@@ -540,7 +542,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
     return page;
   }
 
-  auto GetHistoryEntry(TopicID const& topic_id, uint64_t const message_id)
+  auto GetHistoryEntry(TopicID const& topic_id, std::uint64_t const message_id)
       -> std::optional<messaging::HistoryEntryRecord> override {
     std::lock_guard const lock(mutex_);
     if (auto const itr = history_.find(topic_id); itr != history_.end()) {
@@ -574,7 +576,7 @@ class MockPersistentStorageImpl : public PersistentStorageImpl {
           return left.timestamp < right.timestamp;
         });
 
-        uint32_t unread_count = 0;
+        std::uint32_t unread_count = 0;
         for (auto const& entry : peer_history) {
           if (entry.kind == messaging::HistoryEntryKind::textMessage &&
               entry.direction == messaging::MessageDirection::received &&

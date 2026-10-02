@@ -44,7 +44,7 @@ class SQLiteStorageTest : public ::testing::Test {
   std::unique_ptr<storage::SQLiteStorage> storage_;
   ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
   ContactID const peer2 = ContactID("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15");
-  uint64_t next_id_ = 1;
+  std::uint64_t next_id_ = 1;
 
   messaging::HistoryEntryRecord AddTestEntry(messaging::HistoryEntryRecord r) {
     if (r.id == 0) r.id = next_id_++;
@@ -263,7 +263,7 @@ TEST_F(SQLiteStorageTest, HistoryPagination) {
   storage_->UpdateContact(contact);
 
   constexpr int total_messages = 25;
-  uint64_t newest_id = 0;
+  std::uint64_t newest_id = 0;
 
   for (int i = 0; i < total_messages; ++i) {
     auto entry = AddTestEntry(

@@ -59,7 +59,8 @@ class FileTransferResilienceTest : public ::testing::Test {
     return bytes;
   }
 
-  std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
+  std::vector<std::byte>
+  CreateChunkPacket(std::string const& id, std::uint32_t seq, std::vector<std::byte> const& payload) {
     std::vector<std::byte> packet;
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x01});  // Chunk Type

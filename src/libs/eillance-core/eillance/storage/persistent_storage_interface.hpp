@@ -81,7 +81,7 @@ class PersistentStorageImpl {
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
   virtual void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) = 0;
   virtual void
-  UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
+  UpdateMessageStatus(TopicID const& topic_id, std::uint64_t message_id, messaging::MessageStatus new_status) = 0;
   virtual void UpdateMessageStatuses(
       TopicID const& topic_id,
       std::vector<uint64_t> const& message_ids,
@@ -89,15 +89,16 @@ class PersistentStorageImpl {
   ) = 0;
   virtual void UpdateMessagePeerStatus(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& peer_id,
       messaging::MessageStatus new_status
   ) = 0;
-  virtual void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) = 0;
-  virtual void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) = 0;
+  virtual void
+  UpdateMessageContent(TopicID const& topic_id, std::uint64_t message_id, std::string const& new_content) = 0;
+  virtual void MarkMessageDeleted(TopicID const& topic_id, std::uint64_t message_id) = 0;
   virtual void ToggleReaction(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
   ) = 0;
@@ -110,7 +111,7 @@ class PersistentStorageImpl {
 
   virtual auto GetHistoryPage(TopicID const& topic_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;
-  virtual auto GetHistoryEntry(TopicID const& topic_id, uint64_t message_id)
+  virtual auto GetHistoryEntry(TopicID const& topic_id, std::uint64_t message_id)
       -> std::optional<messaging::HistoryEntryRecord> = 0;
   virtual auto GetFullMessageContent(TopicID const& topic_id, std::uint64_t message_id)
       -> std::optional<std::string> = 0;

@@ -17,7 +17,7 @@ struct MockProfileObserver {
   MyProfile profile;
   bool updated = false;
   std::mutex mutex;
-  uint64_t sub_id;
+  std::uint64_t sub_id;
 
   MockProfileObserver() {
     sub_id = EventQueue::Instance().Subscribe<EventProfileStateUpdated>([this](auto const& e) {

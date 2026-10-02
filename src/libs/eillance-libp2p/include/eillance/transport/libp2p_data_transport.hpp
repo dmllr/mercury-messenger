@@ -137,7 +137,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
               ContactID const& peer_id,
               bool success,
               std::string const& ip,
-              uint16_t port,
+              std::uint16_t port,
               std::string const& user,
               std::string const& cred
           ) -> void {
@@ -396,7 +396,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
     bool any_success = false;
     for (auto const& net_id : networks) {
-      uint64_t seq = 0;
+      std::uint64_t seq = 0;
       {
         std::lock_guard<std::mutex> const lock(peersMutex_);
         if (auto it = peers_.find(net_id); it != peers_.end()) {
@@ -450,7 +450,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
       std::string_view const json_str(reinterpret_cast<char const*>(payload.data()), payload.size());
       auto const parsed = Json::parse(json_str);
       if (parsed.contains("s") && parsed.contains("m")) {
-        uint64_t const seq = parsed["s"];
+        std::uint64_t const seq = parsed["s"];
         auto const inner_msg = parsed["m"];
         if (auto peer = GetPeer(peer_id)) {
           ProcessSequencedMessage(peer_id, peer, seq, inner_msg);
@@ -463,7 +463,12 @@ class Libp2pDataTransport : public DataTransport::Interface {
     return false;
   }
 
-  void ProcessSequencedMessage(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, uint64_t seq, Json const& inner_msg) {
+  void ProcessSequencedMessage(
+      ContactID const& peer_id,
+      std::shared_ptr<Peer> const& peer,
+      std::uint64_t seq,
+      Json const& inner_msg
+  ) {
     std::lock_guard<std::mutex> const lock(peer->queue_mutex);
 
     if (IsNewSession(inner_msg)) {
@@ -482,7 +487,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     return msg.is_object() && msg.value("type", "") == "key_exchange" && !msg.value("is_reply", false);
   }
 
-  void HandleNewSession(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, uint64_t seq) const {
+  void HandleNewSession(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, std::uint64_t seq) const {
     if (seq < peer->rx_seq || peer->crcp_verified.load()) {
       LGW << "Peer " << peer_id.ToString() << " initiated a new session. Resetting sequences.";
       peer->rx_seq = seq;
@@ -491,12 +496,16 @@ class Libp2pDataTransport : public DataTransport::Interface {
     }
   }
 
-  void EnqueueSequencedMessage(ContactID const& peer_id, std::shared_ptr<Peer> const& peer, uint64_t seq, Json const& msg) const {
+  void EnqueueSequencedMessage(
+      ContactID const& peer_id,
+      std::shared_ptr<Peer> const& peer,
+      std::uint64_t seq,
+      Json const& msg
+  ) const {
     peer->out_of_order_queue[seq] = msg;
 
     if (peer->out_of_order_queue.size() > maxOutOfOrderQueueSize) {
-      LGW << "Out-of-order queue exceeded limit for " << peer_id.ToString()
-          << ", advancing rx_seq to prevent stall.";
+      LGW << "Out-of-order queue exceeded limit for " << peer_id.ToString() << ", advancing rx_seq to prevent stall.";
       peer->rx_seq = peer->out_of_order_queue.begin()->first;
     }
   }

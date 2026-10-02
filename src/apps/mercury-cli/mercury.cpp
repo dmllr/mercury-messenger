@@ -328,8 +328,7 @@ auto main(int argc, char** argv) -> int {
           } else {
             auto const target_topic =
                 entry.author_id.IsEmpty() ? conv_state.topic_id : eillance::TopicID(entry.author_id);
-            auto const iter =
-                std::ranges::find_if(contacts, [&](auto const& c) { return c.topic_id == target_topic; });
+            auto const iter = std::ranges::find_if(contacts, [&](auto const& c) { return c.topic_id == target_topic; });
             std::string const display_id = (iter != contacts.end()) ? iter->display_name : target_topic.ToString();
             prefix = "[" + display_id + "]: ";
           }

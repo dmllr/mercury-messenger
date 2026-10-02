@@ -49,7 +49,7 @@ class FileTransferCancellationTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_);
   }
 
-  bool IsBinaryPacket(std::vector<std::byte> const& data, uint8_t type, std::string const& id) {
+  bool IsBinaryPacket(std::vector<std::byte> const& data, std::uint8_t type, std::string const& id) {
     if (data.size() < 3 + id.size()) return false;
     if (data[0] != std::byte{0xFE}) return false;
     if (data[1] != std::byte{type}) return false;
@@ -59,7 +59,8 @@ class FileTransferCancellationTest : public ::testing::Test {
     return packet_id == id;
   }
 
-  std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
+  std::vector<std::byte>
+  CreateChunkPacket(std::string const& id, std::uint32_t seq, std::vector<std::byte> const& payload) {
     std::vector<std::byte> packet;
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x01});  // Chunk Type

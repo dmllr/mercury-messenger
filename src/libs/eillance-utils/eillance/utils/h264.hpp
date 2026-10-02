@@ -46,7 +46,7 @@ class H264Parser {
 
       if (nal_header_pos < nal_unit_end) {
         // The NAL unit type is in the lower 5 bits of the header byte.
-        uint8_t const nal_type = static_cast<uint8_t>(frame[nal_header_pos]) & 0x1F;
+        std::uint8_t const nal_type = static_cast<uint8_t>(frame[nal_header_pos]) & 0x1F;
 
         if (nal_type == 7) {  // NAL unit type 7 is SPS.
           // The actual SPS data for parsing excludes the NAL header byte.
@@ -84,8 +84,8 @@ class H264Parser {
     std::vector<uint8_t> const& data;
     size_t bit_pos = 0;
 
-    auto ReadBits(int n) -> uint32_t {
-      uint32_t val = 0;
+    auto ReadBits(int n) -> std::uint32_t {
+      std::uint32_t val = 0;
       for (int i = 0; i < n; ++i) {
         size_t const current_bit = bit_pos + i;
         size_t const byte_idx = current_bit / 8;
@@ -98,7 +98,7 @@ class H264Parser {
       return val;
     }
 
-    auto ReadUe() -> uint32_t {  // Unsigned Exponential-Golomb
+    auto ReadUe() -> std::uint32_t {  // Unsigned Exponential-Golomb
       int leading_zeros = 0;
       while (bit_pos < data.size() * 8 && ReadBits(1) == 0) {
         leading_zeros++;
@@ -133,11 +133,11 @@ class H264Parser {
 
     BitReader reader{sps_rbsp};
 
-    uint8_t const profile_idc = reader.ReadBits(8);
+    std::uint8_t const profile_idc = reader.ReadBits(8);
     reader.ReadBits(16);  // Skip constraint flags and level_idc
     reader.ReadUe();      // Skip seq_parameter_set_id
 
-    uint32_t chroma_format_idc = 1;  // Default for many profiles.
+    std::uint32_t chroma_format_idc = 1;  // Default for many profiles.
     if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 || profile_idc == 44 ||
         profile_idc == 83 || profile_idc == 86 || profile_idc == 118 || profile_idc == 128 || profile_idc == 138) {
       chroma_format_idc = reader.ReadUe();
@@ -186,8 +186,8 @@ class H264Parser {
     }
     reader.ReadBits(1);  // direct_8x8_inference_flag
 
-    uint32_t width = (pic_width_in_mbs_minus1 + 1) * 16;
-    uint32_t height = (2 - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1) * 16;
+    std::uint32_t width = (pic_width_in_mbs_minus1 + 1) * 16;
+    std::uint32_t height = (2 - frame_mbs_only_flag) * (pic_height_in_map_units_minus1 + 1) * 16;
 
     if (reader.ReadBits(1) != 0u) {  // frame_cropping_flag
       auto crop_left = reader.ReadUe();
@@ -195,8 +195,8 @@ class H264Parser {
       auto crop_top = reader.ReadUe();
       auto crop_bottom = reader.ReadUe();
 
-      uint32_t crop_unit_x = 1;
-      uint32_t crop_unit_y = (2 - frame_mbs_only_flag);
+      std::uint32_t crop_unit_x = 1;
+      std::uint32_t crop_unit_y = (2 - frame_mbs_only_flag);
       if (chroma_format_idc == 1) {  // 4:2:0
         crop_unit_x = 2;
         crop_unit_y *= 2;

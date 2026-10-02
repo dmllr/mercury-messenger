@@ -18,8 +18,8 @@
 
 namespace eillance::messaging {
 
-inline auto GenerateMessageId() -> uint64_t {
-  uint64_t const now_ms = Time::Now() / 1000ULL;
+inline auto GenerateMessageId() -> std::uint64_t {
+  std::uint64_t const now_ms = Time::Now() / 1000ULL;
   static std::random_device rd;
   static std::mt19937 gen(rd());
   std::uniform_int_distribution<uint64_t> dis(0, 524287);  // 19 bits
@@ -46,7 +46,7 @@ class MessageHistory {
 
     Time::Unit const ts = params.timestamp.value_or(Time::Now());
 
-    uint64_t entry_id = params.id;
+    std::uint64_t entry_id = params.id;
     if (entry_id == 0) {
       entry_id = GenerateMessageId();
     }
@@ -76,7 +76,7 @@ class MessageHistory {
   auto AddCallEntry(CallEntryParams const& params) -> HistoryEntryRecord {
     Time::Unit const ts = params.timestamp.value_or(Time::Now());
 
-    uint64_t entry_id = params.id;
+    std::uint64_t entry_id = params.id;
     if (entry_id == 0) {
       entry_id = GenerateMessageId();
     }
@@ -134,7 +134,7 @@ class MessageHistory {
     storage_->ToggleReaction(topic_id, message_id, author_id, reaction);
   }
 
-  [[nodiscard]] auto FindMessageIdByRemoteOrLocal(TopicID const& topic_id, uint64_t target_id) const
+  [[nodiscard]] auto FindMessageIdByRemoteOrLocal(TopicID const& topic_id, std::uint64_t target_id) const
       -> std::optional<uint64_t> {
     return storage_->GetHistoryEntry(topic_id, target_id) ? std::make_optional(target_id) : std::nullopt;
   }
@@ -146,7 +146,7 @@ class MessageHistory {
     }
   }
 
-  [[nodiscard]] auto GetHistoryEntry(TopicID const& topic_id, uint64_t const message_id) const
+  [[nodiscard]] auto GetHistoryEntry(TopicID const& topic_id, std::uint64_t const message_id) const
       -> std::optional<messaging::HistoryEntryRecord> {
     return storage_->GetHistoryEntry(topic_id, message_id);
   }

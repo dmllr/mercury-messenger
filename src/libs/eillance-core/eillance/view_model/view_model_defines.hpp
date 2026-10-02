@@ -22,7 +22,7 @@ struct CallState {
   messaging::HistoryEntryKind call_type = messaging::HistoryEntryKind::voiceCall;
   bool is_muted = false;
   bool is_speaker_on = false;
-  uint32_t duration_seconds = 0;
+  std::uint32_t duration_seconds = 0;
 };
 
 struct MyProfile {
@@ -40,9 +40,9 @@ struct ViewContact {
   std::optional<std::string> photo;
   identity::ContactStatus status;
   transport::PeerConnectionState connection_state = transport::PeerConnectionState::disconnected;
-  uint32_t unread_count = 0;
+  std::uint32_t unread_count = 0;
   std::optional<messaging::HistoryEntryRecord> last_message;
-  uint64_t last_activity_timestamp = 0;
+  std::uint64_t last_activity_timestamp = 0;
   bool is_group = false;
   bool is_channel = false;
   bool is_read_only = false;
