@@ -8,10 +8,21 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+  SYSTEM
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+foreach(_tgt IN ITEMS gtest gtest_main gmock gmock_main)
+  if (TARGET ${_tgt})
+    if (MSVC)
+      target_compile_options(${_tgt} PRIVATE /WX-)
+    else()
+      target_compile_options(${_tgt} PRIVATE -Wno-error)
+    endif()
+  endif()
+endforeach()
 
 enable_testing()
 
