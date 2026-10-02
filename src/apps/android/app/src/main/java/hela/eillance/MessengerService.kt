@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import org.webrtc.VideoSink
 
 class MessengerService : Service() {
@@ -260,8 +261,25 @@ class MessengerService : Service() {
 
   @Keep
   fun onNativeCoreCrash() {
-    Log.e(TAG, "Native core crash/hang detected by C++ Watchdog!")
-    _isCoreUnresponsive.value = true
+    Log.e(TAG, "Native core crash/hang detected by Watchdog! Attempting silent restart...")
+    serviceScope.launch(Dispatchers.IO) {
+      val restartSuccess = try {
+        withTimeout(5000L) {
+          engineMutex.withLock {
+            callHandler.stopLocalMedia()
+            nativeRestart()
+            _isCoreUnresponsive.value = false
+            true
+          }
+        }
+      } catch (e: Exception) {
+        Log.e(TAG, "Silent core restart failed or timed out", e)
+        false
+      }
+      if (!restartSuccess) {
+        _isCoreUnresponsive.value = true
+      }
+    }
   }
 
   // --- Delegation Methods ---

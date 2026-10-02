@@ -96,6 +96,10 @@ class MediaCallService {
     return std::nullopt;
   }
 
+  [[nodiscard]] auto GetQueue() -> DispatchQueue& {
+    return call_queue_;
+  }
+
   // --- User Actions ---
 
   void StartVoiceCall(ContactID const& peer_id) {
@@ -583,7 +587,7 @@ class MediaCallService {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (current_call_) {
-      uint32_t duration = 0;
+      std::uint32_t duration = 0;
       if (current_call_->state == CallState::active) {
         auto now = std::chrono::steady_clock::now();
         duration = static_cast<uint32_t>(

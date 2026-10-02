@@ -84,6 +84,10 @@ class FileTransferService {
     }
   }
 
+  [[nodiscard]] auto GetQueue() -> DispatchQueue& {
+    return transfer_queue_;
+  }
+
   void OnConnectionReady(ContactID const& peer_id) {
     auto pending_attachments = storage_->GetPendingAttachments(TopicID(peer_id));
     for (auto const& g : storage_->GetGroups()) {

@@ -191,6 +191,10 @@ class SyncEngine {
     dispatchQueue_.RemovePending();
   }
 
+  [[nodiscard]] auto GetQueue() -> DispatchQueue& {
+    return dispatchQueue_;
+  }
+
   void AppendAction(TopicID const& topic_id, messaging::LedgerActionType type, Json const& payload) {
     messaging::LedgerEntry entry;
     entry.topic_id = topic_id;

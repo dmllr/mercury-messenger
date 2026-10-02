@@ -161,6 +161,10 @@ class MessagingService {
     }
   }
 
+  [[nodiscard]] auto GetQueue() -> DispatchQueue& {
+    return bg_queue_;
+  }
+
   auto SendChatMessage(
       TopicID const& topic_id,
       std::string const& message,
@@ -560,7 +564,7 @@ class MessagingService {
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
     }
-    uint64_t const target_id = json.value("target_id", 0ULL);
+    std::uint64_t const target_id = json.value("target_id", 0ULL);
     std::string const content = json.value("content", "");
     if (history_->GetHistoryEntry(topic_id, target_id)) {
       history_->UpdateMessageContent(topic_id, target_id, content);
@@ -573,7 +577,7 @@ class MessagingService {
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
     }
-    uint64_t const target_id = json.value("target_id", 0ULL);
+    std::uint64_t const target_id = json.value("target_id", 0ULL);
     if (history_->GetHistoryEntry(topic_id, target_id)) {
       history_->MarkMessageDeleted(topic_id, target_id);
       EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
@@ -585,7 +589,7 @@ class MessagingService {
     if (topic_id == TopicID(sm_->account->GetId())) {
       topic_id = TopicID(entry.author_id);
     }
-    uint64_t const target_id = json.value("target_id", 0ULL);
+    std::uint64_t const target_id = json.value("target_id", 0ULL);
     auto const reaction = static_cast<messaging::Reaction>(json.value("reaction", 0));
     if (history_->GetHistoryEntry(topic_id, target_id)) {
       history_->ToggleReaction(topic_id, target_id, entry.author_id, reaction);
@@ -606,7 +610,7 @@ class MessagingService {
       ledger_ts *= 1000ULL;
     }
 
-    uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
+    std::uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
 
     // Simple deduplication for recent call logs to prevent double-entry for answered calls
     auto [messages, total_messages] = history_->GetHistoryPage(topic_id, 0, 10);
@@ -682,7 +686,7 @@ class MessagingService {
   void OnChatMessageReceived(
       TopicID const& topic_id,
       Json const& payload,
-      uint64_t message_id,
+      std::uint64_t message_id,
       bool is_system,
       std::vector<messaging::Attachment> const& attachments = {}
   ) {
@@ -727,7 +731,7 @@ class MessagingService {
 
     auto const local_attachments = ProcessIncomingAttachments(attachments);
 
-    uint64_t local_reply_to_id = 0;
+    std::uint64_t local_reply_to_id = 0;
     try {
       if (payload.contains("reply_to_id")) {
         local_reply_to_id = payload["reply_to_id"].get<uint64_t>();
@@ -939,7 +943,7 @@ class MessagingService {
 
   void
   HandleChatProjection(TopicID const& topic_id, messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    uint64_t message_id = json.value("message_id", 0ULL);
+    std::uint64_t message_id = json.value("message_id", 0ULL);
 
     if (history_->GetHistoryEntry(topic_id, message_id)) {
       return;
@@ -952,12 +956,12 @@ class MessagingService {
       ledger_ts *= Time::mS;
     }
 
-    uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
+    std::uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
 
     bool const is_system = json.value("is_system", false);
     auto payload = json.value("payload", Json::object());
     std::string const content = payload.value(keyContent, "");
-    uint64_t const reply_to_id = payload.value("reply_to_id", 0ULL);
+    std::uint64_t const reply_to_id = payload.value("reply_to_id", 0ULL);
 
     messaging::HistoryEntryKind const kind =
         is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage;
@@ -1060,7 +1064,7 @@ class MessagingService {
     return local_attachments;
   }
 
-  void TriggerNewMessageNotificationIfNeeded(TopicID const& topic_id, bool is_system, uint64_t entry_id) {
+  void TriggerNewMessageNotificationIfNeeded(TopicID const& topic_id, bool is_system, std::uint64_t entry_id) {
     if (!is_system && !sm_->is_foreground) {
       auto contact = contact_manager_->GetContact(ContactID(topic_id.Span()));
       std::string const name =
@@ -1163,7 +1167,7 @@ class MessagingService {
     sm_->sync_engine->AppendAction(topic_id, messaging::LedgerActionType::Message, receipt);
   }
 
-  void QueueDeliveryReceipt(TopicID const& topic_id, uint64_t message_id) {
+  void QueueDeliveryReceipt(TopicID const& topic_id, std::uint64_t message_id) {
     std::lock_guard<std::mutex> const lock(sync_state_mutex_);
     pending_delivery_receipts_[topic_id].push_back(message_id);
     if (!delivery_receipts_debounce_active_[ContactID(topic_id.Span())]) {
