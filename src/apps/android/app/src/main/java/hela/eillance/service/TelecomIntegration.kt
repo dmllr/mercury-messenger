@@ -2,6 +2,7 @@ package hela.eillance.service
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.telecom.PhoneAccount
@@ -14,26 +15,39 @@ import hela.eillance.telecom.MercuryConnectionService
 
 class TelecomIntegration(private val context: Context) {
 
-  private val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+  private val telecomManager = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
   private val phoneAccountHandle = PhoneAccountHandle(
     ComponentName(context, MercuryConnectionService::class.java),
     TELECOM_ACCOUNT_ID
   )
 
   fun registerPhoneAccount() {
+    val manager = telecomManager ?: return
+    if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELECOM)) {
+      Log.w(TAG, "Telecom feature not supported on this device")
+      return
+    }
+
     val builder =
       PhoneAccount.builder(phoneAccountHandle, context.getString(R.string.telecom_account_name))
         .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
         .setShortDescription(context.getString(R.string.telecom_account_description))
 
     try {
-      telecomManager.registerPhoneAccount(builder.build())
+      manager.registerPhoneAccount(builder.build())
     } catch (e: SecurityException) {
       Log.e(TAG, "Failed to register PhoneAccount", e)
+    } catch (e: UnsupportedOperationException) {
+      Log.e(TAG, "Failed to register PhoneAccount: telecom feature unsupported", e)
     }
   }
 
   fun processIncomingCall(peerId: String) {
+    val manager = telecomManager ?: throw UnsupportedOperationException("TelecomManager not available")
+    if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELECOM)) {
+      throw UnsupportedOperationException("Telecom feature not supported on this device")
+    }
+
     try {
       val extras = Bundle()
       extras.putString(MercuryConnectionService.EXTRA_PEER_ID, peerId)
@@ -44,7 +58,7 @@ class TelecomIntegration(private val context: Context) {
       nestedExtras.putString(MercuryConnectionService.EXTRA_PEER_ID, peerId)
       extras.putBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS, nestedExtras)
 
-      telecomManager.addNewIncomingCall(phoneAccountHandle, extras)
+      manager.addNewIncomingCall(phoneAccountHandle, extras)
     } catch (e: Exception) {
       Log.e(TAG, "Failed to add incoming call to Telecom", e)
       throw e // Let caller handle fallback
@@ -52,6 +66,12 @@ class TelecomIntegration(private val context: Context) {
   }
 
   fun placeTelecomCall(targetId: String, isVideo: Boolean) {
+    val manager = telecomManager ?: return
+    if (!context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELECOM)) {
+      Log.w(TAG, "Telecom feature not supported on this device")
+      return
+    }
+
     try {
       val extras = Bundle()
       extras.putString(MercuryConnectionService.EXTRA_PEER_ID, targetId)
@@ -65,9 +85,11 @@ class TelecomIntegration(private val context: Context) {
           VideoProfile.STATE_BIDIRECTIONAL
         )
       }
-      telecomManager.placeCall(uri, extrasBundle)
+      manager.placeCall(uri, extrasBundle)
     } catch (e: SecurityException) {
       Log.e(TAG, "Permission missing for placeCall", e)
+    } catch (e: UnsupportedOperationException) {
+      Log.e(TAG, "Telecom placeCall not supported", e)
     }
   }
 
