@@ -67,34 +67,69 @@ class MessengerService : Service() {
 
   private var activeNetwork: Network? = null
 
+  private var isUnmetered = false
+  private var isCharging = false
+  private var lastTurnEligibility: Boolean? = null
+
+  private fun evaluateTurnEligibility() {
+    val eligible = isUnmetered && isCharging
+    if (lastTurnEligibility != eligible) {
+      lastTurnEligibility = eligible
+      if (_isEngineReady.value) {
+        nativeSetTurnEligibility(eligible)
+      }
+    }
+  }
+
   private val networkCallback = object : ConnectivityManager.NetworkCallback() {
     override fun onAvailable(network: Network) {
       if (activeNetwork == network) return
       activeNetwork = network
+
+      val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      val caps = cm.getNetworkCapabilities(network)
+      isUnmetered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+
       serviceScope.launch {
         if (_isEngineReady.value) nativeUpdateNetworkState(true)
       }
-      checkTurnEligibility()
+      evaluateTurnEligibility()
     }
 
     override fun onLost(network: Network) {
       if (activeNetwork == network) {
         activeNetwork = null
+        isUnmetered = false
         serviceScope.launch {
           if (_isEngineReady.value) nativeUpdateNetworkState(false)
         }
+        evaluateTurnEligibility()
       }
-      checkTurnEligibility()
     }
 
     override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-      checkTurnEligibility()
+      if (activeNetwork == network) {
+        val currentlyUnmetered = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        if (isUnmetered != currentlyUnmetered) {
+          isUnmetered = currentlyUnmetered
+          evaluateTurnEligibility()
+        }
+      }
     }
   }
 
   private val powerReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
-      checkTurnEligibility()
+      when (intent?.action) {
+        Intent.ACTION_POWER_CONNECTED -> {
+          isCharging = true
+          evaluateTurnEligibility()
+        }
+        Intent.ACTION_POWER_DISCONNECTED -> {
+          isCharging = false
+          evaluateTurnEligibility()
+        }
+      }
     }
   }
 
@@ -112,13 +147,20 @@ class MessengerService : Service() {
     telecomIntegration.registerPhoneAccount()
 
     val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    activeNetwork = cm.activeNetwork
+    val caps = cm.getNetworkCapabilities(activeNetwork)
+    isUnmetered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+
+    val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    val plugged = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+    isCharging = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
+
     cm.registerDefaultNetworkCallback(networkCallback)
     val filter = IntentFilter().apply {
       addAction(Intent.ACTION_POWER_CONNECTED)
       addAction(Intent.ACTION_POWER_DISCONNECTED)
     }
     registerReceiver(powerReceiver, filter)
-    checkTurnEligibility()
 
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
@@ -131,6 +173,7 @@ class MessengerService : Service() {
             setupEventBusObservers()
           }
           _isEngineReady.value = true
+          evaluateTurnEligibility()
         } catch (e: Exception) {
           Log.e(TAG, "Failed to initialize engine", e)
         }
@@ -138,20 +181,6 @@ class MessengerService : Service() {
     }
 
     startForegroundService()
-  }
-
-  private fun checkTurnEligibility() {
-    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val activeNetwork = cm.activeNetwork
-    val caps = cm.getNetworkCapabilities(activeNetwork)
-    val isUnmetered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
-    
-    val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    val plugged = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
-    val isCharging = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
-    
-    val eligible = isUnmetered && isCharging
-    nativeSetTurnEligibility(eligible)
   }
 
   private fun setupEventBusObservers() {
