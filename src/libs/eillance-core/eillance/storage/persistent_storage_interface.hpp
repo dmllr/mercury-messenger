@@ -43,6 +43,7 @@ class PersistentStorageImpl {
   virtual auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) -> std::vector<LedgerEntry> = 0;
   virtual auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<LedgerEntry> = 0;
   virtual auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<LedgerEntry> = 0;
+  virtual auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash) -> std::optional<LedgerEntry> = 0;
   virtual void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) = 0;
   virtual auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> = 0;
   virtual auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) -> bool = 0;

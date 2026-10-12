@@ -7,49 +7,151 @@
 
 using namespace eillance;
 
-class SyncEngineTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    storage_impl_ = std::make_unique<storage::MockPersistentStorageImpl>();
-    storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl_));
-    mock_log_ = std::make_shared<transport::MockCallLog>();
-    transport_ = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+struct PeerNode {
+  ContactID id;
+  std::shared_ptr<storage::PersistentStorage> storage;
+  std::unique_ptr<storage::MockPersistentStorageImpl> storage_impl;
+  std::shared_ptr<transport::DataTransport> transport;
+  transport::MockDataTransport* transport_mock;
+  std::unique_ptr<sync::SyncEngine> engine;
+  std::shared_ptr<transport::Peer> peer_for_other;
 
-    engine_ = std::make_unique<sync::SyncEngine>(storage_, transport_, my_id_);
+  PeerNode(ContactID my_id, ContactID other_id)
+      : id(my_id) {
+    storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
+    storage = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
+    auto mock = std::make_unique<transport::MockDataTransport>();
+    transport_mock = mock.get();
+    transport = std::make_shared<transport::DataTransport>(std::move(mock));
+    engine = std::make_unique<sync::SyncEngine>(storage, transport, id);
+
+    peer_for_other = std::make_shared<transport::Peer>(other_id);
+    peer_for_other->data_channel_is_open = true;
+    transport_mock->AddPeer(other_id, peer_for_other);
   }
-  ContactID my_id_{"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"};
-  ContactID peer_id_{"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15"};
-  std::shared_ptr<storage::PersistentStorage> storage_;
-  std::unique_ptr<storage::MockPersistentStorageImpl> storage_impl_;
-  std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::shared_ptr<transport::DataTransport> transport_;
-  std::unique_ptr<sync::SyncEngine> engine_;
+
+  void InitCipher(PeerNode& other) {
+    auto pub = other.peer_for_other->session_cipher->GetPublicKey();
+    peer_for_other->session_cipher->ComputeSharedSecret(pub);
+  }
 };
 
-TEST_F(SyncEngineTest, AppendActionCreatesLedgerEntryAndProposesSync) {
-  nlohmann::json const payload = {{"key", "value"}};
-  engine_->AppendAction(TopicID(peer_id_), storage::LedgerActionType::Message, payload);
+class SyncEngineTest : public ::testing::Test {
+ protected:
+  ContactID idA_{"d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"};
+  ContactID idB_{"3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15"};
 
-  auto entries = storage_->GetLedgerEntries(TopicID(peer_id_));
-  ASSERT_EQ(entries.size(), 1);
-  EXPECT_EQ(entries[0].payload, payload.dump());
+  std::unique_ptr<PeerNode> A;
+  std::unique_ptr<PeerNode> B;
 
-  auto const reqs = storage_->GetSyncRequests();
-  ASSERT_EQ(reqs.size(), 1);
-  EXPECT_EQ(reqs[0].target_peer_id, peer_id_);
-}
+  void SetUp() override {
+    A = std::make_unique<PeerNode>(idA_, idB_);
+    B = std::make_unique<PeerNode>(idB_, idA_);
+    A->InitCipher(*B);
+    B->InitCipher(*A);
+  }
+
+  void PumpMessages() {
+    bool activity = true;
+    int guard = 0;
+    while (activity && guard++ < 100) {
+      activity = false;
+      auto a_msgs = A->transport_mock->sent_jsons;
+      A->transport_mock->sent_jsons.clear();
+      for (auto& [peer, msg] : a_msgs) {
+        if (peer == B->id) {
+          B->engine->ProcessSyncMessage(A->id, msg);
+          activity = true;
+        }
+      }
+      auto b_msgs = B->transport_mock->sent_jsons;
+      B->transport_mock->sent_jsons.clear();
+      for (auto& [peer, msg] : b_msgs) {
+        if (peer == A->id) {
+          A->engine->ProcessSyncMessage(B->id, msg);
+          activity = true;
+        }
+      }
+    }
+  }
+};
 
 TEST_F(SyncEngineTest, SyncProposeEmptyHead) {
-  storage_->AddSyncRequest({TopicID(peer_id_), peer_id_, Timestamp::Now(), Timestamp{0}});
+  A->storage->AddSyncRequest({TopicID(idB_), idB_, Timestamp::Now(), Timestamp{0}});
 
   nlohmann::json const propose = {
       {"type", "sync_propose"},
-      {"head", std::string(64, '0')},
-      {"recent", {std::string(64, '0')}}
+      {"topic", TopicID(idB_).ToString()},
+      {"head", std::string(64, '0')}
   };
-  engine_->ProcessSyncMessage(peer_id_, propose);
+  A->engine->ProcessSyncMessage(idB_, propose);
 
-  // Verify that the sync_confirm effectively removes the sync request since heads matched
-  auto const reqs = storage_->GetSyncRequests();
+  auto const reqs = A->storage->GetSyncRequests();
   EXPECT_TRUE(reqs.empty());
+}
+
+TEST_F(SyncEngineTest, IterativeSyncMissingEntries) {
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "1"}});
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "2"}});
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "3"}});
+
+  PumpMessages();
+
+  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  ASSERT_EQ(b_entries.size(), 3);
+  EXPECT_EQ(b_entries[0].hash, A->storage->GetLedgerEntries(TopicID(idB_))[0].hash);
+  EXPECT_EQ(b_entries[2].hash, A->storage->GetLedgerEntries(TopicID(idB_))[2].hash);
+}
+
+TEST_F(SyncEngineTest, ConflictResolutionTakeBoth) {
+  // Alice adds common LCA
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "LCA"}});
+  PumpMessages();
+
+  // Concurrent forks
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "A1"}});
+  B->engine->AppendAction(TopicID(idA_), storage::LedgerActionType::Message, {{"msg", "B1"}});
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "A2"}});
+  B->engine->AppendAction(TopicID(idA_), storage::LedgerActionType::Message, {{"msg", "B2"}});
+
+  PumpMessages();
+
+  auto a_entries = A->storage->GetLedgerEntries(TopicID(idB_));
+  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+
+  // LCA + A1 + B1 + A2 + B2 = 5 entries
+  ASSERT_EQ(a_entries.size(), 5);
+  ASSERT_EQ(b_entries.size(), 5);
+
+  // Both should have identical deterministic histories due to hash and order resolution
+  for (size_t i = 0; i < 5; ++i) {
+    EXPECT_EQ(a_entries[i].hash, b_entries[i].hash);
+    EXPECT_EQ(a_entries[i].payload, b_entries[i].payload);
+  }
+}
+
+TEST_F(SyncEngineTest, PeerHasAllHistoryRemoved) {
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "1"}});
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "2"}});
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "3"}});
+  PumpMessages();
+
+  ASSERT_EQ(B->storage->GetLedgerEntries(TopicID(idA_)).size(), 3);
+
+  // Bob removes history
+  B->storage->DeleteLedgerEntriesAfter(TopicID(idA_), std::string(64, '0'));
+  ASSERT_EQ(B->storage->GetLedgerEntries(TopicID(idA_)).size(), 0);
+
+  // Alice appends new message
+  A->engine->AppendAction(TopicID(idB_), storage::LedgerActionType::Message, {{"msg", "4"}});
+
+  PumpMessages();
+
+  // Bob should sync iteratively from 4 all the way to 000
+  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  ASSERT_EQ(b_entries.size(), 4);
+
+  auto a_entries = A->storage->GetLedgerEntries(TopicID(idB_));
+  EXPECT_EQ(b_entries[0].hash, a_entries[0].hash);
+  EXPECT_EQ(b_entries[3].hash, a_entries[3].hash);
 }
