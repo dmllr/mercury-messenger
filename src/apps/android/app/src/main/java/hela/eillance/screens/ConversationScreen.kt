@@ -579,11 +579,20 @@ fun ConversationScreen(
     } else if (peerNeedsUpdate) {
       StatusSnackbar(
         text = stringResource(R.string.version_peer_needs_update),
-        isError = true
-      )
-    }
+            isError = true
+          )
+        }
+        
+        if (historyPage.isUnreachable) {
+          StatusSnackbar(
+            text = stringResource(R.string.contact_unreachable),
+            actionLabel = stringResource(R.string.action_retry),
+            onAction = { chatVM.retrySync() },
+            isError = true
+          )
+        }
 
-    contact?.let {
+        contact?.let {
           ConnectionStatusBar(contact = it)
         }
 

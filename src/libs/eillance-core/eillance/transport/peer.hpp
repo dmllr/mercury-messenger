@@ -37,7 +37,7 @@ struct Peer {
 
 inline Peer::Peer(ContactID const& id)
     : id(id),
-      last_activity_time(Time::Now()) {
+      last_activity_time(Time::SteadyNow()) {
   session_cipher = std::make_unique<crypto::SessionCipher>();
 }
 

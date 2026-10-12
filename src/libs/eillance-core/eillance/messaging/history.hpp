@@ -38,10 +38,7 @@ class MessageHistory {
     MessageStatus const initial_status =
         (params.direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::delivered;
 
-    Time::Unit ts = params.timestamp.value_or(static_cast<Time::Unit>(
-        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count()
-    ));
+    Time::Unit const ts = params.timestamp.value_or(Time::Now());
 
     uint64_t entry_id = params.id;
     if (entry_id == 0) entry_id = GenerateMessageId();
@@ -59,10 +56,7 @@ class MessageHistory {
   }
 
   auto AddCallEntry(CallEntryParams const& params) -> HistoryEntryRecord {
-    Time::Unit ts = params.timestamp.value_or(static_cast<Time::Unit>(
-        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count()
-    ));
+    Time::Unit const ts = params.timestamp.value_or(Time::Now());
 
     uint64_t entry_id = params.id;
     if (entry_id == 0) entry_id = GenerateMessageId();

@@ -316,7 +316,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         "String;II)V"
     );
     classref.RegisterCtor(env, "hela/eillance/ndkio/CallState", "(ZZZILjava/lang/String;IZZI)V");
-    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;Z)V");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/HistoryPage", "(Ljava/util/List;ZZ)V");
 
     std::string const draft_class = "hela/eillance/ndkio/DraftAttachment";
     classref.RegisterClass(env, draft_class);

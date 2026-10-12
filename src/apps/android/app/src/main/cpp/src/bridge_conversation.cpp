@@ -468,4 +468,10 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   env->ReleaseStringUTFChars(attachment_id, chars);
 }
 
+extern "C" JNIEXPORT void JNICALL
+Java_hela_eillance_viewmodels_ConversationViewModel_nativeRetrySync(JNIEnv* /*env*/, jobject /*instance*/, jlong ptr) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  vm->RetrySync();
+}
+
 // NOLINTEND(readability-identifier-naming,*-pro-type-reinterpret-cast)
