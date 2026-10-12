@@ -80,14 +80,13 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
   private var currentIceServers: List<PeerConnection.IceServer> = listOf()
 
-  var onSendSignalingMessage: ((String) -> Unit)? = null
-
   private external fun nativeOnPeerConnectionStateChange(
     nativePointer: Long,
     peerId: String,
     context: Int,
     state: Int
   )
+  private external fun nativeOnSendMediaSignalingMessage(nativePointer: Long, message: String)
 
   init {
     peerConnectionFactory = WebRtcTransport.getOrCreateFactory(context)
@@ -222,7 +221,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           put("context", "media")
           put("to", peerId)
         }
-        onSendSignalingMessage?.invoke(message.toString())
+        nativeOnSendMediaSignalingMessage(nativePointer, message.toString())
       }
     }
   }
@@ -265,7 +264,7 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
           put("context", "media")
           put("to", peerId)
         }
-        onSendSignalingMessage?.invoke(message.toString())
+        nativeOnSendMediaSignalingMessage(nativePointer, message.toString())
       }
     }
   }
