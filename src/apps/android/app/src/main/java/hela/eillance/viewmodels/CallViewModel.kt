@@ -18,12 +18,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   private val _callState = MutableStateFlow(CallState())
   val callState = _callState.asStateFlow()
 
-  private val _isMuted = MutableStateFlow(false)
-  val isMuted = _isMuted.asStateFlow()
-
-  private val _isSpeakerOn = MutableStateFlow(false)
-  val isSpeakerOn = _isSpeakerOn.asStateFlow()
-
   private val messengerService: MessengerService?
     get() = MessengerService.instance
 
@@ -81,11 +75,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun stopCallMedia() {
-    _isMuted.value = false
-    _isSpeakerOn.value = false
-    messengerService?.setSpeakerphoneOn(false)
-    // Note: Core automatically stops OS-level captures via events,
-    // but CallScreen clears manual speakerphone/mute toggles when destroyed.
+    if (nativePtr != 0L) nativeStopCallMedia(nativePtr)
   }
 
   fun setLocalVideoSink(sink: VideoSink?) {
@@ -97,15 +87,11 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   }
 
   fun toggleMute() {
-    val newMuted = !_isMuted.value
-    _isMuted.value = newMuted
-    messengerService?.setMicrophoneMute(newMuted)
+    if (nativePtr != 0L) nativeToggleMute(nativePtr)
   }
 
   fun toggleSpeaker() {
-    val newSpeaker = !_isSpeakerOn.value
-    _isSpeakerOn.value = newSpeaker
-    messengerService?.setSpeakerphoneOn(newSpeaker)
+    if (nativePtr != 0L) nativeToggleSpeaker(nativePtr)
   }
 
   // Exposed for CallService to call into C++
@@ -128,4 +114,7 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   private external fun nativeHangup(ptr: Long)
   private external fun nativeAccept(ptr: Long)
   private external fun nativeReject(ptr: Long)
+  private external fun nativeToggleMute(ptr: Long)
+  private external fun nativeToggleSpeaker(ptr: Long)
+  private external fun nativeStopCallMedia(ptr: Long)
 }

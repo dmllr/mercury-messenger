@@ -35,69 +35,58 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* chars = env->GetStringUTFChars(message, nullptr);
-  vm->SendMessage(chars, {}, static_cast<uint64_t>(reply_to_id));
+  vm->SendMessage(chars, static_cast<uint64_t>(reply_to_id));
   env->ReleaseStringUTFChars(message, chars);
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeSendMessageWithAttachments(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeAddDraftAttachment(
     JNIEnv* env,
     jobject /*instance*/,
     jlong ptr,
-    jstring message,
-    jobjectArray attachments,
-    jlong reply_to_id
+    jstring path,
+    jint type,
+    jstring mime,
+    jstring name,
+    jstring thumb
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
-  char const* msg_chars = env->GetStringUTFChars(message, nullptr);
 
-  std::vector<eillance::messaging::AttachmentRequest> atts;
-  if (attachments != nullptr) {
-    jsize const count = env->GetArrayLength(attachments);
-    auto& cls = ClassRefs::Instance().Class("hela/eillance/ndkio/AttachmentRequest");
+  char const* p = env->GetStringUTFChars(path, nullptr);
+  char const* m = env->GetStringUTFChars(mime, nullptr);
+  char const* n = env->GetStringUTFChars(name, nullptr);
+  char const* t = env->GetStringUTFChars(thumb, nullptr);
 
-    for (int i = 0; i < count; ++i) {
-      jobject obj = env->GetObjectArrayElement(attachments, i);
+  vm->AddDraftAttachment({
+    .file_path = p,
+    .type = static_cast<eillance::messaging::AttachmentType>(type),
+    .mime_type = m,
+    .file_name = n,
+    .thumbnail_base64 = t,
+    .note = ""
+  });
 
-      jstring path = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("path")));
-      jint const type = env->GetIntField(obj, cls.GetField("type"));
-      jstring thumb = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("thumbnail")));
-      jstring mime = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("mimeType")));
-      jstring note = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("note")));
-      jstring name = static_cast<jstring>(env->GetObjectField(obj, cls.GetField("fileName")));
+  env->ReleaseStringUTFChars(path, p);
+  env->ReleaseStringUTFChars(mime, m);
+  env->ReleaseStringUTFChars(name, n);
+  env->ReleaseStringUTFChars(thumb, t);
+}
 
-      char const* p = env->GetStringUTFChars(path, nullptr);
-      char const* t = thumb ? env->GetStringUTFChars(thumb, nullptr) : "";
-      char const* m = mime ? env->GetStringUTFChars(mime, nullptr) : "";
-      char const* n = note ? env->GetStringUTFChars(note, nullptr) : "";
-      char const* fn = name ? env->GetStringUTFChars(name, nullptr) : "";
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeRemoveDraftAttachment(
+    JNIEnv* /*env*/, jobject /*instance*/, jlong ptr, jint index) {
+  reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr)->RemoveDraftAttachment(index);
+}
 
-      atts.push_back(
-          {.file_path = p,
-           .type = static_cast<eillance::messaging::AttachmentType>(type),
-           .thumbnail_base64 = t,
-           .mime_type = m,
-           .note = n,
-           .file_name = fn}
-      );
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeUpdateDraftNote(
+    JNIEnv* env, jobject /*instance*/, jlong ptr, jint index, jstring note) {
+  auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
+  char const* n = env->GetStringUTFChars(note, nullptr);
+  vm->UpdateDraftNote(index, n);
+  env->ReleaseStringUTFChars(note, n);
+}
 
-      env->ReleaseStringUTFChars(path, p);
-      if (thumb != nullptr) {
-        env->ReleaseStringUTFChars(thumb, t);
-      }
-      if (mime != nullptr) {
-        env->ReleaseStringUTFChars(mime, m);
-      }
-      if (note != nullptr) {
-        env->ReleaseStringUTFChars(note, n);
-      }
-      if (name != nullptr) {
-        env->ReleaseStringUTFChars(name, fn);
-      }
-    }
-  }
-
-  vm->SendMessage(msg_chars, atts, static_cast<uint64_t>(reply_to_id));
-  env->ReleaseStringUTFChars(message, msg_chars);
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeOnMessageShown(
+    JNIEnv* /*env*/, jobject /*instance*/, jlong ptr, jlong msg_id) {
+  reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr)->OnMessageShown(static_cast<uint64_t>(msg_id));
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeDeleteMessage(

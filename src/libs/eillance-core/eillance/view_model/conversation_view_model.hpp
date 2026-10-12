@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <unordered_set>
 
 #include <ranges>
 
@@ -79,10 +80,21 @@ class ConversationViewModel {
   }
   void SendMessage(
       std::string const& content,
-      std::vector<messaging::AttachmentRequest> const& attachments,
       uint64_t reply_to_id = 0
   ) const {
-    impl_->SendMessage(content, attachments, reply_to_id);
+    impl_->SendMessage(content, reply_to_id);
+  }
+  void AddDraftAttachment(DraftAttachment const& draft) const {
+    impl_->AddDraftAttachment(draft);
+  }
+  void RemoveDraftAttachment(int index) const {
+    impl_->RemoveDraftAttachment(index);
+  }
+  void UpdateDraftNote(int index, std::string const& note) const {
+    impl_->UpdateDraftNote(index, note);
+  }
+  void OnMessageShown(uint64_t message_id) const {
+    impl_->OnMessageShown(message_id);
   }
   void DeleteMessage(uint64_t message_id) const {
     impl_->client->Messaging()->SendDeleteMessage(impl_->peer_id, message_id);
@@ -144,6 +156,9 @@ class ConversationViewModel {
     std::size_t chat_pages_loaded = 0;
     std::atomic<int> load_generation{0};
 
+    std::unordered_set<uint64_t> read_queue;
+    bool read_debounce_active = false;
+
     // Store pending status updates for attachments that might not be in history yet (race condition)
     std::unordered_map<std::string, messaging::AttachmentStatus> pending_attachment_updates;
 
@@ -161,17 +176,49 @@ class ConversationViewModel {
       return state;
     }
 
+    void AddDraftAttachment(DraftAttachment const& draft) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      state.drafts.push_back(draft);
+      EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+    }
+
+    void RemoveDraftAttachment(int index) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (index >= 0 && index < state.drafts.size()) {
+        state.drafts.erase(state.drafts.begin() + index);
+        EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+      }
+    }
+
+    void UpdateDraftNote(int index, std::string const& note) {
+      std::lock_guard<std::mutex> const lock(mutex);
+      if (index >= 0 && index < state.drafts.size()) {
+        state.drafts[index].note = note;
+        EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+      }
+    }
+
     void SendText(std::string const& content) {
-      SendMessage(content, {}, 0);
+      SendMessage(content, 0);
     }
 
     void SendMessage(
         std::string const& content,
-        std::vector<messaging::AttachmentRequest> const& attachments,
         uint64_t reply_to_id
     ) {
+      std::vector<messaging::AttachmentRequest> reqs;
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        if (content.empty() && state.drafts.empty()) return;
+        for (auto const& d : state.drafts) {
+          reqs.push_back({d.file_path, d.type, d.thumbnail_base64, d.mime_type, d.note, d.file_name});
+        }
+        state.drafts.clear();
+        EventQueue::Instance().Push(EventConversationDraftsUpdated{peer_id, state.drafts});
+      }
+
       // Access MessagingService directly since facade might not have the overload yet
-      auto entry = client->Messaging()->SendChatMessage(peer_id, content, attachments, reply_to_id);
+      auto entry = client->Messaging()->SendChatMessage(peer_id, content, reqs, reply_to_id);
 
       std::lock_guard<std::mutex> const lock(mutex);
 
@@ -364,6 +411,28 @@ class ConversationViewModel {
       }
 
       if (found) EventQueue::Instance().Push(EventConversationStateUpdated{peer_id, state});
+    }
+
+    void OnMessageShown(uint64_t message_id) {
+      if (message_id > 1000000000000000ULL) return;
+      std::lock_guard<std::mutex> const lock(mutex);
+      read_queue.insert(message_id);
+      if (!read_debounce_active) {
+        read_debounce_active = true;
+        std::thread([this, self = shared_from_this()] {
+          std::this_thread::sleep_for(std::chrono::milliseconds(250));
+          std::vector<uint64_t> ids;
+          {
+            std::lock_guard<std::mutex> const lock(mutex);
+            ids.assign(read_queue.begin(), read_queue.end());
+            read_queue.clear();
+            read_debounce_active = false;
+          }
+          if (!ids.empty()) {
+            client->MarkMessagesAsRead(peer_id, ids);
+          }
+        }).detach();
+      }
     }
 
     void OnAttachmentStatusChanged(std::string const& attachment_id, messaging::AttachmentStatus status) {

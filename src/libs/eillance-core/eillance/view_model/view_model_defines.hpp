@@ -21,6 +21,8 @@ struct CallState {
   messaging::CallDirection call_direction = messaging::CallDirection::outgoing;
   ContactID peer_id;
   messaging::HistoryEntryKind call_type = messaging::HistoryEntryKind::voiceCall;
+  bool is_muted = false;
+  bool is_speaker_on = false;
 };
 
 struct MyProfile {
@@ -63,10 +65,20 @@ struct ViewContact {
   uint64_t last_activity_timestamp = 0;
 };
 
+struct DraftAttachment {
+  std::string file_path;
+  messaging::AttachmentType type;
+  std::string mime_type;
+  std::string file_name;
+  std::string thumbnail_base64;
+  std::string note;
+};
+
 struct ConversationState {
   ContactID peer_id;
   std::deque<messaging::HistoryEntryRecord> history{};
   bool has_older_messages = false;
+  std::vector<DraftAttachment> drafts{};
 };
 
 struct SettingsState {
@@ -79,6 +91,7 @@ struct SettingsState {
   std::optional<std::string> custom_turn_pass;
   bool play_sound_on_send = true;
   bool play_sound_on_receive = true;
+  bool show_notification_content = true;
 };
 
 // --- ViewModel Events ---
@@ -88,6 +101,10 @@ struct EventContactsStateUpdated {
 struct EventConversationStateUpdated {
   ContactID peer_id;
   ConversationState state;
+};
+struct EventConversationDraftsUpdated {
+  ContactID peer_id;
+  std::vector<DraftAttachment> drafts;
 };
 struct EventTransferProgressUpdated {
   ContactID peer_id;

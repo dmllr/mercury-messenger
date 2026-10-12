@@ -25,6 +25,7 @@ import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.Reaction
+import hela.eillance.ndkio.DraftAttachment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,15 +38,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.security.MessageDigest
-
-data class DraftAttachment(
-  val uri: Uri,
-  val type: AttachmentType,
-  val mimeType: String,
-  val name: String, // Original filename
-  val bitmap: Bitmap? = null,
-  var note: String = ""
-)
 
 class ConversationViewModel(
   application: Application,
@@ -68,35 +60,8 @@ class ConversationViewModel(
   private val _searchResults = MutableStateFlow<List<HistoryEntry>>(emptyList())
   val searchResults = _searchResults.asStateFlow()
 
-  private val readQueue = mutableSetOf<Long>()
-  private var readDebounceJob: Job? = null
-
-  /**
-   * Called when a message is rendered on screen.
-   * Skip memory-only IDs (fake IDs generated for ephemeral system messages).
-   */
   fun onMessageShown(messageId: Long) {
-    // Memory-only IDs are high values (>= 10^18) or negative when interpreted as Long.
-    // Real DB IDs are positive sequential integers.
-    if (messageId !in 0..1_000_000_000_000_000L) return
-
-    synchronized(readQueue) {
-      readQueue.add(messageId)
-    }
-
-    if (readDebounceJob?.isActive != true) {
-      readDebounceJob = viewModelScope.launch(Dispatchers.IO) {
-        delay(250)
-        val ids = synchronized(readQueue) {
-          val ids = readQueue.toList()
-          readQueue.clear()
-          ids
-        }
-        if (ids.isNotEmpty()) {
-          markMessagesAsRead(ids)
-        }
-      }
-    }
+    if (nativePtr != 0L) nativeOnMessageShown(nativePtr, messageId)
   }
 
   init {
@@ -106,6 +71,13 @@ class ConversationViewModel(
       NativeEventBus.historyUpdates.collect { (pid, page) ->
         if (pid == peerId) {
           onHistoryUpdated(page)
+        }
+      }
+    }
+    viewModelScope.launch {
+      NativeEventBus.draftsUpdates.collect { (pid, drafts) ->
+        if (pid == peerId) {
+          _draftAttachments.value = drafts
         }
       }
     }
@@ -164,7 +136,6 @@ class ConversationViewModel(
     viewModelScope.launch(Dispatchers.IO) {
       val context = getApplication<Application>()
       val cr = context.contentResolver
-      val currentList = _draftAttachments.value.toMutableList()
 
       for (uri in uris) {
         try {
@@ -177,50 +148,45 @@ class ConversationViewModel(
           }
 
           val name = queryFileName(cr, uri) ?: "file_${System.currentTimeMillis()}"
+          val tempFile = File(context.cacheDir, name)
 
-          val preview = if (type == AttachmentType.Image) {
-            try {
-              val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-              val streamCheck = cr.openInputStream(uri)
-              BitmapFactory.decodeStream(streamCheck, null, options)
-              streamCheck?.close()
-
-              options.inSampleSize = calculateInSampleSize(options, 200, 200)
-              options.inJustDecodeBounds = false
-              val streamDecode = cr.openInputStream(uri)
-              val bmp = BitmapFactory.decodeStream(streamDecode, null, options)
-              streamDecode?.close()
-              bmp
-            } catch (_: Exception) {
-              null
+          cr.openInputStream(uri)?.use { input ->
+            tempFile.outputStream().use { output ->
+              input.copyTo(output)
             }
-          } else null
+          }
 
-          currentList.add(DraftAttachment(uri, type, mimeTypeRaw, name, preview))
+          val thumbBase64 = if (type == AttachmentType.Image || type == AttachmentType.Video) {
+            try {
+              val bmp = generateThumbnail(cr, uri, tempFile, type)
+              if (bmp != null) {
+                val outputStream = ByteArrayOutputStream()
+                bmp.compress(Bitmap.CompressFormat.JPEG, 60, outputStream)
+                val bytes = outputStream.toByteArray()
+                Base64.encodeToString(bytes, Base64.NO_WRAP)
+              } else ""
+            } catch (_: Exception) {
+              ""
+            }
+          } else ""
+
+          if (nativePtr != 0L) {
+            nativeAddDraftAttachment(nativePtr, tempFile.absolutePath, type.value, mimeTypeRaw, name, thumbBase64)
+          }
         } catch (e: Exception) {
           Log.e("ConversationVM", "Failed to add draft $uri", e)
         }
       }
-      _draftAttachments.value = currentList
     }
   }
 
   fun removeDraft(index: Int) {
-    val current = _draftAttachments.value.toMutableList()
-    if (index in current.indices) {
-      current.removeAt(index)
-      _draftAttachments.value = current
-    }
+    if (nativePtr != 0L) nativeRemoveDraftAttachment(nativePtr, index)
   }
 
   fun updateDraftNote(index: Int, note: String) {
-    val current = _draftAttachments.value.toMutableList()
-    if (index in current.indices) {
-      val draft = current[index]
-      val truncated = if (note.length > 120) note.substring(0, 120) else note
-      current[index] = draft.copy(note = truncated)
-      _draftAttachments.value = current
-    }
+    val truncated = if (note.length > 120) note.substring(0, 120) else note
+    if (nativePtr != 0L) nativeUpdateDraftNote(nativePtr, index, truncated)
   }
 
   private fun queryFileName(resolver: ContentResolver, uri: Uri): String? {
@@ -297,73 +263,8 @@ class ConversationViewModel(
     val rId = replyToId ?: 0L
     if (messageText.isBlank() && drafts.isEmpty()) return
 
-    if (drafts.isEmpty()) {
-      if (nativePtr != 0L) {
-        nativeSendMessage(nativePtr, messageText, rId)
-      }
-      _messageText.value = ""
-    } else {
-      processAndSend(messageText, drafts, rId)
-    }
-  }
-
-  private fun processAndSend(text: String, drafts: List<DraftAttachment>, replyToId: Long) {
-    _draftAttachments.value = emptyList()
+    if (nativePtr != 0L) nativeSendMessage(nativePtr, messageText, rId)
     _messageText.value = ""
-
-    viewModelScope.launch(Dispatchers.IO) {
-      val attachmentRequests = mutableListOf<AttachmentRequest>()
-      val context = getApplication<Application>()
-
-      // Use persistent attachments directory
-      val attachmentsDir = File(context.filesDir, "attachments")
-      if (!attachmentsDir.exists()) attachmentsDir.mkdirs()
-
-      for (draft in drafts) {
-        try {
-          val destFile =
-            resolveUniqueFile(attachmentsDir, draft.name, context.contentResolver, draft.uri)
-
-          // Only copy if we aren't reusing an existing file
-          if (!destFile.exists() || destFile.length() == 0L) {
-            context.contentResolver.openInputStream(draft.uri)?.use { input ->
-              FileOutputStream(destFile).use { output ->
-                input.copyTo(output)
-              }
-            } ?: throw Exception("Failed to open input stream for ${draft.uri}")
-          }
-
-          val thumbnailBase64 = try {
-            val bitmap = generateThumbnail(context.contentResolver, draft.uri, destFile, draft.type)
-            if (bitmap != null) {
-              val outputStream = ByteArrayOutputStream()
-              bitmap.compress(Bitmap.CompressFormat.JPEG, 60, outputStream)
-              val bytes = outputStream.toByteArray()
-              Base64.encodeToString(bytes, Base64.NO_WRAP)
-            } else ""
-          } catch (_: Exception) {
-            ""
-          }
-
-          val request = AttachmentRequest(
-            path = destFile.absolutePath,
-            type = draft.type.value,
-            thumbnail = thumbnailBase64,
-            mimeType = draft.mimeType,
-            note = draft.note,
-            fileName = draft.name // Pass the original filename to be sent in protocol
-          )
-          attachmentRequests.add(request)
-
-        } catch (e: Exception) {
-          Log.e("ConversationVM", "Failed to process attachment draft", e)
-        }
-      }
-
-      if (nativePtr != 0L) {
-        nativeSendMessageWithAttachments(nativePtr, text, attachmentRequests.toTypedArray(), replyToId)
-      }
-    }
   }
 
   fun deleteMessage(messageId: Long) {
@@ -492,12 +393,11 @@ class ConversationViewModel(
   private external fun nativeCreate(peerId: String): Long
   private external fun nativeDestroy(ptr: Long)
   private external fun nativeSendMessage(ptr: Long, message: String, replyToId: Long)
-  private external fun nativeSendMessageWithAttachments(
-    ptr: Long,
-    message: String,
-    attachments: Array<AttachmentRequest>,
-    replyToId: Long
-  )
+
+  private external fun nativeAddDraftAttachment(ptr: Long, path: String, type: Int, mime: String, name: String, thumb: String)
+  private external fun nativeRemoveDraftAttachment(ptr: Long, index: Int)
+  private external fun nativeUpdateDraftNote(ptr: Long, index: Int, note: String)
+  private external fun nativeOnMessageShown(ptr: Long, messageId: Long)
 
   private external fun nativeDeleteMessage(ptr: Long, messageId: Long)
   private external fun nativeEditMessage(ptr: Long, messageId: Long, content: String)

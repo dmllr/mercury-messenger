@@ -136,6 +136,15 @@ data class HistoryEntry(
   val replyToId: Long? get() = if (replyToIdValue == 0L) null else replyToIdValue
 }
 
+data class DraftAttachment(
+  val path: String,
+  val typeValue: Int,
+  val mimeType: String,
+  val name: String,
+  val thumbnailBase64: String,
+  val note: String
+) { val type: AttachmentType get() = AttachmentType.fromInt(typeValue) }
+
 data class HistoryPage(
   val messages: List<HistoryEntry> = emptyList(),
   val hasOlderMessages: Boolean = false
@@ -172,7 +181,9 @@ data class CallState(
   val isRinging: Boolean = false,
   private val callDirectionValue: Int = CallDirection.Outgoing.value,
   val peerId: String = "",
-  private val callTypeValue: Int = HistoryEntryKind.VoiceCall.value
+  private val callTypeValue: Int = HistoryEntryKind.VoiceCall.value,
+  val isMuted: Boolean = false,
+  val isSpeakerOn: Boolean = false
 ) {
   val callDirection: CallDirection get() = CallDirection.fromInt(callDirectionValue)
   val callType: HistoryEntryKind get() = HistoryEntryKind.fromInt(callTypeValue)
