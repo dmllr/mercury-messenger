@@ -182,8 +182,8 @@ class SyncEngine {
         for (auto const& e : my_entries) {
           auto encrypted = peer->session_cipher->Encrypt(e.payload);
           size_t const entry_size = encrypted.size() + 200;
-          if (current_payload_size + entry_size > 16000 && !entries_json.empty()) {
-            break;  // Keep payload under 16KB to prevent hitting relay data limits
+          if (current_payload_size + entry_size > 1000000 && !entries_json.empty()) {
+            break;  // Keep payload under 1MB to prevent hitting relay data limits
           }
           current_payload_size += entry_size;
           entries_json.push_back(
@@ -309,8 +309,8 @@ class SyncEngine {
           for (auto const& e : my_entries) {
             auto encrypted = peer->session_cipher->Encrypt(e.payload);
             size_t const entry_size = encrypted.size() + 200;
-            if (current_payload_size + entry_size > 16000 && !entries_json.empty()) {
-              break;  // Keep payload under 16KB to prevent hitting relay data limits
+            if (current_payload_size + entry_size > 1000000 && !entries_json.empty()) {
+              break;  // Keep payload under 1MB to prevent hitting relay data limits
             }
             current_payload_size += entry_size;
             entries_json.push_back(
