@@ -22,6 +22,7 @@
 #include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
+#include "eillance/transport/libp2p_node.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 #include "eillance/utils/watchdog.hpp"
@@ -208,6 +209,11 @@ class Client final {
     if (auto const url = sm_->account->GetSettings()->GetSignalingServerUrl()) {
       sm_->data_transport->SetSignalingUrl(*url);
     }
+
+    if (!sm_->p2p_node) {
+      sm_->p2p_node = std::make_shared<transport::Libp2pNode>(sm_->account->GetPrivateKey());
+    }
+    sm_->p2p_node->Start();
     sm_->data_transport->SetId(sm_->account->GetId());
     sm_->data_transport->Start();
     sm_->sync_engine->Start();
@@ -219,6 +225,10 @@ class Client final {
     is_running_ = false;
     StopWatchdog();
     background_queue_.RemovePending();
+
+    if (sm_->p2p_node) {
+      sm_->p2p_node->Stop();
+    }
     sm_->sync_engine->Stop();
 
     auto peers = sm_->data_transport->GetPeers();

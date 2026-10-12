@@ -180,6 +180,19 @@ class Identity {
     return pub_key;
   }
 
+  [[nodiscard]] auto GetPrivateKey() const -> std::vector<std::byte> {
+    size_t length = 0;
+    if (EVP_PKEY_get_raw_private_key(pkey_.get(), nullptr, &length) <= 0 || length == 0) {
+      return {};
+    }
+    std::vector<std::byte> priv_key(length);
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    if (EVP_PKEY_get_raw_private_key(pkey_.get(), reinterpret_cast<unsigned char*>(priv_key.data()), &length) <= 0) {
+      return {};
+    }
+    return priv_key;
+  }
+
   [[nodiscard]] auto Sign(std::span<std::byte const> message) -> std::vector<std::byte> {
     EvpMdCtxPtr const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {

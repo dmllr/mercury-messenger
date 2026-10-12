@@ -24,9 +24,3 @@ target_link_libraries(eillance-core PUBLIC
 if(ANDROID)
   target_link_libraries(eillance-core PUBLIC log)
 endif()
-
-if(UNIX AND NOT APPLE AND NOT ANDROID)
-  target_link_libraries(eillance-core PUBLIC pthread dl m)
-elseif(WIN32)
-  target_link_libraries(eillance-core PUBLIC ws2_32 userenv bcrypt ntdll)
-endif()

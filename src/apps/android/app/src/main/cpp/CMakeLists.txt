@@ -19,5 +19,6 @@ add_subdirectory("${REPO_ROOT}/src/libs/eillance-logging" "${CMAKE_CURRENT_BINAR
 add_subdirectory("${REPO_ROOT}/src/libs/eillance-utils" "${CMAKE_CURRENT_BINARY_DIR}/eillance-utils")
 add_subdirectory("${REPO_ROOT}/src/libs/eillance-crypto" "${CMAKE_CURRENT_BINARY_DIR}/eillance-crypto")
 add_subdirectory("${REPO_ROOT}/src/libs/eillance-storage-sqlite" "${CMAKE_CURRENT_BINARY_DIR}/eillance-storage-sqlite")
+add_subdirectory("${REPO_ROOT}/src/libs/eillance-libp2p" "${CMAKE_CURRENT_BINARY_DIR}/eillance-libp2p")
 add_subdirectory("${REPO_ROOT}/src/libs/eillance-core" "${CMAKE_CURRENT_BINARY_DIR}/eillance-core")
 add_subdirectory("src")

@@ -10,6 +10,7 @@ class PersistentStorage;
 namespace transport {
 class DataTransport;
 class MediaTransport;
+class Libp2pNode;
 }  // namespace transport
 namespace identity {
 class ContactManager;
@@ -34,6 +35,7 @@ struct ServiceManager {
   std::shared_ptr<storage::PersistentStorage> storage;
   std::shared_ptr<transport::DataTransport> data_transport;
   std::shared_ptr<transport::MediaTransport> media_transport;
+  std::shared_ptr<transport::Libp2pNode> p2p_node;
   std::shared_ptr<identity::ContactManager> contact_manager;
 
   std::shared_ptr<AccountService> account;
