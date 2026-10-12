@@ -11,7 +11,7 @@
 namespace eillance::transport {
 
 class MockTrack : public ITrack {
-public:
+ public:
   std::vector<std::vector<std::byte>> samples;
   void SendSample(std::vector<std::byte> const& sample, uint64_t /*sample_time*/) override {
     samples.push_back(sample);
@@ -21,7 +21,7 @@ public:
 class MockMediaTransport : public MediaTransport::Interface {
   std::shared_ptr<MockCallLog> log_;
 
-public:
+ public:
   explicit MockMediaTransport(std::shared_ptr<MockCallLog> log)
       : log_(std::move(log)) {
   }

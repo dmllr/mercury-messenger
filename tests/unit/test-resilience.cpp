@@ -229,7 +229,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   // Convert JSON to bytes for binary-capable handler
   nlohmann::json clean_msg = chat_msg;
   clean_msg["payload"] = nlohmann::json::array();
-  for(auto b : encrypted) {
+  for (auto b : encrypted) {
     clean_msg["payload"].push_back(static_cast<uint8_t>(b));
   }
   std::string msg_str = clean_msg.dump();

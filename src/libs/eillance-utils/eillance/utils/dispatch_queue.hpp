@@ -56,7 +56,9 @@ class DispatchQueue {
   }
 
   void Dispatch(FpT const& operation) {
-    if (shutdownRequested_ || !operation) return;
+    if (shutdownRequested_ || !operation) {
+      return;
+    }
     {
       auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
@@ -66,7 +68,9 @@ class DispatchQueue {
   }
 
   void Dispatch(FpT&& operation) {
-    if (shutdownRequested_ || !operation) return;
+    if (shutdownRequested_ || !operation) {
+      return;
+    }
     {
       auto const now = std::chrono::steady_clock::now();
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
@@ -76,7 +80,9 @@ class DispatchQueue {
   }
 
   void DispatchAfter(std::chrono::milliseconds const delay, FpT const&& operation) {
-    if (shutdownRequested_ || !operation) return;
+    if (shutdownRequested_ || !operation) {
+      return;
+    }
     {
       auto const scheduled_time = std::chrono::steady_clock::now() + delay;
       std::unique_lock<std::mutex> const lock(queueAccessMutex_);
@@ -114,7 +120,7 @@ class DispatchQueue {
       lock.lock();
 
       if (queue_.empty()) {
-        condition_.wait(lock, [this] { return shutdownRequested_ || !queue_.empty(); });
+        condition_.wait(lock, [this]() -> bool { return shutdownRequested_ || !queue_.empty(); });
         if (queue_.empty()) {
           lock.unlock();
           continue;
@@ -122,11 +128,10 @@ class DispatchQueue {
       }
 
       auto now = std::chrono::steady_clock::now();
-      // Safe copy of the top element's execution time to avoid invalidating reference if queue changes
-      auto next_execute_time = queue_.top().execute_time;
 
-      if (next_execute_time > now) {
-        condition_.wait_until(lock, next_execute_time, [this, next_execute_time] {
+      // Safe copy of the top element's execution time to avoid invalidating reference if queue changes
+      if (auto next_execute_time = queue_.top().execute_time; next_execute_time > now) {
+        condition_.wait_until(lock, next_execute_time, [this, next_execute_time]() -> bool {
           if (shutdownRequested_) {
             return true;
           }

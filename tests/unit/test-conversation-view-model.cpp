@@ -365,9 +365,15 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
   }
 
   // Send
-  std::vector<messaging::AttachmentRequest> atts;
-  atts.push_back({temp_path.string(), messaging::AttachmentType::file, "", "application/octet-stream"});
-  vm_->SendMessage("Small File", atts);
+  vm_->AddDraftAttachment(
+      {.file_path = temp_path.string(),
+       .type = messaging::AttachmentType::file,
+       .mime_type = "application/octet-stream",
+       .file_name = "",
+       .thumbnail_base64 = "",
+       .note = ""}
+  );
+  vm_->SendMessage("Small File");
 
   // Wait for Done status
   bool success = false;
@@ -598,7 +604,7 @@ TEST_F(ConversationViewModelTest, SendReply) {
   auto observer = std::make_shared<MockConversationObserver>(peer1);
   WaitFor([&] { return observer->updated; });
 
-  vm_->SendMessage("Reply", {}, 12345);
+  vm_->SendMessage("Reply", 12345);
 
   WaitFor([&] {
     auto s = observer->GetState();
