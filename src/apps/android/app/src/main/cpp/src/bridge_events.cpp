@@ -360,8 +360,8 @@ void InitEventBridge(JavaVM* jvm) {
 
   // Setup explicitly requested notification triggers
   g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventNotifyNewMessage>([jvm](auto const& e) -> void {
-    jni::ScopedJniEnv env_scope(jvm);
-    auto* env = env_scope.Get());
+    jni::ScopedJniEnv const env_scope(jvm);
+    auto* env = env_scope.Get();
     if (env == nullptr) {
       return;
     }
