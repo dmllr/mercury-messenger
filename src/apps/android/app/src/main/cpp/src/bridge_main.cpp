@@ -130,6 +130,12 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRese
   if (g_clientEngine) g_clientEngine->GetClient()->ResetIgnoredPermissions();
 }
 
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeSetTurnEligibility(JNIEnv*, jobject, jboolean eligible) {
+  if (g_clientEngine) {
+    eillance::EventQueue::Instance().Push(eillance::EventTurnEligibilityChanged{eligible != 0U});
+  }
+}
+
 // NOLINTEND(readability-identifier-naming)
 
 jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {

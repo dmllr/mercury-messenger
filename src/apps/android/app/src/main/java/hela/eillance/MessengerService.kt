@@ -1,9 +1,15 @@
 package hela.eillance
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -59,6 +65,18 @@ class MessengerService : Service() {
 
   var isIncomingUIVisible: Boolean = false
 
+  private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+    override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+      checkTurnEligibility()
+    }
+  }
+
+  private val powerReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      checkTurnEligibility()
+    }
+  }
+
   override fun onBind(intent: Intent?): IBinder = binder
 
   override fun onCreate() {
@@ -71,6 +89,15 @@ class MessengerService : Service() {
 
     callHandler.init()
     telecomIntegration.registerPhoneAccount()
+
+    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    cm.registerDefaultNetworkCallback(networkCallback)
+    val filter = IntentFilter().apply {
+      addAction(Intent.ACTION_POWER_CONNECTED)
+      addAction(Intent.ACTION_POWER_DISCONNECTED)
+    }
+    registerReceiver(powerReceiver, filter)
+    checkTurnEligibility()
 
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
@@ -90,6 +117,20 @@ class MessengerService : Service() {
     }
 
     startForegroundService()
+  }
+
+  private fun checkTurnEligibility() {
+    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val activeNetwork = cm.activeNetwork
+    val caps = cm.getNetworkCapabilities(activeNetwork)
+    val isUnmetered = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+    
+    val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    val plugged = batteryIntent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+    val isCharging = plugged == BatteryManager.BATTERY_PLUGGED_AC || plugged == BatteryManager.BATTERY_PLUGGED_USB || plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
+    
+    val eligible = isUnmetered && isCharging
+    nativeSetTurnEligibility(eligible)
   }
 
   private fun setupEventBusObservers() {
@@ -207,6 +248,11 @@ class MessengerService : Service() {
     instance = null
     _isEngineReady.value = false
     callHandler.stop()
+
+    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    cm.unregisterNetworkCallback(networkCallback)
+    unregisterReceiver(powerReceiver)
+
     serviceScope.launch(Dispatchers.IO) {
       engineMutex.withLock {
         terminate()
@@ -298,6 +344,7 @@ class MessengerService : Service() {
   external fun nativeIgnoreBattery()
   external fun nativeIgnoreCalls()
   external fun nativeResetIgnoredPermissions()
+  external fun nativeSetTurnEligibility(eligible: Boolean)
 
   companion object {
     var instance: MessengerService? = null

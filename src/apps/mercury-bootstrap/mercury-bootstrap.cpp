@@ -71,6 +71,7 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   eillance::transport::Libp2pNode const node(secret_key, eillance::transport::NodeRole::bootstrapNode);
+  node.SetTurnEligibility(true);
   node.Start();
 
   // Listen on the specified port.

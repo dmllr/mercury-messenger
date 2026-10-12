@@ -1,5 +1,5 @@
 use crate::behaviour::{MercuryBehaviour, MercuryBehaviourEvent};
-use crate::types::{Callbacks, Command};
+use crate::types::{Callbacks, Command, NodeRole};
 use crate::utils::{hex_encode, notify_connected, notify_disconnected, peerid_to_pubkey, resolve_multiaddr};
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, request_response, swarm::SwarmEvent};
@@ -19,10 +19,13 @@ pub struct EventLoopState {
   pub turn_auth: std::sync::Arc<crate::turn_server::TurnAuthenticator>,
   pub turn_port: Option<u16>,
   pub public_ip: Option<String>,
+  pub is_turn_eligible: bool,
+  pub is_public: bool,
+  pub turn_server_handle: Option<crate::turn_server::TurnServerHandle>,
 }
 
 impl EventLoopState {
-  pub fn new() -> Self {
+  pub fn new(role: NodeRole) -> Self {
     Self {
       pending_dials: HashSet::new(),
       known_addresses: HashMap::new(),
@@ -33,6 +36,9 @@ impl EventLoopState {
       turn_auth: std::sync::Arc::new(crate::turn_server::TurnAuthenticator::new()),
       turn_port: None,
       public_ip: None,
+      is_turn_eligible: matches!(role, NodeRole::BootstrapNode | NodeRole::DesktopClient | NodeRole::Bot),
+      is_public: false,
+      turn_server_handle: None,
     }
   }
 
@@ -94,8 +100,9 @@ pub async fn run_event_loop(
   mut rx: mpsc::UnboundedReceiver<Command>,
   tx: mpsc::UnboundedSender<Command>,
   callbacks: Callbacks,
+  role: NodeRole,
 ) {
-  let mut state = EventLoopState::new();
+  let mut state = EventLoopState::new(role);
   let mut keepalive_interval = tokio::time::interval(Duration::from_secs(30));
 
   loop {
@@ -110,7 +117,7 @@ pub async fn run_event_loop(
             }
         }
         event = swarm.select_next_some() => {
-            handle_swarm_event(event, &mut state, &mut swarm, &tx, &callbacks);
+            handle_swarm_event(event, &mut state, &mut swarm, &tx, &callbacks, role);
         }
     }
   }
@@ -162,6 +169,27 @@ fn handle_keepalive(state: &mut EventLoopState, swarm: &mut Swarm<MercuryBehavio
       Err(e) => {
         node_log!(callbacks, 2, "Failed to re-listen on relay: {:?}", e);
       }
+    }
+  }
+}
+
+fn try_start_turn_server(state: &mut EventLoopState, tx: &mpsc::UnboundedSender<Command>, callbacks: &Callbacks) {
+  if state.is_turn_eligible && state.is_public && state.turn_port.is_none() {
+    if let Some(public_ip) = state.public_ip.clone() {
+      let turn_auth = state.turn_auth.clone();
+      let tx_clone = tx.clone();
+      let callbacks_clone = callbacks.clone();
+
+      tokio::spawn(async move {
+        match crate::turn_server::start_turn_server(public_ip.clone(), turn_auth).await {
+          Ok((port, handle)) => {
+            let _ = tx_clone.send(Command::TurnServerStarted { port, public_ip, handle });
+          }
+          Err(e) => {
+            node_log!(&callbacks_clone, 2, "Failed to start embedded TURN server: {}", e);
+          }
+        }
+      });
     }
   }
 }
@@ -229,9 +257,10 @@ fn handle_command(
       let _ = swarm.disconnect_peer_id(peer_id);
       state.pending_dials.remove(&peer_id);
     }
-    Command::TurnServerStarted { port, public_ip } => {
+    Command::TurnServerStarted { port, public_ip, handle } => {
       state.turn_port = Some(port);
       state.public_ip = Some(public_ip);
+      state.turn_server_handle = Some(handle);
 
       let record_key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
       if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(record_key) {
@@ -250,6 +279,18 @@ fn handle_command(
       let _ = swarm.behaviour_mut().turn_auth.send_request(&peer_id, req);
       node_log!(callbacks, 4, "Authenticating TURN relay {}...", peer_id);
     }
+    Command::SetTurnEligibility(eligible) => {
+      state.is_turn_eligible = eligible;
+      if eligible {
+        try_start_turn_server(state, tx, callbacks);
+      } else {
+        if let Some(handle) = state.turn_server_handle.take() {
+          let _ = handle.close_tx.send(());
+        }
+        state.turn_port = None;
+        swarm.behaviour_mut().kademlia.stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
+      }
+    }
     _ => {}
   }
 }
@@ -260,6 +301,7 @@ fn handle_swarm_event(
   swarm: &mut Swarm<MercuryBehaviour>,
   tx: &mpsc::UnboundedSender<Command>,
   callbacks: &Callbacks,
+  role: NodeRole,
 ) {
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
@@ -406,6 +448,23 @@ fn handle_swarm_event(
     }
     SwarmEvent::ExternalAddrConfirmed { address } => {
       node_log!(callbacks, 3, "External address confirmed: {}", address);
+      if state.public_ip.is_none() {
+        let mut public_ip = String::new();
+        for protocol in address.iter() {
+          match protocol {
+            libp2p::multiaddr::Protocol::Ip4(ip) => public_ip = ip.to_string(),
+            libp2p::multiaddr::Protocol::Ip6(ip) => public_ip = ip.to_string(),
+            _ => {}
+          }
+        }
+        if !public_ip.is_empty() {
+          state.public_ip = Some(public_ip);
+          if matches!(role, NodeRole::BootstrapNode) {
+            state.is_public = true;
+            try_start_turn_server(state, tx, callbacks);
+          }
+        }
+      }
     }
     SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
       node_log!(callbacks, 4, "NewExternalAddrOfPeer for {}: {}", peer_id, address);
@@ -487,21 +546,22 @@ fn handle_swarm_event(
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
       result: kad::QueryResult::GetProviders(res),
-      step,
       ..
     })) => {
-      if let Ok(ok) = res {
-        if step.last && callbacks.on_turn_relays_discovered != 0 {
+      if let Ok(kad::GetProvidersOk::FoundProviders { providers, .. }) = res {
+        if callbacks.on_turn_relays_discovered != 0 {
           let mut providers_hex = Vec::new();
-          for peer in ok.providers {
+          for peer in providers {
             if let Some(pk) = peerid_to_pubkey(&peer) {
               providers_hex.push(crate::utils::hex_encode(&pk));
             }
           }
-          let joined = providers_hex.join(",");
-          let cb: extern "C" fn(*mut c_void, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
-          if let Ok(c_str) = CString::new(joined) {
-            cb(callbacks.context as *mut c_void, c_str.as_ptr());
+          if !providers_hex.is_empty() {
+            let joined = providers_hex.join(",");
+            let cb: extern "C" fn(*mut c_void, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
+            if let Ok(c_str) = CString::new(joined) {
+              cb(callbacks.context as *mut c_void, c_str.as_ptr());
+            }
           }
         }
       }
@@ -581,6 +641,7 @@ fn handle_swarm_event(
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(autonat::Event::StatusChanged { old, new })) => {
       node_log!(callbacks, 3, "AutoNAT status changed: {:?} -> {:?}", old, new);
       if let autonat::NatStatus::Public(addr) = new {
+        state.is_public = true;
         if state.turn_port.is_none() {
           let mut public_ip = String::new();
           for protocol in addr.iter() {
@@ -591,22 +652,17 @@ fn handle_swarm_event(
             }
           }
           if !public_ip.is_empty() {
-            let turn_auth = state.turn_auth.clone();
-            let tx_clone = tx.clone();
-            let callbacks_clone = callbacks.clone();
-
-            tokio::spawn(async move {
-              match crate::turn_server::start_turn_server(public_ip.clone(), turn_auth).await {
-                Ok(port) => {
-                  let _ = tx_clone.send(Command::TurnServerStarted { port, public_ip });
-                }
-                Err(e) => {
-                  node_log!(&callbacks_clone, 2, "Failed to start embedded TURN server: {}", e);
-                }
-              }
-            });
+            state.public_ip = Some(public_ip);
           }
+          try_start_turn_server(state, tx, callbacks);
         }
+      } else {
+        state.is_public = false;
+        if let Some(handle) = state.turn_server_handle.take() {
+          let _ = handle.close_tx.send(());
+        }
+        state.turn_port = None;
+        swarm.behaviour_mut().kademlia.stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::Message { peer, message })) => {

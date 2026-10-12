@@ -53,6 +53,7 @@ class DataTransport {
 
     virtual void DiscoverTurnRelays() = 0;
     virtual void AuthTurnRelay(ContactID const& peer_id) = 0;
+    virtual void SetTurnEligibility(bool eligible) = 0;
   };
 
   template <typename T>
@@ -128,6 +129,9 @@ class DataTransport {
   }
   void AuthTurnRelay(ContactID const& peer_id) const {
     self_->AuthTurnRelay(peer_id);
+  }
+  void SetTurnEligibility(bool eligible) const {
+    self_->SetTurnEligibility(eligible);
   }
 
  private:
