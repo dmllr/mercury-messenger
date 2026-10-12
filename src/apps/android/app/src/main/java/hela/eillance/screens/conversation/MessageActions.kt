@@ -161,18 +161,30 @@ fun MessageActionMenu(
         if (isFromMe && peerStatuses.isNotEmpty()) {
           HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
           Column(modifier = Modifier.padding(vertical = 4.dp)) {
-            Text(stringResource(R.string.message_read_by), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Text(
+              stringResource(R.string.message_read_by),
+              style = MaterialTheme.typography.labelSmall,
+              modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
             peerStatuses.forEach { ps ->
               val name = resolveContactName(ps.peerId)
-              val icon = when(ps.status) {
+              val icon = when (ps.status) {
                 hela.eillance.ndkio.MessageStatus.Read -> Icons.Filled.DoneAll
                 hela.eillance.ndkio.MessageStatus.Delivered -> Icons.Filled.Done
                 else -> Icons.Filled.Schedule
               }
-              val tint = if (ps.status == hela.eillance.ndkio.MessageStatus.Read) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.onSurfaceVariant
+              val tint =
+                if (ps.status == hela.eillance.ndkio.MessageStatus.Read) MaterialTheme.extendedColors.success else MaterialTheme.colorScheme.onSurfaceVariant
               ListItem(
                 headlineContent = { Text(name, style = MaterialTheme.typography.bodyMedium) },
-                trailingContent = { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp)) },
+                trailingContent = {
+                  Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(16.dp)
+                  )
+                },
                 modifier = Modifier.height(36.dp),
                 colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent)
               )

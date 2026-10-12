@@ -227,13 +227,24 @@ class ContactsViewModel {
         }
 
         for (auto const& group : client->GetGroups()) {
+          transport::PeerConnectionState group_state = transport::PeerConnectionState::disconnected;
+          for (auto const& m : group.members) {
+            if (m.contact_id == client->GetId()) continue;
+            auto s = client->GetPeerConnectionState(m.contact_id);
+            if (s == transport::PeerConnectionState::connected) {
+              group_state = transport::PeerConnectionState::connected;
+              break;
+            } else if (s == transport::PeerConnectionState::connecting) {
+              group_state = transport::PeerConnectionState::connecting;
+            }
+          }
           temp_contacts.push_back(
               {.topic_id = TopicID(group.id),
                .display_name = group.name,
                .bio = "Group Chat",
                .photo = std::nullopt,
                .status = identity::ContactStatus::confirmed,
-               .connection_state = transport::PeerConnectionState::disconnected,
+               .connection_state = group_state,
                .unread_count = 0,
                .last_message = std::nullopt,
                .last_activity_timestamp = 0,
@@ -246,12 +257,32 @@ class ContactsViewModel {
         }
 
         for (auto const& channel : client->GetChannels()) {
+          transport::PeerConnectionState channel_state = transport::PeerConnectionState::disconnected;
           bool is_read_only = (channel.owner_id != client->GetId());
           if (is_read_only) {
             for (auto const& m : channel.members) {
               if (m.contact_id == client->GetId() && m.role == 1) {
                 is_read_only = false;
+              }
+              if (m.contact_id == client->GetId()) continue;
+              auto s = client->GetPeerConnectionState(m.contact_id);
+              if (s == transport::PeerConnectionState::connected) {
+                channel_state = transport::PeerConnectionState::connected;
+              } else if (s == transport::PeerConnectionState::connecting &&
+                         channel_state != transport::PeerConnectionState::connected) {
+                channel_state = transport::PeerConnectionState::connecting;
+              }
+            }
+          } else {
+            // owner can check state of subscribers
+            for (auto const& m : channel.members) {
+              if (m.contact_id == client->GetId()) continue;
+              auto s = client->GetPeerConnectionState(m.contact_id);
+              if (s == transport::PeerConnectionState::connected) {
+                channel_state = transport::PeerConnectionState::connected;
                 break;
+              } else if (s == transport::PeerConnectionState::connecting) {
+                channel_state = transport::PeerConnectionState::connecting;
               }
             }
           }
@@ -261,7 +292,7 @@ class ContactsViewModel {
                .bio = "Channel",
                .photo = std::nullopt,
                .status = identity::ContactStatus::confirmed,
-               .connection_state = transport::PeerConnectionState::disconnected,
+               .connection_state = channel_state,
                .unread_count = 0,
                .last_message = std::nullopt,
                .last_activity_timestamp = 0,
@@ -306,26 +337,7 @@ class ContactsViewModel {
     }
 
     void UpdateContactConnectionState(ContactID const& peer_id, transport::PeerConnectionState state) {
-      std::vector<ViewContact> notify_copy;
-      bool changed = false;
-      {
-        std::lock_guard<std::mutex> const lock(mutex);
-        for (auto& contact : contacts) {
-          if (contact.topic_id == TopicID(peer_id)) {
-            if (contact.connection_state != state) {
-              contact.connection_state = state;
-              changed = true;
-            }
-            break;
-          }
-        }
-        if (changed) {
-          notify_copy = contacts;
-        }
-      }
-      if (changed) {
-        EventQueue::Instance().Push(EventContactsStateUpdated{notify_copy});
-      }
+      UpdateContactsList();
     }
   };
 

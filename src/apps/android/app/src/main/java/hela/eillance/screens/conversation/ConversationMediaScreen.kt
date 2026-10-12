@@ -368,9 +368,11 @@ fun ConversationMediaScreen(
                       contentScale = ContentScale.Crop
                     )
                   } else {
-                    Box(modifier = Modifier
-                      .fillMaxSize()
-                      .background(MaterialTheme.colorScheme.surfaceVariant))
+                    Box(
+                      modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
                   }
                   Box(
                     modifier = Modifier
