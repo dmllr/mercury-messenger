@@ -36,7 +36,7 @@ fun CallUserInfo(
   statusText: String,
   modifier: Modifier = Modifier,
   showPulse: Boolean = false,
-  textColor: Color = Color.White,
+  textColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
   Column(
     modifier = modifier,
