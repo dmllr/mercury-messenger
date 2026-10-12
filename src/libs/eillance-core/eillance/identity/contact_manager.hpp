@@ -131,7 +131,8 @@ class ContactManager {
   auto ConfirmContact(ContactID const& peer_id) -> bool {
     std::lock_guard<std::mutex> const lock(mutex_);
     auto const it = contacts_.find(peer_id);
-    if (it == contacts_.end() || it->second.status != ContactStatus::awaitingApproval) {
+    if (it == contacts_.end() ||
+        (it->second.status != ContactStatus::awaitingApproval && it->second.status != ContactStatus::pendingApproval)) {
       LGW << "Cannot confirm contact " << peer_id.ToString() << "; not found or not awaiting approval.";
       return false;
     }
@@ -149,11 +150,13 @@ class ContactManager {
       if (it->second.status == ContactStatus::confirmed) {
         return true;
       }
+      if (it->second.status != ContactStatus::pendingApproval) {
+        return false;
+      }
       it->second.status = ContactStatus::confirmed;
       storage_->UpdateContact(it->second);
     } else {
-      contacts_[peer_id] = {.peer_id = peer_id, .status = ContactStatus::confirmed};
-      storage_->UpdateContact(contacts_[peer_id]);
+      return false;
     }
     return true;
   }

@@ -25,7 +25,7 @@ def test_receiver_crash(test_environment):
   # We simulate this by having B run a short script, exit (or we stop it), and then we create a new B process?
   # Framework supports restarting named containers.
   # So B should run a script that just waits.
-  script_b = "connect, wait 30" # Long wait, we will kill it
+  script_b = f"connect, wait 2, confirm {id_a}, wait 30" # Long wait, we will kill it
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.70.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.70.32"})

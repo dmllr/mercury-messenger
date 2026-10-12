@@ -40,7 +40,7 @@ def test_cross_network_communication(test_environment):
   )
 
   # App A on Net A
-  script_a = f"wait 10, connect, wait 2, message {id_b} \"Hello from A\", wait 10, disconnect"
+  script_a = f"stop, wait 5, reconnect, wait 2, message {id_b} \"Hello from A\", wait 15, disconnect"
   scenario.add_process(
     name="app-a",
     executable="/app/bin/mercury-mock-app",
@@ -50,7 +50,7 @@ def test_cross_network_communication(test_environment):
 
   # App B on Net B
   # Needs to reach Signaling (192.168.10.30) via Router (192.168.20.254)
-  script_b = "wait 10, connect, wait 20, disconnect"
+  script_b = "stop, wait 5, reconnect, wait 25, disconnect"
   scenario.add_process(
     name="app-b",
     executable="/app/bin/mercury-mock-app",

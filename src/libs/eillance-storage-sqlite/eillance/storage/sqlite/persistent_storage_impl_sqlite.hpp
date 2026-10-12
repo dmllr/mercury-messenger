@@ -590,8 +590,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(statement.Get());
   }
 
-  void UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time)
-      override {
+  void
+  UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const statement(
@@ -771,8 +771,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
-  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
-      override {
+  void
+  UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE messages SET status=? WHERE peer_id=? AND id=?;");
@@ -878,8 +878,11 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(op.Get());
   }
 
-  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
-      override {
+  void UpdateAttachmentStatus(
+      std::string const& attachment_id,
+      messaging::AttachmentStatus status,
+      bool is_downloaded
+  ) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(db_, "UPDATE message_attachments SET status=?, is_downloaded=? WHERE id=?;");

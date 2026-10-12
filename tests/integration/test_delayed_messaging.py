@@ -28,7 +28,7 @@ def test_delayed_receiver_start(test_environment):
   # We simulate delayed start by a long initial wait in script before 'connect'?
   # Or physically starting container later?
   # The mock app script runs sequentially.
-  script_b = "wait 8, connect, wait 20, disconnect"
+  script_b = f"stop, wait 8, start, wait 2, confirm {id_a}, wait 25, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app", 
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.50.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.50.32"})
