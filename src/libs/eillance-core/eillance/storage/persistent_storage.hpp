@@ -152,7 +152,8 @@ class PersistentStorage {
   void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) const {
     pimpl_->UpdateHistoryEntry(entry);
   }
-  void UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) const {
+  void
+  UpdateMessageStatus(TopicID const& topic_id, std::uint64_t message_id, messaging::MessageStatus new_status) const {
     pimpl_->UpdateMessageStatus(topic_id, message_id, new_status);
   }
   void UpdateMessageStatuses(
@@ -164,21 +165,21 @@ class PersistentStorage {
   }
   void UpdateMessagePeerStatus(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& peer_id,
       messaging::MessageStatus new_status
   ) const {
     pimpl_->UpdateMessagePeerStatus(topic_id, message_id, peer_id, new_status);
   }
-  virtual void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) {
+  virtual void UpdateMessageContent(TopicID const& topic_id, std::uint64_t message_id, std::string const& new_content) {
     pimpl_->UpdateMessageContent(topic_id, message_id, new_content);
   };
-  virtual void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) {
+  virtual void MarkMessageDeleted(TopicID const& topic_id, std::uint64_t message_id) {
     pimpl_->MarkMessageDeleted(topic_id, message_id);
   }
   virtual void ToggleReaction(
       TopicID const& topic_id,
-      uint64_t message_id,
+      std::uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
   ) {
@@ -203,7 +204,7 @@ class PersistentStorage {
   [[nodiscard]] auto GetHistoryPage(TopicID const& topic_id, size_t page_index, size_t page_size) const {
     return pimpl_->GetHistoryPage(topic_id, page_index, page_size);
   }
-  [[nodiscard]] auto GetHistoryEntry(TopicID const& topic_id, uint64_t const message_id) const
+  [[nodiscard]] auto GetHistoryEntry(TopicID const& topic_id, std::uint64_t const message_id) const
       -> std::optional<messaging::HistoryEntryRecord> {
     return pimpl_->GetHistoryEntry(topic_id, message_id);
   }

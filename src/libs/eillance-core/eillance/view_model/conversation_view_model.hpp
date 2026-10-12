@@ -118,7 +118,7 @@ class ConversationViewModel {
   void SendText(std::string const& content) const {
     impl_->SendText(content);
   }
-  void SendMessage(std::string const& content, uint64_t reply_to_id = 0) const {
+  void SendMessage(std::string const& content, std::uint64_t reply_to_id = 0) const {
     impl_->SendMessage(content, reply_to_id);
   }
   void AddDraftAttachment(DraftAttachment const& draft) const {
@@ -259,7 +259,7 @@ class ConversationViewModel {
       SendMessage(content, 0);
     }
 
-    void SendMessage(std::string const& content, uint64_t reply_to_id) {
+    void SendMessage(std::string const& content, std::uint64_t reply_to_id) {
       std::vector<messaging::AttachmentRequest> reqs;
       {
         std::lock_guard<std::mutex> const lock(mutex);
@@ -428,7 +428,7 @@ class ConversationViewModel {
       EventQueue::Instance().Push(EventConversationStateUpdated{topic_id, state});
     }
 
-    void OnMessageStatusChanged(TopicID const&, uint64_t const message_id, messaging::MessageStatus const status) {
+    void OnMessageStatusChanged(TopicID const&, std::uint64_t const message_id, messaging::MessageStatus const status) {
       std::lock_guard<std::mutex> const lock(mutex);
 
       // If status is None (0), it means the message was dismissed/deleted. Remove it from the list.

@@ -58,7 +58,7 @@ TEST_F(MessageHistoryTest, AddCallEntry) {
 
 TEST_F(MessageHistoryTest, UpdateMessageStatus) {
   ContactID received_peer_id;
-  uint64_t received_msg_id = 0;
+  std::uint64_t received_msg_id = 0;
   auto received_status = messaging::MessageStatus::none;
   bool updated = false;
 
@@ -203,7 +203,7 @@ TEST_F(MessageHistoryTest, MarkMessageDeleted) {
 
 TEST_F(MessageHistoryTest, MarkMessagesAsRead) {
   ContactID received_peer_id;
-  uint64_t received_msg_id = 0;
+  std::uint64_t received_msg_id = 0;
   auto received_status = messaging::MessageStatus::none;
   bool updated = false;
 

@@ -58,7 +58,7 @@ struct ChannelID {
 
  private:
   std::array<std::byte, identitySize> value_{};
-  static constexpr auto HexCharToInt(char const chr) -> uint8_t {
+  static constexpr auto HexCharToInt(char const chr) -> std::uint8_t {
     auto const c = static_cast<unsigned char>(chr);
     if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
     if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);

@@ -82,7 +82,7 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
       {"signature", crypto::ToHex(test_sig)}
   };
 
-  // Transform the byte array to uint8 array to avoid nlohmann::json dump
+  // Transform the byte array to std::uint8 array to avoid nlohmann::json dump
   // implicitly mangling the std::byte arrays when parsed back via string parsing.
   nlohmann::json clean_msg = key_msg;
   clean_msg["key"] = nlohmann::json::array();

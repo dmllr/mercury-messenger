@@ -201,7 +201,7 @@ struct ChannelMessageEntry {
 };
 
 struct CallEntry {
-  uint32_t duration_seconds = 0;
+  std::uint32_t duration_seconds = 0;
   CallDirection call_direction;
   CallStatus call_status;
 };
@@ -240,7 +240,7 @@ struct HistoryEntryRecord {
 struct ChatSummary {
   TopicID topic_id;
   HistoryEntryRecord last_message;
-  uint32_t unread_count = 0;
+  std::uint32_t unread_count = 0;
 };
 
 struct HistoryPage {
@@ -248,7 +248,7 @@ struct HistoryPage {
   size_t total_messages{};
 };
 
-enum class LedgerActionType : uint8_t {
+enum class LedgerActionType : std::uint8_t {
   Message = 1,
   MessageEdit = 2,
   MessageDelete = 3,
@@ -305,7 +305,7 @@ struct LedgerHash {
   auto operator==(LedgerHash const&) const -> bool = default;
 
  private:
-  static constexpr auto HexCharToInt(char const chr) -> uint8_t {
+  static constexpr auto HexCharToInt(char const chr) -> std::uint8_t {
     auto const c = static_cast<unsigned char>(chr);
     if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
     if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(c - 'a' + 10);
@@ -328,7 +328,7 @@ inline void from_json(nlohmann::json const& json, LedgerHash& hash) {
 }
 
 struct LedgerEntry {
-  uint64_t seq_id = 0;
+  std::uint64_t seq_id = 0;
   TopicID topic_id;
   ContactID author_id;
   Timestamp created_at;

@@ -75,7 +75,8 @@ class MessagingServiceTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_, ec);
   }
 
-  std::vector<std::byte> CreateChunkPacket(std::string const& id, uint32_t seq, std::vector<std::byte> const& payload) {
+  std::vector<std::byte>
+  CreateChunkPacket(std::string const& id, std::uint32_t seq, std::vector<std::byte> const& payload) {
     std::vector<std::byte> packet;
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x01});
@@ -107,7 +108,7 @@ class MessagingServiceTest : public ::testing::Test {
   std::shared_ptr<Client> client_;
   std::vector<ContactID> connection_requests_;
   std::filesystem::path temp_dir_;
-  uint64_t conn_sub_id_ = 0;
+  std::uint64_t conn_sub_id_ = 0;
 
   ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };

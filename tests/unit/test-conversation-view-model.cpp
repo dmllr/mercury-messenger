@@ -36,7 +36,7 @@ struct MockConversationObserver {
   bool updated = false;
   std::mutex mutex;
   std::map<std::string, float> progress_updates;
-  uint64_t sub1, sub2;
+  std::uint64_t sub1, sub2;
 
   MockConversationObserver(ContactID peer_id) {
     sub1 = EventQueue::Instance().Subscribe<EventConversationStateUpdated>([this, peer_id](auto const& e) {
@@ -162,7 +162,7 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
   vm_->SendText("Status Test");
 
   // Wait until the message appears in history
-  uint64_t msg_id = 0;
+  std::uint64_t msg_id = 0;
   WaitFor([&] {
     auto s = observer->GetState();
     for (auto const& msg : s.history) {
@@ -367,7 +367,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage) {
   auto observer = std::make_shared<MockConversationObserver>(peer1);
 
   // Create 150 messages in mock storage
-  uint64_t target_id = 0;
+  std::uint64_t target_id = 0;
   for (int i = 0; i < 150; ++i) {
     auto entry = mock_storage_->AddHistoryEntry(
         {.kind = messaging::HistoryEntryKind::textMessage,
@@ -420,7 +420,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
   auto observer = std::make_shared<MockConversationObserver>(peer1);
 
   // Setup: Create messages
-  uint64_t target_id = 0;
+  std::uint64_t target_id = 0;
   for (int i = 0; i < 60; ++i) {
     auto entry = mock_storage_->AddHistoryEntry(
         {.kind = messaging::HistoryEntryKind::textMessage,

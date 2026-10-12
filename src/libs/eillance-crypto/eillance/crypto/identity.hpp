@@ -94,7 +94,7 @@ class Identity {
 
     std::stringstream mnemonic_ss;
     for (int i = 0; i < words_count; ++i) {
-      uint16_t index = 0;
+      std::uint16_t index = 0;
       for (int j = 0; j < bits_per_word; ++j) {
         index = (index << 1U) | (bits[i * bits_per_word + j] ? 1 : 0);
       }

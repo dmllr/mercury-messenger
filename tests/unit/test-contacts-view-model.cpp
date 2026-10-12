@@ -19,7 +19,7 @@ struct MockContactsObserver {
   std::vector<ViewContact> contacts;
   bool updated = false;
   std::mutex mutex;
-  uint64_t sub_id;
+  std::uint64_t sub_id;
 
   MockContactsObserver() {
     sub_id = EventQueue::Instance().Subscribe<EventContactsStateUpdated>([this](auto const& e) {

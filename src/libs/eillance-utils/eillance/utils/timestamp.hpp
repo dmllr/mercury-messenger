@@ -9,7 +9,7 @@
 namespace eillance {
 
 struct Timestamp {
-  uint64_t value = 0;
+  std::uint64_t value = 0;
 
   static auto Now() -> Timestamp {
     return {Time::Now()};

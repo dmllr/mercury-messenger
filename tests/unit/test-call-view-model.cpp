@@ -19,7 +19,7 @@ struct MockCallObserver {
   CallState state;
   bool updated = false;
   std::mutex mutex;
-  uint64_t sub_id;
+  std::uint64_t sub_id;
 
   MockCallObserver() {
     sub_id = EventQueue::Instance().Subscribe<EventCallStateChanged>([this](auto const& e) {

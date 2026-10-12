@@ -24,7 +24,7 @@ struct MockSettingsObserver {
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   bool updated = false;
   std::mutex mutex;
-  uint64_t sub1, sub2;
+  std::uint64_t sub1, sub2;
 
   MockSettingsObserver() {
     sub1 = EventQueue::Instance().Subscribe<EventSettingsStateUpdated>([this](auto const& e) {

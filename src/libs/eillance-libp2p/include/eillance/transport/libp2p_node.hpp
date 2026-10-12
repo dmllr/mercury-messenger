@@ -213,8 +213,8 @@ class Libp2pNode final {
     on_turn_relays_discovered_ = std::move(cb);
   }
   void SetOnTurnAuthResult(
-      std::function<void(ContactID const&, bool, std::string const&, uint16_t, std::string const&, std::string const&)>
-          cb
+      std::function<
+          void(ContactID const&, bool, std::string const&, std::uint16_t, std::string const&, std::string const&)> cb
   ) {
     on_turn_auth_result_ = std::move(cb);
   }
@@ -232,7 +232,7 @@ class Libp2pNode final {
   std::function<void(ContactID const&)> on_disconnected_;
   std::function<void(ContactID const&, std::span<std::byte const>)> on_message_;
   std::function<void(std::vector<ContactID> const&)> on_turn_relays_discovered_;
-  std::function<void(ContactID const&, bool, std::string const&, uint16_t, std::string const&, std::string const&)>
+  std::function<void(ContactID const&, bool, std::string const&, std::uint16_t, std::string const&, std::string const&)>
       on_turn_auth_result_;
   std::function<void(int, int, int, std::string const&)> on_network_stats_;
   std::function<void(std::string const&, std::vector<ContactID> const&)> on_providers_discovered_;
@@ -251,7 +251,7 @@ class Libp2pNode final {
     }
   }
 
-  static void OnMessageCallback(void* context, char const* peer_id_hex, uint8_t const* data, size_t len) {
+  static void OnMessageCallback(void* context, char const* peer_id_hex, std::uint8_t const* data, size_t len) {
     auto* self = static_cast<Libp2pNode*>(context);
     if (self->on_message_) {
       self->on_message_(
@@ -304,7 +304,7 @@ class Libp2pNode final {
       void* context,
       char const* peer_id_hex,
       char const* ip,
-      uint16_t port,
+      std::uint16_t port,
       char const* user,
       char const* cred
   ) {
