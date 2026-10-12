@@ -82,6 +82,8 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
   on_disconnected: *const c_void,
   on_message: *const c_void,
   on_log: *const c_void,
+  on_turn_relays_discovered: *const c_void,
+  on_turn_auth_result: *const c_void,
 ) {
   run_ffi(
     AssertUnwindSafe(|| {
@@ -96,7 +98,51 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
         on_disconnected: on_disconnected as usize,
         on_message: on_message as usize,
         on_log: on_log as usize,
+        on_turn_relays_discovered: on_turn_relays_discovered as usize,
+        on_turn_auth_result: on_turn_auth_result as usize,
       };
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_discover_turn_relays(ptr: *mut c_void) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Some(tx) = &node.command_tx {
+        let _ = tx.send(Command::DiscoverTurnRelays);
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_auth_turn_relay(ptr: *mut c_void, peer_id_hex: *const c_char) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() || peer_id_hex.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Ok(hex_str) = unsafe { CStr::from_ptr(peer_id_hex) }.to_str() {
+        if let Ok(peer_bytes) = hex_decode(hex_str) {
+          if peer_bytes.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&peer_bytes);
+            if let Some(peer_id) = pubkey_to_peerid(&arr) {
+              if let Some(tx) = &node.command_tx {
+                let _ = tx.send(Command::AuthTurnRelay(peer_id));
+              }
+            }
+          }
+        }
+      }
     }),
     (),
   );

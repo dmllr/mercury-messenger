@@ -165,6 +165,19 @@ struct EventNotifyContactRequest {
   std::string contact_name;
 };
 
+// DHT Turn Discovery & Auth
+struct EventTurnRelaysDiscovered {
+  std::vector<ContactID> peer_ids;
+};
+struct EventTurnAuthResult {
+  ContactID peer_id;
+  bool success;
+  std::string public_ip;
+  uint16_t port;
+  std::string username;
+  std::string credential;
+};
+
 // Explicit Hardware / OS Orchestration Commands
 enum class AudioRoutingMode : uint8_t { normal = 0, inCall = 1 };
 enum class SoundType : uint8_t { ringing = 0, ringback = 1, connecting = 2 };

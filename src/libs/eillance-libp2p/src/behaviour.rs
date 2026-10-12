@@ -1,6 +1,6 @@
-use crate::types::NodeRole;
+use crate::types::{NodeRole, TurnAuthRequest, TurnAuthResponse};
 use libp2p::{
-  PeerId, StreamProtocol, dcutr, identify,
+  PeerId, StreamProtocol, autonat, dcutr, identify,
   kad::{self, Behaviour as Kademlia, Config as KademliaConfig, store::MemoryStore},
   mdns, ping, relay,
   request_response::{self, ProtocolSupport},
@@ -16,6 +16,8 @@ pub struct MercuryBehaviour {
   pub kademlia: Kademlia<MemoryStore>,
   pub chat: request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
   pub file: request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
+  pub turn_auth: request_response::cbor::Behaviour<TurnAuthRequest, TurnAuthResponse>,
+  pub autonat: autonat::Behaviour,
   pub mdns: mdns::tokio::Behaviour,
   pub identify: identify::Behaviour,
   pub ping: ping::Behaviour,
@@ -42,6 +44,12 @@ pub fn build_behaviour(
     [(StreamProtocol::new("/mercury/file/1.0.0"), ProtocolSupport::Full)],
     request_response::Config::default(),
   );
+  let turn_auth = request_response::cbor::Behaviour::new(
+[(StreamProtocol::new("/mercury/turn_auth/1.0.0"), ProtocolSupport::Full)],
+    request_response::Config::default(),
+  );
+
+  let autonat = autonat::Behaviour::new(peer_id, autonat::Config::default());
   let identify = identify::Behaviour::new(identify::Config::new("/mercury/id/1.0.0".into(), key.public()));
 
   let is_bootstrap = matches!(role, NodeRole::BootstrapNode);
@@ -77,6 +85,8 @@ pub fn build_behaviour(
     kademlia,
     chat,
     file,
+    turn_auth,
+    autonat,
     mdns,
     identify,
     ping,

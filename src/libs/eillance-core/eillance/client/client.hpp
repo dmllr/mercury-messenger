@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -143,6 +144,32 @@ class Client final {
           }
         })
     );
+
+    event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventTurnRelaysDiscovered>([this](auto const& e) -> void {
+          auto relays = e.peer_ids;
+          std::mt19937 g(std::random_device{}());
+          std::shuffle(relays.begin(), relays.end(), g);
+          int count = 0;
+          for (auto const& r : relays) {
+            if (count++ >= 3) break;
+            sm_->data_transport->AuthTurnRelay(r);
+          }
+        })
+    );
+
+    event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventTurnAuthResult>([this](auto const& e) -> void {
+      if (e.success) {
+        {
+          std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
+          dynamic_turn_servers_.push_back(
+              {e.peer_id, e.public_ip, e.port, e.username, e.credential, std::chrono::steady_clock::now()}
+          );
+          if (dynamic_turn_servers_.size() > 5) dynamic_turn_servers_.erase(dynamic_turn_servers_.begin());
+        }
+        ReevaluateIceConfiguration();
+      }
+    }));
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventConnectionRequested>(
         [this](auto const& e) -> void { this->Connect(e.peer_id); }
@@ -586,10 +613,24 @@ class Client final {
       final_config.push_back(turn_server);
     }
 
-    if (!final_config.empty()) {
-      auto json_str = final_config.dump();
-      sm_->media_transport->SetIceServers(json_str);
+    {
+      std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
+      auto const now = std::chrono::steady_clock::now();
+      std::erase_if(dynamic_turn_servers_, [&](auto const& s) {
+        return (now - s.discovered_at) > std::chrono::minutes(10);
+      });
+
+      for (auto const& ts : dynamic_turn_servers_) {
+        Json turn_server;
+        turn_server["urls"] = std::vector<std::string>{"turn:" + ts.ip + ":" + std::to_string(ts.port)};
+        turn_server["username"] = ts.username;
+        turn_server["credential"] = ts.credential;
+        final_config.push_back(turn_server);
+      }
     }
+
+    auto json_str = final_config.dump();
+    sm_->media_transport->SetIceServers(json_str);
   }
 
   std::unique_ptr<services::ServiceManager> sm_;
@@ -601,6 +642,17 @@ class Client final {
 
   static constexpr std::chrono::seconds peerInactivityCheckInterval{20};
   DispatchQueue background_queue_{"ClientBgQueue", 1};
+
+  struct DynamicTurnServer {
+    ContactID peer_id;
+    std::string ip;
+    uint16_t port;
+    std::string username;
+    std::string credential;
+    std::chrono::steady_clock::time_point discovered_at;
+  };
+  std::vector<DynamicTurnServer> dynamic_turn_servers_;
+  std::mutex dynamic_turn_mutex_;
 };
 
 }  // namespace eillance
