@@ -33,8 +33,7 @@ docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspa
 This step generates the build files inside a `build-deploy` directory. It only needs to be run once unless you change the `CMakeLists.txt` files.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
-  git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy
+docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy"
 ```
 
 #### 2. Build
@@ -42,7 +41,7 @@ docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
 This command compiles `mercury-bootstrap` native target.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv cmake --build build-deploy --target mercury-bootstrap --config Release
+docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv bash -c "cmake --build build-deploy --target mercury-bootstrap --config Release"
 ```
 
 The compiled binary will be located at `build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap`.
@@ -52,7 +51,7 @@ The compiled binary will be located at `build-deploy/src/apps/mercury-bootstrap/
 Use `scp` to copy the `mercury-bootstrap` binary to your deployment machine. This example requires you to have SSH keys configured.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c 'chmod 400 /workspace/.ssh/vm0.ssh.key && SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key" && SERVERS=(jp-bn-101 jp-bn-102 us-bn-101 us-bn-102); for s in "${SERVERS[@]}"; do echo "Deploying to ${s}.eillance.com..."; ssh $SSH_OPTS ubuntu@${s}.eillance.com "sudo mkdir -p /var/app/mercury-bootstrap/; sudo chown -R ubuntu:ubuntu /var/app"; scp $SSH_OPTS build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap ubuntu@${s}.eillance.com:/var/app/mercury-bootstrap/; done'
 ```
 
 ### Running the Bootstrap Node
