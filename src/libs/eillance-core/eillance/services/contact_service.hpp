@@ -23,6 +23,9 @@
 namespace eillance::services {
 
 class ContactService {
+  std::unordered_map<ContactID, std::vector<std::byte>> pending_tokens_;
+  std::mutex tokens_mutex_;
+
  public:
   explicit ContactService(ServiceManager* sm)
       : sm_(sm),
@@ -50,6 +53,14 @@ class ContactService {
                {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
                 {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
           };
+
+          if (contact->status == identity::ContactStatus::pendingApproval) {
+            std::lock_guard<std::mutex> const t_lock(tokens_mutex_);
+            if (auto it = pending_tokens_.find(e.peer_id); it != pending_tokens_.end()) {
+              content["token"] = crypto::ToHex(it->second);
+            }
+          }
+
           if (auto peer = transport_->GetPeer(e.peer_id); peer && peer->data_channel_is_open) {
             std::ignore = transport_->SendJson(e.peer_id, content);
           }
@@ -73,6 +84,11 @@ class ContactService {
     if (existing && existing->status == identity::ContactStatus::awaitingApproval) {
       ConfirmContact(peer_id);
       return true;
+    }
+
+    if (token) {
+      std::lock_guard<std::mutex> const lock(tokens_mutex_);
+      pending_tokens_[peer_id] = *token;
     }
 
     if (manager_->AddContact(peer_id) || (existing && existing->status == identity::ContactStatus::pendingApproval)) {
@@ -107,6 +123,10 @@ class ContactService {
   }
 
   void ConfirmContact(ContactID const& peer_id) {
+    {
+      std::lock_guard<std::mutex> const lock(tokens_mutex_);
+      pending_tokens_.erase(peer_id);
+    }
     auto contact = manager_->GetContact(peer_id);
     if (!contact) {
       return;
@@ -146,6 +166,10 @@ class ContactService {
   }
 
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
+    {
+      std::lock_guard<std::mutex> const lock(tokens_mutex_);
+      pending_tokens_.erase(peer_id);
+    }
     if (notify_peer) {
       nlohmann::json msg = {{"type", "crcp_reject"}};
       if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
@@ -331,6 +355,10 @@ class ContactService {
 
   void
   OnContactConfirm(ContactID const& peer_id, std::vector<std::byte> const& sig, nlohmann::json const& profile_json) {
+    {
+      std::lock_guard<std::mutex> const lock(tokens_mutex_);
+      pending_tokens_.erase(peer_id);
+    }
     if (!sig.empty()) {
       manager_->StoreSignatureFrom(peer_id, sig);
     }
@@ -373,6 +401,10 @@ class ContactService {
   }
 
   void OnContactRemoved(ContactID const& peer_id) {
+    {
+      std::lock_guard<std::mutex> const lock(tokens_mutex_);
+      pending_tokens_.erase(peer_id);
+    }
     EventQueue::Instance().Push(EventContactRemoved{peer_id});
     BlockContact(peer_id, false);
   }
