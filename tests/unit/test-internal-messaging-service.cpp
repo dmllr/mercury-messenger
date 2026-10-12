@@ -38,18 +38,19 @@ class InternalMessagingServiceTest : public ::testing::Test {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 
-  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
+  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };
 
 TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
   nlohmann::json const propose =
-      {{"from", peer1.ToString()}, {"type", "sync_propose"}, {"topic", peer1.ToString()}, {"head", "000"}};
+      {{"from", peer1.ToString()}, {"type", "sync_propose"}, {"topic", peer1.ToString()}, {"head", std::string(64, '0')}};
   std::string str = propose.dump();
   std::vector<std::byte> bytes(str.size());
   std::memcpy(bytes.data(), str.data(), str.size());
 
   // Ensure a sync request exists to be resolved
   storage_->AddSyncRequest({TopicID(peer1), peer1, Timestamp::Now(), Timestamp{0}});
+  client_->Connect(peer1);
 
   // Make session cipher ready
   eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});

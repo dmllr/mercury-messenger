@@ -42,8 +42,8 @@ class SQLiteStorageTest : public ::testing::Test {
 
   std::filesystem::path db_path_;
   std::unique_ptr<storage::SQLiteStorage> storage_;
-  ContactID const peer1 = ContactID("0000000000000000000000000000000000000000000000000000000000000001");
-  ContactID const peer2 = ContactID("0000000000000000000000000000000000000000000000000000000000000002");
+  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+  ContactID const peer2 = ContactID("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e15");
   uint64_t next_id_ = 1;
 
   messaging::HistoryEntryRecord AddTestEntry(messaging::HistoryEntryRecord r) {
@@ -113,7 +113,7 @@ TEST_F(SQLiteStorageTest, Contacts) {
 
   // Test Get non-existent
   auto non_existent =
-      storage_->GetContact(ContactID("9999999999999999999999999999999999999999999999999999999999999999"));
+      storage_->GetContact(ContactID("061e8db172f02b3df4735fb291244e6ea60cc6e3ef31e42ceab9cf531189410d"));
   EXPECT_FALSE(non_existent.has_value());
 
   // Test Update status
@@ -307,7 +307,7 @@ TEST_F(SQLiteStorageTest, ChatSummaries) {
   storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   storage_->UpdateContact({peer2, identity::ContactStatus::confirmed});
 
-  auto const peer3_no_history = ContactID("0000000000000000000000000000000000000000000000000000000000000003");
+  auto const peer3_no_history = ContactID("fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025");
 
   auto const base_time = Time::Now();
 
