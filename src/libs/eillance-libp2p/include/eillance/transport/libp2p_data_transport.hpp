@@ -24,10 +24,13 @@ class Libp2pDataTransport : public DataTransport::Interface {
   NodeRole role_;
   DispatchQueue rx_queue_{"Libp2pRx", 1};
   std::shared_ptr<Libp2pNode> node_;
-  ContactID id_;
+  ContactID master_id_;
+  ContactID device_id_;
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   mutable std::mutex peersMutex_;
-  std::vector<std::byte> secret_key_;
+  std::unordered_map<ContactID, std::vector<ContactID>> master_to_devices_;
+  std::unordered_map<ContactID, ContactID> device_to_master_;
+  std::vector<std::byte> device_secret_key_;
   std::vector<std::string> bootstrap_urls_;
   bool is_started_ = false;
   bool is_reconnecting_ = false;
@@ -38,11 +41,15 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   void SetId(ContactID const& id) override {
-    id_ = id;
+    master_id_ = id;
+  }
+
+  void SetDeviceId(ContactID const& id) override {
+    device_id_ = id;
   }
 
   void SetSecretKey(std::span<std::byte const> key) override {
-    secret_key_.assign(key.begin(), key.end());
+    device_secret_key_.assign(key.begin(), key.end());
   }
 
   void SetBootstrapNodeUrls(std::vector<std::string> const& urls) override {
@@ -54,7 +61,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     is_started_ = true;
 
     if (!node_) {
-      node_ = std::make_shared<Libp2pNode>(secret_key_, role_);
+      node_ = std::make_shared<Libp2pNode>(device_secret_key_, role_);
 
       node_->SetOnConnected([this](ContactID const& peer_id, bool is_circuit) -> void {
         rx_queue_.Dispatch([this, peer_id, is_circuit]() -> void {
@@ -74,7 +81,6 @@ class Libp2pDataTransport : public DataTransport::Interface {
             p->is_connecting = false;
             p->is_circuit = is_circuit;
             LGI << "Peer connected: " << peer_id.ToString() << (is_circuit ? " (circuit)" : " (direct)");
-            EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
             EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
           } else {
             LGD << "Secondary connection established with " << peer_id.ToString() << ", ignoring seq reset.";
@@ -82,14 +88,32 @@ class Libp2pDataTransport : public DataTransport::Interface {
         });
       });
 
-      node_->SetOnDisconnected([this](ContactID const& peer_id) -> void {
-        rx_queue_.Dispatch([this, peer_id]() -> void {
-          if (auto p = GetPeer(peer_id)) {
-            p->data_channel_is_open = false;
-            p->is_connecting = false;
-            p->data_channel_initialized = false;
+      node_->SetOnDisconnected([this](ContactID const& network_id) -> void {
+        rx_queue_.Dispatch([this, network_id]() -> void {
+          ContactID master_id = network_id;
+          bool no_more_devices = true;
+          {
+            std::lock_guard<std::mutex> const lock(peersMutex_);
+            if (auto it = peers_.find(network_id); it != peers_.end()) {
+              it->second->data_channel_is_open = false;
+              it->second->is_connecting = false;
+              it->second->data_channel_initialized = false;
+            }
+            if (auto it = device_to_master_.find(network_id); it != device_to_master_.end()) {
+              master_id = it->second;
+              if (auto m_it = master_to_devices_.find(master_id); m_it != master_to_devices_.end()) {
+                std::erase(m_it->second, network_id);
+                no_more_devices = m_it->second.empty();
+              }
+              device_to_master_.erase(it);
+            }
+            peers_.erase(network_id);
           }
-          EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
+          if (no_more_devices) {
+            EventQueue::Instance().Push(
+                EventDataPeerConnectionStateChanged{master_id, PeerConnectionState::disconnected}
+            );
+          }
         });
       });
 
@@ -176,7 +200,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
     }
 
     node_->Start();
-    node_->StartProviding(id_.ToString());
+    node_->StartProviding(master_id_.ToString());
 
     if (!bootstrap_urls_.empty()) {
       for (auto const& url : bootstrap_urls_) {
@@ -221,6 +245,8 @@ class Libp2pDataTransport : public DataTransport::Interface {
           to_notify.push_back(id);
         }
       }
+      master_to_devices_.clear();
+      device_to_master_.clear();
     }
     for (auto const& id : to_notify) {
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{id, PeerConnectionState::disconnected});
@@ -243,11 +269,22 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
   void RemovePeer(ContactID const& peer_id) override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
+    if (auto it = master_to_devices_.find(peer_id); it != master_to_devices_.end()) {
+      for (auto const& net_id : it->second) {
+        peers_.erase(net_id);
+        device_to_master_.erase(net_id);
+      }
+      master_to_devices_.erase(it);
+    }
     peers_.erase(peer_id);
   }
 
   auto GetPeer(ContactID const& peer_id) const -> std::shared_ptr<Peer> override {
     std::lock_guard<std::mutex> const lock(peersMutex_);
+    if (auto it = master_to_devices_.find(peer_id); it != master_to_devices_.end() && !it->second.empty()) {
+      auto dev_it = peers_.find(it->second.front());
+      if (dev_it != peers_.end()) return dev_it->second;
+    }
     auto it = peers_.find(peer_id);
     if (it != peers_.end()) return it->second;
     return nullptr;
@@ -266,6 +303,27 @@ class Libp2pDataTransport : public DataTransport::Interface {
     return PeerConnectionState::disconnected;
   }
 
+  auto GetMasterId(ContactID const& network_id) const -> ContactID override {
+    std::lock_guard<std::mutex> const lock(peersMutex_);
+    if (auto it = device_to_master_.find(network_id); it != device_to_master_.end()) {
+      return it->second;
+    }
+    return network_id;
+  }
+
+  void LinkDeviceToMaster(ContactID const& network_id, ContactID const& master_id) override {
+    std::lock_guard<std::mutex> const lock(peersMutex_);
+    if (network_id != master_id) {
+      auto& vec = master_to_devices_[master_id];
+      if (std::find(vec.begin(), vec.end(), network_id) == vec.end()) {
+        vec.push_back(network_id);
+      }
+      device_to_master_[network_id] = master_id;
+      peers_.erase(master_id);
+    }
+    EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{master_id, PeerConnectionState::connected});
+  }
+
   void Connect(ContactID const& peer_id) override {
     if (node_) {
       auto p = GetPeer(peer_id);
@@ -274,31 +332,52 @@ class Libp2pDataTransport : public DataTransport::Interface {
         AddPeer(peer_id, p);
       }
       p->is_connecting = true;
-      LGD << "Triggering DHT Provider search for: " << peer_id.ToString();
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connecting});
 
       node_->GetProviders(peer_id.ToString());
-      node_->Dial(peer_id);
+
+      rx_queue_.DispatchAfter(std::chrono::seconds(15), [this, peer_id]() {
+        std::lock_guard<std::mutex> const lock(peersMutex_);
+        if (auto it = peers_.find(peer_id); it != peers_.end()) {
+          if (it->second->is_connecting && !it->second->data_channel_is_open) {
+            it->second->is_connecting = false;
+            EventQueue::Instance().Push(
+                EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected}
+            );
+          }
+        }
+      });
     }
   }
 
   void Disconnect(ContactID const& peer_id) override {
+    std::vector<ContactID> networks;
     bool changed = false;
     {
       std::lock_guard<std::mutex> const lock(peersMutex_);
-      auto it = peers_.find(peer_id);
-      if (it != peers_.end()) {
-        auto& p = it->second;
-        if (p->data_channel_is_open || p->is_connecting) {
-          p->data_channel_is_open = false;
-          p->is_connecting = false;
-          p->data_channel_initialized = false;
-          changed = true;
+      if (auto it = master_to_devices_.find(peer_id); it != master_to_devices_.end()) {
+        networks = it->second;
+        master_to_devices_.erase(it);
+      } else {
+        networks.push_back(peer_id);
+      }
+      for (auto const& net_id : networks) {
+        if (auto it = peers_.find(net_id); it != peers_.end()) {
+          auto& p = it->second;
+          if (p->data_channel_is_open || p->is_connecting) {
+            p->data_channel_is_open = false;
+            p->is_connecting = false;
+            p->data_channel_initialized = false;
+            changed = true;
+          }
         }
+        device_to_master_.erase(net_id);
       }
     }
     if (node_) {
-      node_->Disconnect(peer_id);
+      for (auto const& net_id : networks) {
+        node_->Disconnect(net_id);
+      }
     }
     if (changed) {
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
@@ -313,37 +392,68 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
-    if (node_) return node_->SendFile(peer_id, message);
-    return false;
+    std::vector<ContactID> networks;
+    {
+      std::lock_guard<std::mutex> const lock(peersMutex_);
+      if (auto it = master_to_devices_.find(peer_id); it != master_to_devices_.end() && !it->second.empty()) {
+        networks = it->second;
+      } else {
+        networks.push_back(peer_id);
+      }
+    }
+    bool any = false;
+    for (auto const& net : networks) {
+      if (node_ && node_->SendFile(net, message)) any = true;
+    }
+    return any;
   }
 
   auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
-    uint64_t seq = 0;
-    if (auto peer = GetPeer(peer_id)) {
-      seq = peer->tx_seq++;
-    }
-    Json const envelope = {{"s", seq}, {"m", message}};
-    auto str = envelope.dump();
-    if (node_) {
-      bool const success = node_->SendChat(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
-      if (!success) {
-        Disconnect(peer_id);
+    std::vector<ContactID> networks;
+    {
+      std::lock_guard<std::mutex> const lock(peersMutex_);
+      if (auto it = master_to_devices_.find(peer_id); it != master_to_devices_.end() && !it->second.empty()) {
+        networks = it->second;
+      } else {
+        networks.push_back(peer_id);
       }
-      return success;
     }
-    return false;
+
+    bool any_success = false;
+    for (auto const& net_id : networks) {
+      uint64_t seq = 0;
+      {
+        std::lock_guard<std::mutex> const lock(peersMutex_);
+        if (auto it = peers_.find(net_id); it != peers_.end()) {
+          seq = it->second->tx_seq++;
+        }
+      }
+      Json const wrapped = {{"s", seq}, {"m", message}};
+      std::string const json_str = wrapped.dump();
+      std::vector<std::byte> payload(json_str.size());
+      std::memcpy(payload.data(), json_str.data(), json_str.size());
+
+      if (node_ && node_->SendChat(net_id, payload)) any_success = true;
+    }
+    return any_success;
   }
 
   void DiscoverTurnRelays() override {
-    if (node_) node_->DiscoverTurnRelays();
+    if (node_) {
+      node_->DiscoverTurnRelays();
+    }
   }
 
   void AuthTurnRelay(ContactID const& peer_id) override {
-    if (node_) node_->AuthTurnRelay(peer_id);
+    if (node_) {
+      node_->AuthTurnRelay(peer_id);
+    }
   }
 
   void SetTurnEligibility(bool eligible) override {
-    if (node_) node_->SetTurnEligibility(eligible);
+    if (node_) {
+      node_->SetTurnEligibility(eligible);
+    }
   }
 };
 

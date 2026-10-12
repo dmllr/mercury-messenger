@@ -53,12 +53,16 @@ class DeliveryService {
         })
     );
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
-      std::lock_guard<std::recursive_mutex> const lock(mutex_);
-      if (unreachable_contacts_.erase(e.peer_id)) {
-        EventQueue::Instance().Push(EventContactUnreachable{e.peer_id, false});
-      }
-    }));
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) -> void {
+          if (e.state == transport::PeerConnectionState::connected) {
+            std::lock_guard<std::recursive_mutex> const lock(mutex_);
+            if (unreachable_contacts_.erase(e.peer_id)) {
+              EventQueue::Instance().Push(EventContactUnreachable{e.peer_id, false});
+            }
+          }
+        })
+    );
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventContactUnwilling>([this](auto const& e) -> void {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
@@ -124,6 +128,7 @@ class DeliveryService {
 
       if (is_connected) {
         retry_delays_s_.erase(peer_id);
+        EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
         return;
       }
 
@@ -168,10 +173,10 @@ class DeliveryService {
         EventQueue::Instance().Push(EventContactUnwilling{peer_id, false});
       }
     }
-    AttemptDelivery(peer_id);
+    AttemptDelivery(peer_id, true);
   }
 
-  void AttemptDelivery(ContactID const& peer_id) {
+  void AttemptDelivery(ContactID const& peer_id, bool force_connect = false) {
     {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
       if (CheckIfUnreachable(peer_id)) {
@@ -190,7 +195,7 @@ class DeliveryService {
         return;
       }
 
-      if (!HasPendingWork(peer_id)) {
+      if (!force_connect && !HasPendingWork(peer_id)) {
         return;
       }
 
@@ -204,40 +209,77 @@ class DeliveryService {
  private:
   [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
     if (contact_manager_) {
-      if (auto const contact = contact_manager_->GetContact(peer_id);
-          contact && contact->status == identity::ContactStatus::pendingApproval) {
-        return true;
+      if (auto const contact = contact_manager_->GetContact(peer_id); contact) {
+        if (contact->status == identity::ContactStatus::rejected) {
+          return false;
+        }
+        if (contact->status == identity::ContactStatus::pendingApproval) {
+          return true;
+        }
       }
     }
 
-    auto const sending_msgs = storage_->GetMessagesWithStatus(TopicID(peer_id), messaging::MessageStatus::sending);
-    if (std::ranges::any_of(sending_msgs, [](auto const& msg) {
-          return msg.kind != messaging::HistoryEntryKind::systemMessage;
-        })) {
+    auto const reqs = storage_->GetSyncRequests();
+    if (std::ranges::any_of(reqs, [&](auto const& req) { return req.target_peer_id == peer_id; })) {
       return true;
     }
 
-    auto const attachments = storage_->GetPendingAttachments(TopicID(peer_id));
-    return std::ranges::any_of(attachments, [](auto const& att) {
-      return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
-    });
+    auto has_pending_attachments = [&](TopicID const& tid) {
+      auto const attachments = storage_->GetPendingAttachments(tid);
+      return std::ranges::any_of(attachments, [](auto const& att) {
+        return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
+      });
+    };
+
+    if (has_pending_attachments(TopicID(peer_id))) return true;
+
+    for (auto const& g : storage_->GetGroups()) {
+      if (std::ranges::any_of(g.members, [&](auto const& m) { return m.contact_id == peer_id; })) {
+        if (has_pending_attachments(TopicID(g.id))) return true;
+      }
+    }
+
+    for (auto const& c : storage_->GetChannels()) {
+      if (std::ranges::any_of(c.members, [&](auto const& m) { return m.contact_id == peer_id; })) {
+        if (has_pending_attachments(TopicID(c.id))) return true;
+      }
+    }
+
+    return false;
   }
 
   [[nodiscard]] auto CheckIfUnreachable(ContactID const& peer_id) const -> bool {
-    auto sending_msgs = storage_->GetMessagesWithStatus(TopicID(peer_id), messaging::MessageStatus::sending);
-    std::erase_if(sending_msgs, [](auto const& msg) -> bool {
-      return msg.kind == messaging::HistoryEntryKind::systemMessage;
-    });
+    Time::Unit oldest = std::numeric_limits<Time::Unit>::max();
+    bool found = false;
 
-    if (sending_msgs.empty()) {
-      return false;
+    auto check_topic = [&](TopicID const& tid) {
+      auto const sending_msgs = storage_->GetMessagesWithStatus(tid, messaging::MessageStatus::sending);
+      for (auto const& msg : sending_msgs) {
+        if (msg.kind != messaging::HistoryEntryKind::systemMessage) {
+          if (msg.timestamp < oldest) {
+            oldest = msg.timestamp;
+            found = true;
+          }
+        }
+      }
+    };
+
+    check_topic(TopicID(peer_id));
+
+    for (auto const& g : storage_->GetGroups()) {
+      if (std::ranges::any_of(g.members, [&](auto const& m) { return m.contact_id == peer_id; })) {
+        check_topic(TopicID(g.id));
+      }
     }
 
-    Time::Unit oldest = std::numeric_limits<Time::Unit>::max();
-    for (auto const& msg : sending_msgs) {
-      if (msg.timestamp < oldest) {
-        oldest = msg.timestamp;
+    for (auto const& c : storage_->GetChannels()) {
+      if (std::ranges::any_of(c.members, [&](auto const& m) { return m.contact_id == peer_id; })) {
+        check_topic(TopicID(c.id));
       }
+    }
+
+    if (!found) {
+      return false;
     }
 
     if (auto const it = manual_retry_time_.find(peer_id); it != manual_retry_time_.end() && it->second > oldest) {
@@ -254,7 +296,7 @@ class DeliveryService {
     }
     for (auto const& contact : contact_manager_->GetContacts()) {
       if (contact.status != identity::ContactStatus::rejected) {
-        AttemptDelivery(contact.peer_id);
+        AttemptDelivery(contact.peer_id, true);
       }
     }
   }

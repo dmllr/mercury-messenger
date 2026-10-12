@@ -161,92 +161,7 @@ class MessagingService {
       return {};
     }
 
-    std::filesystem::path const storage_root(storage_->GetPath());
-    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
-    std::error_code dir_ec;
-    std::filesystem::create_directories(attachments_dir, dir_ec);
-
-    std::vector<messaging::Attachment> domain_attachments;
-    for (auto const& req : attachments) {
-      std::uint64_t file_size = 0;
-      std::string mime = req.mime_type;
-      std::string hash;
-
-      std::error_code ec;
-      if (!std::filesystem::exists(req.file_path, ec) || ec) {
-        LGW << "Attachment file does not exist: " << req.file_path;
-        continue;
-      }
-      try {
-        file_size = std::filesystem::file_size(req.file_path, ec);
-        if (ec) {
-          LGW << "Failed to get file size for: " << req.file_path;
-          continue;
-        }
-        hash = crypto::CalculateFileHash(req.file_path);
-      } catch (...) {
-        LGW << "Failed to process attachment file: " << req.file_path;
-        continue;
-      }
-
-      if (hash.empty()) {
-        LGW << "Failed to calculate hash for attachment (empty result): " << req.file_path;
-        continue;
-      }
-
-      if (mime.empty()) {
-        if (req.type == messaging::AttachmentType::image) {
-          mime = "image/jpeg";
-        } else if (req.type == messaging::AttachmentType::video) {
-          mime = "video/mp4";
-        } else {
-          mime = "application/octet-stream";
-        }
-      }
-
-      std::string filename = req.file_name;
-      if (filename.empty()) {
-        filename = GenerateAttachmentId() + GetExtensionForMimeType(mime);
-      }
-
-      std::filesystem::path final_path = req.file_path;
-      std::filesystem::path const req_path(req.file_path);
-
-      if (req_path.parent_path() != attachments_dir) {
-        final_path = ResolvePathConflict(attachments_dir, filename);
-        std::filesystem::rename(req_path, final_path, ec);
-        if (ec) {
-          ec.clear();
-          std::filesystem::copy_file(req_path, final_path, std::filesystem::copy_options::overwrite_existing, ec);
-          if (!ec) {
-            std::filesystem::remove(req_path, ec);
-          }
-        }
-        if (ec) {
-          LGW << "Failed to move attachment to persistent dir: " << ec.message();
-          continue;
-        }
-      }
-
-      std::string note = req.note;
-      if (note.length() > maxAttachmentNoteLength) {
-        note = note.substr(0, maxAttachmentNoteLength);
-      }
-
-      domain_attachments.push_back(
-          {.id = GenerateAttachmentId(),
-           .type = req.type,
-           .file_path = final_path.string(),
-           .mime_type = mime,
-           .size_bytes = file_size,
-           .thumbnail_base64 = req.thumbnail_base64,
-           .hash = hash,
-           .is_downloaded = true,
-           .status = messaging::AttachmentStatus::pending,
-           .note = note,
-           .file_name = req.file_name}
-      );
-    }
+    auto domain_attachments = ProcessOutgoingAttachments(attachments);
 
     auto entry = history_->AddTextEntry(
         {.topic_id = topic_id,
@@ -391,7 +306,29 @@ class MessagingService {
 
   void ResumeTransfer(TopicID const& topic_id, std::string const& attachment_id, bool const is_upload) {
     sm_->file_transfer->ResumeTransfer(ContactID(topic_id.Span()), attachment_id, is_upload);
-    sm_->sync_engine->ProposeSync(topic_id, ContactID(topic_id.Span()));
+
+    auto trigger_sync = [&](ContactID const& target) {
+      for (auto const& [net_id, peer] : transport_->GetPeers()) {
+        if (transport_->GetMasterId(net_id) == target) {
+          if (peer->data_channel_is_open && peer->crcp_verified) {
+            sm_->sync_engine->ProposeSync(topic_id, net_id);
+          }
+        }
+      }
+    };
+
+    auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+    if (group) {
+      for (auto const& m : group->members) {
+        if (m.contact_id != sm_->account->GetId()) trigger_sync(m.contact_id);
+      }
+    } else if (auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()))) {
+      for (auto const& m : channel->members) {
+        if (m.contact_id != sm_->account->GetId()) trigger_sync(m.contact_id);
+      }
+    } else {
+      trigger_sync(ContactID(topic_id.Span()));
+    }
   }
 
   void DiscardAttachment(TopicID const& topic_id, std::string const& attachment_id) {
@@ -522,11 +459,24 @@ class MessagingService {
       topic_id = TopicID(entry.author_id);
     }
 
+    std::string const type = json.value("type", "");
+
+    bool is_contact_request = false;
+    if (type == "chat") {
+      auto payload = json.value("payload", Json::object());
+      std::string const content = payload.value(keyContent, "");
+      if (content.find("\"action\":\"contact_request\"") != std::string::npos) {
+        is_contact_request = true;
+      }
+    }
+
     auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
     auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()));
     if (!group && !channel && !contact_manager_->GetContact(ContactID(topic_id.Span()))) {
       contact_manager_->AddContact(ContactID(topic_id.Span()));
-      contact_manager_->MarkAsConfirmed(ContactID(topic_id.Span()));
+      if (!is_contact_request) {
+        contact_manager_->MarkAsConfirmed(ContactID(topic_id.Span()));
+      }
       EventQueue::Instance().Push(EventContactRestored{ContactID(topic_id.Span())});
     }
 
@@ -544,82 +494,8 @@ class MessagingService {
       }
     }
 
-    std::string const type = json.value("type", "");
-
     if (type == "message_read" || type == "message_receipt") {
-      if (is_mine) {
-        return;
-      }
-      auto msg_status = messaging::MessageStatus::sending;
-      if (type == "message_read") {
-        msg_status = messaging::MessageStatus::read;
-      } else {
-        std::string const status_str = json.value("status", "");
-        if (status_str == "delivered") {
-          msg_status = messaging::MessageStatus::delivered;
-        } else if (status_str == "read") {
-          msg_status = messaging::MessageStatus::read;
-        } else {
-          return;
-        }
-      }
-
-      std::vector<uint64_t> target_ids;
-      if (json.contains("message_ids")) {
-        for (auto const& id_val : json["message_ids"]) {
-          target_ids.push_back(id_val.get<uint64_t>());
-        }
-      } else {
-        target_ids.push_back(json.value("message_id", 0ULL));
-      }
-
-      for (auto const target_id : target_ids) {
-        if (auto current_entry = history_->GetHistoryEntry(topic_id, target_id)) {
-          if (current_entry->status == messaging::MessageStatus::read &&
-              msg_status == messaging::MessageStatus::delivered) {
-            continue;
-          }
-
-          if (std::holds_alternative<messaging::GroupMessageEntry>(current_entry->data)) {
-            history_->UpdateMessagePeerStatus(topic_id, target_id, entry.author_id, msg_status);
-
-            bool all_read = true;
-            bool all_delivered = true;
-            auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
-            if (group) {
-              auto updated_entry = history_->GetHistoryEntry(topic_id, target_id);
-              if (updated_entry) {
-                if (auto* upd_group_entry = std::get_if<messaging::GroupMessageEntry>(&updated_entry->data)) {
-                  for (auto const& member : group->members) {
-                    if (member.contact_id == sm_->account->GetId()) continue;
-                    messaging::MessageStatus member_status = messaging::MessageStatus::none;
-                    for (auto const& ps : upd_group_entry->peer_statuses) {
-                      if (ps.peer_id == member.contact_id) {
-                        member_status = ps.status;
-                        break;
-                      }
-                    }
-                    if (member_status != messaging::MessageStatus::read) {
-                      all_read = false;
-                    }
-                    if (member_status != messaging::MessageStatus::delivered &&
-                        member_status != messaging::MessageStatus::read) {
-                      all_delivered = false;
-                    }
-                  }
-                }
-              }
-            }
-            if (all_read) {
-              history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::read);
-            } else if (all_delivered && current_entry->status != messaging::MessageStatus::read) {
-              history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::delivered);
-            }
-          } else {
-            history_->UpdateMessageStatus(topic_id, target_id, msg_status);
-          }
-        }
-      }
+      HandleReceiptProjection(topic_id, entry, json, is_mine, is_synced, type);
       return;
     }
 
@@ -628,102 +504,8 @@ class MessagingService {
       return;
     }
 
-    if (type != "chat") {
-      return;  // Unsupported message type
-    }
-
-    uint64_t message_id = json.value("message_id", 0ULL);
-
-    auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
-    if (ledger_ts < 10000000000ULL) {
-      ledger_ts *= 1000000ULL;  // Convert seconds to microseconds
-    } else if (ledger_ts < 10000000000000ULL) {
-      ledger_ts *= 1000ULL;  // Convert milliseconds to microseconds
-    }
-
-    uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
-
-    bool const is_system = json.value("is_system", false);
-    auto payload = json.value("payload", Json::object());
-    std::string const content = payload.value(keyContent, "");
-    uint64_t const reply_to_id = payload.value("reply_to_id", 0ULL);
-
-    messaging::HistoryEntryKind const kind =
-        is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage;
-
-    std::vector<messaging::Attachment> attachments;
-    if (json.contains("attachments")) {
-      std::filesystem::path const storage_root(storage_->GetPath());
-      std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
-      std::error_code err;
-      std::filesystem::create_directories(attachments_dir, err);
-
-      for (auto const& j_att : json["attachments"]) {
-        messaging::Attachment att;
-        att.id = j_att.value("id", "");
-        att.type = j_att.value("type", messaging::AttachmentType::file);
-        att.mime_type = j_att.value("mime", "");
-        att.size_bytes = j_att.value("size", 0ULL);
-        att.thumbnail_base64 = j_att.value("thumb", "");
-        att.hash = j_att.value("hash", "");
-        att.note = j_att.value("note", "");
-        att.file_name = j_att.value("name", "");
-
-        att.is_downloaded = false;
-        att.status = messaging::AttachmentStatus::pending;
-        std::string filename = att.file_name;
-        if (filename.empty()) {
-          filename = att.id + GetExtensionForMimeType(att.mime_type);
-        }
-        att.file_path = ResolvePathConflict(attachments_dir, filename).string();
-        attachments.push_back(att);
-      }
-    }
-
-    auto db_entry = history_->AddTextEntry(
-        {.topic_id = topic_id,
-         .content = content,
-         .attachments = attachments,
-         .direction = is_mine ? messaging::MessageDirection::sent : messaging::MessageDirection::received,
-         .kind = kind,
-         .id = message_id,
-         .reply_to_id = reply_to_id,
-         .timestamp = msg_timestamp,
-         .author_id = entry.author_id}
-    );
-
-    if (is_mine) {
-      history_->UpdateMessageStatus(topic_id, message_id, messaging::MessageStatus::delivered);
-      db_entry.status = messaging::MessageStatus::delivered;
-    }
-
-    for (auto const& att : attachments) {
-      if (!att.is_downloaded && att.status != messaging::AttachmentStatus::discarded &&
-          att.status != messaging::AttachmentStatus::canceled) {
-        sm_->file_transfer->QueueDownload(entry.author_id, att, db_entry.id);
-        sm_->file_transfer->ResumeTransfer(entry.author_id, att.id, false);
-      }
-    }
-
-    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, db_entry});
-
-    if (!is_mine) {
-      QueueDeliveryReceipt(topic_id, message_id);
-
-      if (!is_system) {
-        bool should_evaluate_now = false;
-        {
-          std::lock_guard<std::mutex> const lock(sync_state_mutex_);
-          if (!is_syncing_[ContactID(topic_id.Span())]) {
-            should_evaluate_now = true;
-          } else {
-            unread_evaluation_needed_[ContactID(topic_id.Span())] = true;
-          }
-        }
-        if (should_evaluate_now && !sm_->is_foreground) {
-          bg_queue_.Dispatch([this, topic_id]() { EvaluateNotifications(topic_id, true, false); });
-        }
-      }
+    if (type == "chat") {
+      HandleChatProjection(topic_id, entry, json, is_mine);
     }
   }
 
@@ -903,23 +685,7 @@ class MessagingService {
       return;
     }
 
-    std::vector<messaging::Attachment> local_attachments = attachments;
-    std::filesystem::path const storage_root(storage_->GetPath());
-    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
-
-    if (!local_attachments.empty()) {
-      std::error_code err;
-      std::filesystem::create_directories(attachments_dir, err);
-      for (auto& att : local_attachments) {
-        std::string filename = att.file_name;
-        if (filename.empty()) {
-          filename = att.id + GetExtensionForMimeType(att.mime_type);
-        }
-        std::filesystem::path const final_path = ResolvePathConflict(attachments_dir, filename);
-        att.file_path = final_path.string();
-        att.status = messaging::AttachmentStatus::pending;
-      }
-    }
+    std::vector<messaging::Attachment> local_attachments = ProcessIncomingAttachments(attachments);
 
     uint64_t local_reply_to_id = 0;
     try {
@@ -948,6 +714,309 @@ class MessagingService {
     QueueDeliveryReceipt(topic_id, message_id);
 
     EventQueue::Instance().Push(EventChatMessageReceived{topic_id, entry});
+
+    TriggerNewMessageNotificationIfNeeded(topic_id, is_system, entry.id);
+  }
+
+ private:
+  auto ProcessOutgoingAttachments(std::vector<messaging::AttachmentRequest> const& attachments)
+      -> std::vector<messaging::Attachment> {
+    std::filesystem::path const storage_root(storage_->GetPath());
+    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+    std::error_code dir_ec;
+    std::filesystem::create_directories(attachments_dir, dir_ec);
+
+    std::vector<messaging::Attachment> domain_attachments;
+    for (auto const& req : attachments) {
+      std::uint64_t file_size = 0;
+      std::string mime = req.mime_type;
+      std::string hash;
+
+      std::error_code ec;
+      if (!std::filesystem::exists(req.file_path, ec) || ec) {
+        LGW << "Attachment file does not exist: " << req.file_path;
+        continue;
+      }
+      try {
+        file_size = std::filesystem::file_size(req.file_path, ec);
+        if (ec) {
+          LGW << "Failed to get file size for: " << req.file_path;
+          continue;
+        }
+        hash = crypto::CalculateFileHash(req.file_path);
+      } catch (...) {
+        LGW << "Failed to process attachment file: " << req.file_path;
+        continue;
+      }
+
+      if (hash.empty()) {
+        LGW << "Failed to calculate hash for attachment (empty result): " << req.file_path;
+        continue;
+      }
+
+      if (mime.empty()) {
+        if (req.type == messaging::AttachmentType::image) {
+          mime = "image/jpeg";
+        } else if (req.type == messaging::AttachmentType::video) {
+          mime = "video/mp4";
+        } else {
+          mime = "application/octet-stream";
+        }
+      }
+
+      std::string filename = req.file_name;
+      if (filename.empty()) {
+        filename = GenerateAttachmentId() + GetExtensionForMimeType(mime);
+      }
+
+      std::filesystem::path final_path = req.file_path;
+      std::filesystem::path const req_path(req.file_path);
+
+      if (req_path.parent_path() != attachments_dir) {
+        final_path = ResolvePathConflict(attachments_dir, filename);
+        std::filesystem::rename(req_path, final_path, ec);
+        if (ec) {
+          ec.clear();
+          std::filesystem::copy_file(req_path, final_path, std::filesystem::copy_options::overwrite_existing, ec);
+          if (!ec) {
+            std::filesystem::remove(req_path, ec);
+          }
+        }
+        if (ec) {
+          LGW << "Failed to move attachment to persistent dir: " << ec.message();
+          continue;
+        }
+      }
+
+      std::string note = req.note;
+      if (note.length() > maxAttachmentNoteLength) {
+        note = note.substr(0, maxAttachmentNoteLength);
+      }
+
+      domain_attachments.push_back(
+          {.id = GenerateAttachmentId(),
+           .type = req.type,
+           .file_path = final_path.string(),
+           .mime_type = mime,
+           .size_bytes = file_size,
+           .thumbnail_base64 = req.thumbnail_base64,
+           .hash = hash,
+           .is_downloaded = true,
+           .status = messaging::AttachmentStatus::pending,
+           .note = note,
+           .file_name = req.file_name}
+      );
+    }
+    return domain_attachments;
+  }
+
+  void HandleReceiptProjection(
+      TopicID const& topic_id,
+      messaging::LedgerEntry const& entry,
+      Json const& json,
+      bool is_mine,
+      bool is_synced,
+      std::string const& type
+  ) {
+    if (is_mine && !is_synced) {
+      return;
+    }
+    auto msg_status = messaging::MessageStatus::sending;
+    if (type == "message_read") {
+      msg_status = messaging::MessageStatus::read;
+    } else {
+      std::string const status_str = json.value("status", "");
+      if (status_str == "delivered") {
+        msg_status = messaging::MessageStatus::delivered;
+      } else if (status_str == "read") {
+        msg_status = messaging::MessageStatus::read;
+      } else {
+        return;
+      }
+    }
+
+    std::vector<uint64_t> target_ids;
+    if (json.contains("message_ids")) {
+      for (auto const& id_val : json["message_ids"]) {
+        target_ids.push_back(id_val.get<uint64_t>());
+      }
+    } else {
+      target_ids.push_back(json.value("message_id", 0ULL));
+    }
+
+    for (auto const target_id : target_ids) {
+      if (auto current_entry = history_->GetHistoryEntry(topic_id, target_id)) {
+        if (current_entry->status == messaging::MessageStatus::read &&
+            msg_status == messaging::MessageStatus::delivered) {
+          continue;
+        }
+
+        if (is_mine) {
+          history_->UpdateMessageStatus(topic_id, target_id, msg_status);
+        } else {
+          if (std::holds_alternative<messaging::GroupMessageEntry>(current_entry->data)) {
+            history_->UpdateMessagePeerStatus(topic_id, target_id, entry.author_id, msg_status);
+
+            bool all_read = true;
+            bool all_delivered = true;
+            auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
+            if (group) {
+              auto updated_entry = history_->GetHistoryEntry(topic_id, target_id);
+              if (updated_entry) {
+                if (auto* upd_group_entry = std::get_if<messaging::GroupMessageEntry>(&updated_entry->data)) {
+                  for (auto const& member : group->members) {
+                    if (member.contact_id == sm_->account->GetId()) continue;
+                    messaging::MessageStatus member_status = messaging::MessageStatus::none;
+                    for (auto const& ps : upd_group_entry->peer_statuses) {
+                      if (ps.peer_id == member.contact_id) {
+                        member_status = ps.status;
+                        break;
+                      }
+                    }
+                    if (member_status != messaging::MessageStatus::read) {
+                      all_read = false;
+                    }
+                    if (member_status != messaging::MessageStatus::delivered &&
+                        member_status != messaging::MessageStatus::read) {
+                      all_delivered = false;
+                    }
+                  }
+                }
+              }
+            }
+            if (all_read) {
+              history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::read);
+            } else if (all_delivered && current_entry->status != messaging::MessageStatus::read) {
+              history_->UpdateMessageStatus(topic_id, target_id, messaging::MessageStatus::delivered);
+            }
+          } else {
+            history_->UpdateMessageStatus(topic_id, target_id, msg_status);
+          }
+        }
+      }
+    }
+  }
+
+  void
+  HandleChatProjection(TopicID const& topic_id, messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+    uint64_t message_id = json.value("message_id", 0ULL);
+
+    auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
+    if (ledger_ts < 10000000000ULL) {
+      ledger_ts *= Time::uS;
+    } else if (ledger_ts < 10000000000000ULL) {
+      ledger_ts *= Time::mS;
+    }
+
+    uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
+
+    bool const is_system = json.value("is_system", false);
+    auto payload = json.value("payload", Json::object());
+    std::string const content = payload.value(keyContent, "");
+    uint64_t const reply_to_id = payload.value("reply_to_id", 0ULL);
+
+    messaging::HistoryEntryKind const kind =
+        is_system ? messaging::HistoryEntryKind::systemMessage : messaging::HistoryEntryKind::textMessage;
+
+    std::vector<messaging::Attachment> attachments;
+    if (json.contains("attachments")) {
+      std::filesystem::path const storage_root(storage_->GetPath());
+      std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+      std::error_code err;
+      std::filesystem::create_directories(attachments_dir, err);
+
+      for (auto const& j_att : json["attachments"]) {
+        messaging::Attachment att;
+        att.id = j_att.value("id", "");
+        att.type = j_att.value("type", messaging::AttachmentType::file);
+        att.mime_type = j_att.value("mime", "");
+        att.size_bytes = j_att.value("size", 0ULL);
+        att.thumbnail_base64 = j_att.value("thumb", "");
+        att.hash = j_att.value("hash", "");
+        att.note = j_att.value("note", "");
+        att.file_name = j_att.value("name", "");
+
+        att.is_downloaded = false;
+        att.status = messaging::AttachmentStatus::pending;
+        std::string filename = att.file_name;
+        if (filename.empty()) {
+          filename = att.id + GetExtensionForMimeType(att.mime_type);
+        }
+        att.file_path = ResolvePathConflict(attachments_dir, filename).string();
+        attachments.push_back(att);
+      }
+    }
+
+    auto db_entry = history_->AddTextEntry(
+        {.topic_id = topic_id,
+         .content = content,
+         .attachments = attachments,
+         .direction = is_mine ? messaging::MessageDirection::sent : messaging::MessageDirection::received,
+         .kind = kind,
+         .id = message_id,
+         .reply_to_id = reply_to_id,
+         .timestamp = msg_timestamp,
+         .author_id = entry.author_id}
+    );
+
+    if (is_mine) {
+      history_->UpdateMessageStatus(topic_id, message_id, messaging::MessageStatus::delivered);
+      db_entry.status = messaging::MessageStatus::delivered;
+    }
+
+    for (auto const& att : attachments) {
+      if (!att.is_downloaded && att.status != messaging::AttachmentStatus::discarded &&
+          att.status != messaging::AttachmentStatus::canceled) {
+        sm_->file_transfer->QueueDownload(entry.author_id, att, db_entry.id);
+        sm_->file_transfer->ResumeTransfer(entry.author_id, att.id, false);
+      }
+    }
+
+    EventQueue::Instance().Push(EventChatMessageReceived{topic_id, db_entry});
+
+    if (!is_mine) {
+      QueueDeliveryReceipt(topic_id, message_id);
+
+      if (!is_system) {
+        bool should_evaluate_now = false;
+        {
+          std::lock_guard<std::mutex> const lock(sync_state_mutex_);
+          if (!is_syncing_[ContactID(topic_id.Span())]) {
+            should_evaluate_now = true;
+          } else {
+            unread_evaluation_needed_[ContactID(topic_id.Span())] = true;
+          }
+        }
+        if (should_evaluate_now && !sm_->is_foreground) {
+          bg_queue_.Dispatch([this, topic_id]() { EvaluateNotifications(topic_id, true, false); });
+        }
+      }
+    }
+  }
+
+  auto ProcessIncomingAttachments(std::vector<messaging::Attachment> const& attachments)
+      -> std::vector<messaging::Attachment> {
+    std::vector<messaging::Attachment> local_attachments = attachments;
+    std::filesystem::path const storage_root(storage_->GetPath());
+    std::filesystem::path const attachments_dir = storage_root.parent_path() / "attachments";
+
+    if (!local_attachments.empty()) {
+      std::error_code err;
+      std::filesystem::create_directories(attachments_dir, err);
+      for (auto& att : local_attachments) {
+        std::string filename = att.file_name;
+        if (filename.empty()) {
+          filename = att.id + GetExtensionForMimeType(att.mime_type);
+        }
+        std::filesystem::path const final_path = ResolvePathConflict(attachments_dir, filename);
+        att.file_path = final_path.string();
+        att.status = messaging::AttachmentStatus::pending;
+      }
+    }
+    return local_attachments;
+  }
+
+  void TriggerNewMessageNotificationIfNeeded(TopicID const& topic_id, bool is_system, uint64_t entry_id) {
     if (!is_system && !sm_->is_foreground) {
       auto contact = contact_manager_->GetContact(ContactID(topic_id.Span()));
       std::string const name =
@@ -963,17 +1032,20 @@ class MessagingService {
         return false;
       });
       if (!unread.empty()) {
-        EventQueue::Instance().Push(EventNotifyNewMessage{topic_id, entry.id, name, std::move(unread)});
+        EventQueue::Instance().Push(EventNotifyNewMessage{topic_id, entry_id, name, std::move(unread)});
       }
     }
   }
 
- private:
   void EvaluateNotifications(TopicID const& topic_id, bool evaluate_unread, bool evaluate_missed_calls) {
-    if (sm_->is_foreground) return;
+    if (sm_->is_foreground) {
+      return;
+    }
 
     auto unread = GetUnreadMessages(topic_id);
-    if (unread.empty()) return;
+    if (unread.empty()) {
+      return;
+    }
 
     std::string name = topic_id.ToString().substr(0, 8);
     if (auto contact = contact_manager_->GetContact(ContactID(topic_id.Span()))) {

@@ -12,10 +12,11 @@
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_hela_eillance_viewmodels_ContactsViewModel_nativeCreate(JNIEnv* env, jobject /*instance*/) {
-  if (!g_clientEngine) {
+  auto engine = GetSafeEngine();
+  if (!engine) {
     return 0;
   }
-  auto* vm = new eillance::view_model::ContactsViewModel(g_clientEngine->GetClient());
+  auto* vm = new eillance::view_model::ContactsViewModel(engine->GetClient());
   return reinterpret_cast<jlong>(vm);
 }
 
@@ -144,7 +145,8 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewM
     jstring name,
     jstring peer_ids_csv
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
 
   char const* name_chars = env->GetStringUTFChars(name, nullptr);
   char const* csv_chars = env->GetStringUTFChars(peer_ids_csv, nullptr);
@@ -164,7 +166,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewM
     }
   }
 
-  auto gid = g_clientEngine->GetClient()->CreateGroup(group_name, members);
+  auto gid = engine->GetClient()->CreateGroup(group_name, members);
   return env->NewStringUTF(gid.ToString().c_str());
 }
 
@@ -240,10 +242,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewM
     jstring name,
     jstring desc
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
   char const* n = env->GetStringUTFChars(name, nullptr);
   char const* d = env->GetStringUTFChars(desc, nullptr);
-  auto cid = g_clientEngine->GetClient()->CreateChannel(n, d);
+  auto cid = engine->GetClient()->CreateChannel(n, d);
   env->ReleaseStringUTFChars(name, n);
   env->ReleaseStringUTFChars(desc, d);
   return env->NewStringUTF(cid.ToString().c_str());
@@ -256,19 +259,21 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
     jstring cid,
     jstring oid
 ) {
-  if (!g_clientEngine) return;
+  auto engine = GetSafeEngine();
+  if (!engine) return;
   char const* c = env->GetStringUTFChars(cid, nullptr);
   char const* o = env->GetStringUTFChars(oid, nullptr);
-  g_clientEngine->GetClient()->SubscribeToChannel(eillance::ChannelID(c), eillance::ContactID(o));
+  engine->GetClient()->SubscribeToChannel(eillance::ChannelID(c), eillance::ContactID(o));
   env->ReleaseStringUTFChars(cid, c);
   env->ReleaseStringUTFChars(oid, o);
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_viewmodels_ContactsViewModel_nativeUnsubscribeChannel(JNIEnv* env, jobject, jlong ptr, jstring cid) {
-  if (!g_clientEngine) return;
+  auto engine = GetSafeEngine();
+  if (!engine) return;
   char const* c = env->GetStringUTFChars(cid, nullptr);
-  g_clientEngine->GetClient()->UnsubscribeChannel(eillance::ChannelID(c));
+  engine->GetClient()->UnsubscribeChannel(eillance::ChannelID(c));
   env->ReleaseStringUTFChars(cid, c);
 }
 
@@ -278,9 +283,10 @@ extern "C" JNIEXPORT jobjectArray JNICALL Java_hela_eillance_viewmodels_Contacts
     jlong ptr,
     jstring channel_id
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
   char const* cid_chars = env->GetStringUTFChars(channel_id, nullptr);
-  auto members = g_clientEngine->GetClient()->GetChannelMembers(eillance::ChannelID(cid_chars));
+  auto members = engine->GetClient()->GetChannelMembers(eillance::ChannelID(cid_chars));
   env->ReleaseStringUTFChars(channel_id, cid_chars);
 
   auto& class_refs = ClassRefs::Instance();
@@ -303,10 +309,11 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsView
     jstring cid,
     jstring mid
 ) {
-  if (!g_clientEngine) return false;
+  auto engine = GetSafeEngine();
+  if (!engine) return false;
   char const* c = env->GetStringUTFChars(cid, nullptr);
   char const* m = env->GetStringUTFChars(mid, nullptr);
-  bool res = g_clientEngine->GetClient()->AddChannelMember(eillance::ChannelID(c), eillance::ContactID(m));
+  bool res = engine->GetClient()->AddChannelMember(eillance::ChannelID(c), eillance::ContactID(m));
   env->ReleaseStringUTFChars(cid, c);
   env->ReleaseStringUTFChars(mid, m);
   return res ? JNI_TRUE : JNI_FALSE;
@@ -319,10 +326,11 @@ extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsView
     jstring cid,
     jstring mid
 ) {
-  if (!g_clientEngine) return false;
+  auto engine = GetSafeEngine();
+  if (!engine) return false;
   char const* c = env->GetStringUTFChars(cid, nullptr);
   char const* m = env->GetStringUTFChars(mid, nullptr);
-  bool res = g_clientEngine->GetClient()->RemoveChannelMember(eillance::ChannelID(c), eillance::ContactID(m));
+  bool res = engine->GetClient()->RemoveChannelMember(eillance::ChannelID(c), eillance::ContactID(m));
   env->ReleaseStringUTFChars(cid, c);
   env->ReleaseStringUTFChars(mid, m);
   return res ? JNI_TRUE : JNI_FALSE;
@@ -366,9 +374,10 @@ extern "C" JNIEXPORT jobject JNICALL Java_hela_eillance_viewmodels_ContactsViewM
     jlong /*ptr*/,
     jstring query
 ) {
-  if (!g_clientEngine) return nullptr;
+  auto engine = GetSafeEngine();
+  if (!engine) return nullptr;
   char const* chars = env->GetStringUTFChars(query, nullptr);
-  auto messages = g_clientEngine->GetClient()->SearchAllMessages(chars);
+  auto messages = engine->GetClient()->SearchAllMessages(chars);
   env->ReleaseStringUTFChars(query, chars);
 
   // Convert to GlobalSearchResult list
