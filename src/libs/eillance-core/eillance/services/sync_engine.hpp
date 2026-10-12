@@ -250,7 +250,7 @@ class SyncEngine {
             transport_->SendJson(peer_id, reply);
           }
         } else {
-          LGE << "[Sync] Peer requested missing entry: " << req_hash;
+          LGW << "[Sync] Peer requested missing or replaced entry: " << req_hash << ". Ignoring until new propose.";
           nlohmann::json const reply = {{"type", "sync_not_found"}, {"topic", topic_id.ToString()}, {"hash", req_hash}};
           transport_->SendJson(peer_id, reply);
         }
@@ -348,7 +348,9 @@ class SyncEngine {
                 break;
               }
             }
-            if (!found) new_entries.push_back(ce);
+            if (!found) {
+              new_entries.push_back(ce);
+            }
           }
 
           auto current_hash = actual_lca;
@@ -362,8 +364,6 @@ class SyncEngine {
           }
 
           storage_->ReplaceLedgerEntries(topic_id, actual_lca, combined);
-
-          active_sync_requests_.erase(topic_id.ToString());
 
           for (auto const& entry : new_entries) {
             EventQueue::Instance().Push(EventLedgerAppended{entry});
