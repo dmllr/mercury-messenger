@@ -57,6 +57,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
               AddPeer(peer_id, p);
           }
           p->data_channel_is_open = true;
+          p->is_connecting = false;
           LGI << "Peer connected: " << peer_id.ToString();
           EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
           EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
@@ -65,6 +66,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
       node_->SetOnDisconnected([this](ContactID const& peer_id) {
         if (auto p = GetPeer(peer_id)) {
           p->data_channel_is_open = false;
+          p->is_connecting = false;
         }
         EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
       });
@@ -128,14 +130,21 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   auto GetConnectionState(ContactID const& peer_id) const -> PeerConnectionState override {
-    if (auto p = GetPeer(peer_id); p && p->data_channel_is_open) {
-      return PeerConnectionState::connected;
+    if (auto p = GetPeer(peer_id)) {
+      if (p->data_channel_is_open) return PeerConnectionState::connected;
+      if (p->is_connecting) return PeerConnectionState::connecting;
     }
     return PeerConnectionState::disconnected;
   }
 
   void Connect(ContactID const& peer_id) override {
     if (node_) {
+      auto p = GetPeer(peer_id);
+      if (!p) {
+        p = std::make_shared<Peer>(peer_id);
+        AddPeer(peer_id, p);
+      }
+      p->is_connecting = true;
       LGI << "Triggering automated DHT search for: " << peer_id.ToString();
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connecting});
       node_->Dial(peer_id);
@@ -143,7 +152,10 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   void Disconnect(ContactID const& peer_id) override {
-    if (auto p = GetPeer(peer_id)) p->data_channel_is_open = false;
+    if (auto p = GetPeer(peer_id)) {
+      p->data_channel_is_open = false;
+      p->is_connecting = false;
+    }
     EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
   }
 
