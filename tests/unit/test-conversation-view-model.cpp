@@ -284,11 +284,10 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   auto const entry = mock_storage_->AddHistoryEntry({.data = msg_data, .topic_id = TopicID(peer1), .author_id = peer1});
 
   EventQueue::Instance().Push(EventChatMessageReceived{TopicID(peer1), entry});
-  WaitFor([&] {
-    for (auto const& m : observer->GetState().history) {
-      if (m.id == entry.id) return true;
-    }
-    return false;
+  WaitFor([&observer, &entry]() -> bool {
+    return std::ranges::any_of(observer->GetState().history, [&entry](auto const& m) -> bool {
+      return m.id == entry.id;
+    });
   });
 
   // Resume download (is_upload=false)
@@ -300,7 +299,9 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
           if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
             auto& m = std::get<messaging::ChatMessageEntry>(msg.data);
             for (auto& a : m.message.attachments) {
-              if (a.id == "resume-test-id" && a.status == messaging::AttachmentStatus::transferring) return true;
+              if (a.id == "resume-test-id" && a.status == messaging::AttachmentStatus::transferring) {
+                return true;
+              }
             }
           }
         }
