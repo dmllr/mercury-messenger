@@ -118,9 +118,7 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   client_->UpdateMyProfile({.display_name = "Conn Name", .bio = "Conn Bio", .photo_base64 = "NewPhoto"});
 
   eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        return client_->GetPeerConnectionState(peer1) == transport::PeerConnectionState::connecting;
-      },
+      [&]() { return client_->GetPeerConnectionState(peer1) == transport::PeerConnectionState::connecting; },
       std::chrono::milliseconds(2000)
   );
 

@@ -339,13 +339,13 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
       [&]() -> bool {
         auto state = observer->GetState();
         for (auto const& entry : state.history) {
-                    if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-                      auto const& message = std::get<messaging::MessageEntry>(entry.data);
-                      if (message.content == "Small File" && !message.attachments.empty()) {
-                        if (message.attachments[0].status == messaging::AttachmentStatus::transferring) {
-                          success = true;
-                          return true;
-                        }
+          if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
+            auto const& message = std::get<messaging::MessageEntry>(entry.data);
+            if (message.content == "Small File" && !message.attachments.empty()) {
+              if (message.attachments[0].status == messaging::AttachmentStatus::transferring) {
+                success = true;
+                return true;
+              }
             }
           }
         }

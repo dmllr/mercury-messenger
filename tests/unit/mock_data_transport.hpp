@@ -4,12 +4,12 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <span>
 
 #include <nlohmann/json.hpp>
+#include <span>
 
-#include "eillance/transport/data_transport.hpp"
 #include "eillance/events/client_events.hpp"
+#include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::transport {
@@ -21,7 +21,9 @@ class MockDataTransport : public DataTransport::Interface {
   std::vector<std::byte> secret_key_;
   std::string bootstrap_url_;
 
-  void SetId(ContactID const& id) override { id_ = id; }
+  void SetId(ContactID const& id) override {
+    id_ = id;
+  }
   void SetSecretKey(std::span<std::byte const> key) override {
     secret_key_.assign(key.begin(), key.end());
   }
@@ -29,9 +31,12 @@ class MockDataTransport : public DataTransport::Interface {
     bootstrap_url_ = url;
   }
 
-  void Start() override {}
-  void Terminate() override {}
-  void Reconnect() override {}
+  void Start() override {
+  }
+  void Terminate() override {
+  }
+  void Reconnect() override {
+  }
 
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
     peers_[peer_id] = peer;
@@ -71,13 +76,18 @@ class MockDataTransport : public DataTransport::Interface {
       p->data_channel_initialized = false;
     }
     if (changed) {
-      eillance::EventQueue::Instance().Push(eillance::EventDataPeerConnectionStateChanged{peer_id, eillance::transport::PeerConnectionState::disconnected});
+      eillance::EventQueue::Instance().Push(
+          eillance::EventDataPeerConnectionStateChanged{peer_id, eillance::transport::PeerConnectionState::disconnected}
+      );
     }
   }
 
-  void CreateOffer(ContactID const&) override {}
-  void CreateAnswer(ContactID const&) override {}
-  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {}
+  void CreateOffer(ContactID const&) override {
+  }
+  void CreateAnswer(ContactID const&) override {
+  }
+  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
+  }
 
   auto SendData(ContactID const&, std::span<std::byte const>) -> bool override {
     return false;
@@ -85,7 +95,8 @@ class MockDataTransport : public DataTransport::Interface {
   auto SendJson(ContactID const&, nlohmann::json const&) -> bool override {
     return false;
   }
-  void SendSignalingMessage(nlohmann::json const&) const override {}
+  void SendSignalingMessage(nlohmann::json const&) const override {
+  }
 };
 
 }  // namespace eillance::transport

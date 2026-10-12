@@ -18,7 +18,8 @@ class AccountServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    auto media_transport = std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
+    auto media_transport =
+        std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
     auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);

@@ -9,8 +9,8 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/sync_engine.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_call_log.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;

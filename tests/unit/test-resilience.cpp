@@ -92,9 +92,7 @@ TEST_F(ResilienceTest, ProfileUpdateSyncsOnConnect) {
   );
 
   eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        return client_->GetPeerConnectionState(peer1) == transport::PeerConnectionState::connecting;
-      },
+      [&]() { return client_->GetPeerConnectionState(peer1) == transport::PeerConnectionState::connecting; },
       std::chrono::milliseconds(2000)
   );
 }

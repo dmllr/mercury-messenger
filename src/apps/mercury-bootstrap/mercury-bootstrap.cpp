@@ -11,8 +11,10 @@
 
 namespace {
 std::sig_atomic_t volatile signal_received = 0;
-void SignalHandler(int const signum) { signal_received = signum; }
+void SignalHandler(int const signum) {
+  signal_received = signum;
 }
+}  // namespace
 
 auto main(int argc, char* argv[]) -> int {
   eillance::utils::ArgsParser const args(argc, argv);

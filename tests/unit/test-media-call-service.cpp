@@ -73,7 +73,7 @@ TEST_F(MediaCallServiceTest, AcceptCall) {
   // Also push media state connected to hit the correct accept logic
   EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{peer1, transport::PeerConnectionState::connected});
 
-  EventQueue::Instance().WaitFor([]{ return false; }, std::chrono::milliseconds(50));
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   bool accepted_cb = false;
   auto sub = EventQueue::Instance().Subscribe<EventCallAccepted>([&](auto const& e) {
