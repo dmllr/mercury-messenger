@@ -31,6 +31,7 @@ pub struct Callbacks {
   pub on_log: usize,
   pub on_turn_relays_discovered: usize,
   pub on_turn_auth_result: usize,
+  pub on_network_stats: usize,
 }
 unsafe impl Send for Callbacks {}
 unsafe impl Sync for Callbacks {}

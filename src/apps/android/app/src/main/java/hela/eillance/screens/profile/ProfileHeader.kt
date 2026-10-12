@@ -56,8 +56,10 @@ fun ProfileHeader(
   val context = LocalContext.current
   val connectionState by settingsVM.connectionState.collectAsState()
   val bootstrapNodeUrl by settingsVM.bootstrapNodeUrl.collectAsState()
+  val networkStats by settingsVM.networkStats.collectAsState()
 
   var showQrDialog by remember { mutableStateOf(false) }
+  var expandedNerdStats by remember { mutableStateOf(false) }
   val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
   val copyIdToClipboard: () -> Unit = {
@@ -134,38 +136,63 @@ fun ProfileHeader(
       Spacer(modifier = Modifier.height(16.dp))
     }
 
-    val (statusText, statusColor) = when (connectionState) {
-      ServiceConnectionState.Online -> stringResource(id = R.string.service_connection_state_online) to MaterialTheme.extendedColors.success
-      ServiceConnectionState.Establishing -> stringResource(id = R.string.service_connection_state_establishing) to MaterialTheme.extendedColors.warning
-      ServiceConnectionState.NoNetwork -> stringResource(id = R.string.status_no_network) to MaterialTheme.colorScheme.error
-      ServiceConnectionState.Failure -> stringResource(id = R.string.status_bootstrap_error) to MaterialTheme.colorScheme.error
-      else -> stringResource(id = R.string.service_connection_state_disconnected) to MaterialTheme.colorScheme.onSurfaceVariant
+    val isOnline = connectionState == ServiceConnectionState.Online
+    val (statusText, statusColor) = if (!isOnline) {
+      when (connectionState) {
+        ServiceConnectionState.Establishing -> stringResource(id = R.string.service_connection_state_establishing) to MaterialTheme.extendedColors.warning
+        ServiceConnectionState.NoNetwork -> stringResource(id = R.string.status_no_network) to MaterialTheme.colorScheme.error
+        ServiceConnectionState.Failure -> stringResource(id = R.string.status_bootstrap_error) to MaterialTheme.colorScheme.error
+        else -> stringResource(id = R.string.network_offline) to MaterialTheme.colorScheme.onSurfaceVariant
+      }
+    } else {
+      // Degraded only applies if completely isolated. If we have at least 1 peer, we are healthy enough to communicate.
+      if (networkStats.bootstrapNodesAlive > 0 || networkStats.connectedPeers > 0) {
+        stringResource(id = R.string.network_healthy) to MaterialTheme.extendedColors.success
+      } else {
+        stringResource(id = R.string.network_degraded) to MaterialTheme.extendedColors.warning
+      }
     }
 
     Surface(
       color = statusColor.copy(alpha = 0.1f),
       shape = MaterialTheme.shapes.small,
-      modifier = Modifier.padding(bottom = 16.dp)
+      modifier = Modifier.padding(bottom = 16.dp).clip(MaterialTheme.shapes.small).clickable { expandedNerdStats = !expandedNerdStats }
     ) {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-      ) {
-        Box(
-          modifier = Modifier
-            .size(8.dp)
-            .background(statusColor, CircleShape)
-        )
-        Spacer(Modifier.width(8.dp))
-        Column {
-          Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
-          if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrl.isNotEmpty()) {
-            Text(
-              text = stringResource(id = R.string.status_bootstrap_url, bootstrapNodeUrl),
-              style = MaterialTheme.typography.labelSmall,
-              color = statusColor
-            )
+      Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            modifier = Modifier
+              .size(8.dp)
+              .background(statusColor, CircleShape)
+          )
+          Spacer(Modifier.width(8.dp))
+          Column {
+            Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
+            if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrl.isNotEmpty()) {
+              Text(
+                text = stringResource(id = R.string.status_bootstrap_url, bootstrapNodeUrl),
+                style = MaterialTheme.typography.labelSmall,
+                color = statusColor
+              )
+            }
           }
+        }
+        if (expandedNerdStats) {
+          Spacer(Modifier.height(8.dp))
+          androidx.compose.material3.HorizontalDivider(color = statusColor.copy(alpha = 0.3f))
+          Spacer(Modifier.height(8.dp))
+          Text(stringResource(R.string.nerd_stats_title), style = MaterialTheme.typography.labelMedium, color = statusColor)
+          Spacer(Modifier.height(4.dp))
+          Text(stringResource(R.string.stats_bootstrap_nodes, networkStats.bootstrapNodesAlive), style = MaterialTheme.typography.bodySmall, color = statusColor)
+          Text(stringResource(R.string.stats_connected_nodes, networkStats.connectedPeers), style = MaterialTheme.typography.bodySmall, color = statusColor)
+          Text(stringResource(R.string.stats_dht_peers, networkStats.dhtPeers), style = MaterialTheme.typography.bodySmall, color = statusColor)
+
+          val roleStr = when (networkStats.deviceRole) {
+            "turn_server" -> stringResource(R.string.role_turn_server)
+            "relay_node" -> stringResource(R.string.role_relay_node)
+            else -> stringResource(R.string.role_simple_node)
+          }
+          Text(stringResource(R.string.stats_device_role, roleStr), style = MaterialTheme.typography.bodySmall, color = statusColor)
         }
       }
     }

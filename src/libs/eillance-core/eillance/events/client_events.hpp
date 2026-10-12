@@ -123,6 +123,13 @@ struct EventPeerVersionMismatch {
   bool we_are_outdated;
 };
 
+struct EventNetworkStatsUpdated {
+  int connected_peers;
+  int bootstrap_nodes_alive;
+  int dht_peers;
+  std::string device_role;
+};
+
 struct EventContactUnreachable {
   ContactID peer_id;
   bool is_unreachable;
