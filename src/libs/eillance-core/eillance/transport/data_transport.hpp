@@ -22,7 +22,9 @@ class DataTransport {
 
     // Config
     virtual void SetId(ContactID const& id) = 0;
-    virtual void SetSecretKey(std::span<std::byte const> key) { (void)key; }
+    virtual void SetSecretKey(std::span<std::byte const> key) {
+      (void)key;
+    }
     virtual void SetBootstrapNodeUrl(std::string const& url) = 0;
 
     // Lifecycle
