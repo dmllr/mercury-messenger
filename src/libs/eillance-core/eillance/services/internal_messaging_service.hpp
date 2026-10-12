@@ -45,6 +45,12 @@ class InternalMessagingService {
     }));
 
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaSignalingMessage>([this](auto const& e) {
+      std::string const to_str = e.message.value("to", "");
+      if (!to_str.empty()) {
+        if (auto p = data_transport_->GetPeer(ContactID(to_str))) {
+          p->pending_offer_sdp = "";  // Mark as sent to prevent forced fallback
+        }
+      }
       data_transport_->SendSignalingMessage(e.message);
     }));
   }

@@ -191,6 +191,7 @@ class CallViewModel {
         client->AcceptCall(peer_id);
       }
       Notify();
+      StartTicker();
     }
 
     void RejectCall() {
@@ -277,6 +278,7 @@ class CallViewModel {
       }
       if (should_notify) {
         Notify();
+        StartTicker();
       }
     }
 
@@ -294,6 +296,7 @@ class CallViewModel {
       }
       if (should_notify) {
         Notify();
+        StartTicker();
       }
     }
 
