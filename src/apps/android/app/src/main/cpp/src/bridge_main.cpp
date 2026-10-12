@@ -179,7 +179,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterMethod(env, media_transport_class, "stopLocalMedia", "()V");
     classref.RegisterMethod(env, media_transport_class, "setAudioEnabled", "(Z)V");
     classref.RegisterMethod(env, media_transport_class, "setVideoEnabled", "(Z)V");
-    classref.RegisterMethod(env, media_transport_class, "nativeOnSendMediaSignalingMessage", "(JLjava/lang/String;)V");
+    classref
+        .RegisterMethod(env, media_transport_class, "nativeOnSendMediaNegotiationMessage", "(JLjava/lang/String;)V");
 
     classref.RegisterClass(env, "hela/eillance/MessengerService");
     classref.RegisterMethod(

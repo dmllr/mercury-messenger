@@ -4,6 +4,7 @@
 
 #include <jni.h>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
 #include "media_transport_impl_libwebrtc.hpp"
@@ -27,7 +28,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport
   }
 }
 
-extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport_nativeOnSendMediaSignalingMessage(
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport_nativeOnSendMediaNegotiationMessage(
     JNIEnv* env,
     jobject,
     jlong native_ptr,
@@ -38,7 +39,7 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_webrtc_WebRtcMediaTransport
     char const* msg_chars = env->GetStringUTFChars(message, nullptr);
     try {
       auto const json_msg = nlohmann::json::parse(msg_chars);
-      eillance::EventQueue::Instance().Push(eillance::EventSendMediaSignalingMessage{json_msg});
+      eillance::EventQueue::Instance().Push(eillance::EventSendMediaNegotiationMessage{json_msg});
     } catch (std::exception const& e) {
       LGE << "Failed to parse media signaling message: " << e.what();
     }

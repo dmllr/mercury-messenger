@@ -55,7 +55,7 @@ The core business logic is encapsulated within a set of C++ libraries collective
 
 #### Protocol Stack
 
-Project Mercury utilizes real-time data and media exchange through a Peer Connection, a signaled peer-to-peer connection capable of carrying both data and media tracks based on the following standards:
+Project Mercury utilizes real-time data and media exchange through a Peer Connection, a negotiated peer-to-peer connection capable of carrying both data and media tracks based on the following standards:
 
 **Protocol Stack:**
 

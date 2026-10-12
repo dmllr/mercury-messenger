@@ -217,8 +217,8 @@ struct EventCmdSetSpeakerphone {
   bool is_speaker_on;
 };
 
-// WebRTC Media signaling bridge event
-struct EventSendMediaSignalingMessage {
+// WebRTC Media negotiation bridge event
+struct EventSendMediaNegotiationMessage {
   nlohmann::json message;
 };
 

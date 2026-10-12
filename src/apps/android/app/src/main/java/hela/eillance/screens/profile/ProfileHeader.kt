@@ -138,7 +138,7 @@ fun ProfileHeader(
       ServiceConnectionState.Online -> stringResource(id = R.string.service_connection_state_online) to MaterialTheme.extendedColors.success
       ServiceConnectionState.Establishing -> stringResource(id = R.string.service_connection_state_establishing) to MaterialTheme.extendedColors.warning
       ServiceConnectionState.NoNetwork -> stringResource(id = R.string.status_no_network) to MaterialTheme.colorScheme.error
-      ServiceConnectionState.Failure -> stringResource(id = R.string.status_server_error) to MaterialTheme.colorScheme.error
+      ServiceConnectionState.Failure -> stringResource(id = R.string.status_bootstrap_error) to MaterialTheme.colorScheme.error
       else -> stringResource(id = R.string.service_connection_state_disconnected) to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -161,7 +161,7 @@ fun ProfileHeader(
           Text(text = statusText, style = MaterialTheme.typography.labelLarge, color = statusColor)
           if (connectionState == ServiceConnectionState.Failure && bootstrapNodeUrl.isNotEmpty()) {
             Text(
-              text = stringResource(id = R.string.status_server_url, bootstrapNodeUrl),
+              text = stringResource(id = R.string.status_bootstrap_url, bootstrapNodeUrl),
               style = MaterialTheme.typography.labelSmall,
               color = statusColor
             )
