@@ -10,16 +10,9 @@ execute_process(
 )
 set(shared_cmake_libs_path "${REPO_ROOT}/src/cmake")
 
-add_subdirectory("${REPO_ROOT}/src/libs/eillance-capture" "${CMAKE_CURRENT_BINARY_DIR}/eillance-capture")
-add_subdirectory("${REPO_ROOT}/src/libs/eillance-rtc" "${CMAKE_CURRENT_BINARY_DIR}/eillance-rtc")
-
 include("${shared_cmake_libs_path}/setup.cmake")
 include("${shared_cmake_libs_path}/import_remote.cmake")
 include("${shared_cmake_libs_path}/libftxui.cmake")
-include("${shared_cmake_libs_path}/libopencv.cmake")
-include("${shared_cmake_libs_path}/libffmpeg.cmake")
-include("${shared_cmake_libs_path}/libminiaudio.cmake")
-include("${shared_cmake_libs_path}/libopus.cmake")
 
 add_executable(mercury-cli
   mercury.cpp
@@ -34,8 +27,4 @@ target_link_libraries(mercury-cli PRIVATE
   eillance-rtc
   eillance-utils
   libftxui
-  libopencv
-  libffmpeg
-  libminiaudio
-  opus
 )

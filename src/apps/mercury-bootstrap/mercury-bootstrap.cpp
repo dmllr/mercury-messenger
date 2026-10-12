@@ -1,78 +1,45 @@
 #include <chrono>
 #include <csignal>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <string>
 #include <thread>
 #include <vector>
-
-#include <openssl/rand.h>
-
-#include "eillance/crypto/crypto.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/transport/libp2p_node.hpp"
 #include "eillance/utils/args_parser.hpp"
 
 namespace {
 std::sig_atomic_t volatile signal_received = 0;
+void SignalHandler(int const signum) { signal_received = signum; }
 
-void SignalHandler(int const signum) {
-  LGI << "\nInterrupt signal (" << signum << ") received.\n";
-  signal_received = signum;
+// Hardcoded seed for the local bootstrap node identity.
+// In production, this would be loaded from a protected file.
+constexpr std::array<uint8_t, 32> kBootstrapSeed = {
+  0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+  0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+  0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20
+};
 }
-
-constexpr auto ParseLogLevel(std::string_view const level) -> plog::Severity {
-  if (level == "none") return plog::none;
-  if (level == "fatal") return plog::fatal;
-  if (level == "error") return plog::error;
-  if (level == "warning") return plog::warning;
-  if (level == "info") return plog::info;
-  if (level == "debug") return plog::debug;
-  if (level == "verbose") return plog::verbose;
-  return plog::info;
-}
-}  // namespace
 
 auto main(int argc, char* argv[]) -> int {
   eillance::utils::ArgsParser const args(argc, argv);
-
-  static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
-  plog::init(plog::warning, &appender);
-  auto log_level_str = args.Get("--log-level").value_or("info");
-  plog::init<logInstanceId>(ParseLogLevel(log_level_str), &appender);
-
-  LGI << "Starting Mercury Bootstrap Node";
-
-  std::string key_file = args.Get("--key-file").value_or("bootstrap.key");
-  std::vector<std::byte> secret_key(32);
-
-  if (std::filesystem::exists(key_file)) {
-    std::ifstream ifs(key_file, std::ios::binary);
-    ifs.read(reinterpret_cast<char*>(secret_key.data()), 32);
-    LGI << "Loaded secret key from " << key_file;
-  } else {
-    RAND_bytes(reinterpret_cast<unsigned char*>(secret_key.data()), 32);
-    std::ofstream ofs(key_file, std::ios::binary);
-    ofs.write(reinterpret_cast<char const*>(secret_key.data()), 32);
-    LGI << "Generated new secret key and saved to " << key_file;
-  }
-
   uint16_t const port = static_cast<uint16_t>(args.GetInt("--port").value_or(807));
 
-  std::signal(SIGINT, SignalHandler);
+  std::vector<std::byte> secret_key;
+  for(auto b : kBootstrapSeed) secret_key.push_back(static_cast<std::byte>(b));
 
   eillance::transport::Libp2pNode const node(secret_key);
   node.Start();
 
+  // Listen on the specified port.
+  // IMPORTANT: For DHT to work properly, we listen on 0.0.0.0
   std::string const listen_addr = "/ip4/0.0.0.0/tcp/" + std::to_string(port);
   node.Listen(listen_addr);
 
-  LGI << "Listening on " << listen_addr << "\nPress Ctrl+C to exit";
+  LGI << "Bootstrap Node Active. Multiaddr: " << listen_addr;
+  std::signal(SIGINT, SignalHandler);
   while (signal_received == 0) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
-  LGI << "Shutting down...";
   node.Stop();
   return 0;
 }

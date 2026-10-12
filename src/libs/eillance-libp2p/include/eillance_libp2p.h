@@ -15,7 +15,7 @@ typedef void (*eillance_libp2p_on_peer_disconnected_cb)(void* context, char cons
 typedef void (*eillance_libp2p_on_message_cb)(void* context, char const* peer_id_hex, uint8_t const* data, size_t len);
 
 /* Creates a new libp2p node instance using a 32-byte Ed25519 secret key. Returns an opaque pointer. */
-void* eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes);
+auto eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes) -> void*;
 /* Starts the libp2p swarm background task. */
 void eillance_libp2p_node_start(void* node);
 /* Signals the node to cleanly shutdown its networking operations. */
@@ -31,7 +31,7 @@ void eillance_libp2p_node_set_callbacks(
     eillance_libp2p_on_message_cb on_message
 );
 
-bool eillance_libp2p_node_send_message(void* node, char const* peer_id_hex, uint8_t const* data, size_t len);
+auto eillance_libp2p_node_send_message(void* node, char const* peer_id_hex, uint8_t const* data, size_t len) -> bool;
 void eillance_libp2p_node_dial(void* node, char const* peer_id_hex);
 void eillance_libp2p_node_add_bootstrap_node(void* node, char const* multiaddr);
 void eillance_libp2p_node_listen(void* node, char const* multiaddr);

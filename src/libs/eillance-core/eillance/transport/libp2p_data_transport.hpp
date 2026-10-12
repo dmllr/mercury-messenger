@@ -26,6 +26,10 @@ class Libp2pDataTransport : public DataTransport::Interface {
   mutable std::mutex peersMutex_;
   std::vector<std::byte> secret_key_;
   std::string bootstrap_url_;
+  bool is_started_ = false;
+
+  // The PeerID of the bootstrap node derived from the hardcoded kBootstrapSeed in mercury-bootstrap.cpp
+  const std::string kLocalBootstrapPeerId = "12D3KooWJ6GrnK86eZ6vVVD7rXNskpYq2zLALoE29C6sU49Y1C2D";
 
  public:
   Libp2pDataTransport() = default;
@@ -40,24 +44,25 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
   void SetBootstrapNodeUrl(std::string const& url) override {
     bootstrap_url_ = url;
-    if (node_ && !bootstrap_url_.empty()) {
-      node_->AddBootstrapNode(bootstrap_url_);
-    }
   }
 
   void Start() override {
+    if (is_started_) return;
+    is_started_ = true;
+
     if (!node_) {
       node_ = std::make_shared<Libp2pNode>(secret_key_);
 
       node_->SetOnConnected([this](ContactID const& peer_id) {
-        auto p = GetPeer(peer_id);
-        if (!p) {
-          p = std::make_shared<Peer>(peer_id);
-          AddPeer(peer_id, p);
-        }
-        p->data_channel_is_open = true;
-        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
-        EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
+          auto p = GetPeer(peer_id);
+          if (!p) {
+              p = std::make_shared<Peer>(peer_id);
+              AddPeer(peer_id, p);
+          }
+          p->data_channel_is_open = true;
+          LGI << "Peer connected: " << peer_id.ToString();
+          EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
+          EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
       });
 
       node_->SetOnDisconnected([this](ContactID const& peer_id) {
@@ -73,26 +78,34 @@ class Libp2pDataTransport : public DataTransport::Interface {
       });
     }
 
+    node_->Start();
+
     if (!bootstrap_url_.empty()) {
+      LGI << "Connecting to bootstrap: " << bootstrap_url_;
       node_->AddBootstrapNode(bootstrap_url_);
+    } else {
+      std::string const fallback_addr = "/ip4/127.0.0.1/tcp/807/p2p/" + kLocalBootstrapPeerId;
+      LGI << "Connecting to fallback bootstrap: " << fallback_addr;
+      node_->AddBootstrapNode(fallback_addr);
     }
 
-    node_->Start();
+    node_->Listen("/ip4/0.0.0.0/tcp/0");
+    node_->Listen("/ip6/::/tcp/0");
+
     EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
   }
 
   void Terminate() override {
-    if (node_) {
-      node_->Stop();
-    }
+    if (!is_started_) return;
+    is_started_ = false;
+    if (node_) node_->Stop();
     EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::disconnected});
   }
 
   void Reconnect() override {
-    if (node_) {
-      node_->Stop();
-      node_->Start();
-    }
+    if (!is_started_) return;
+    Terminate();
+    Start();
   }
 
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
@@ -126,24 +139,20 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
   void Connect(ContactID const& peer_id) override {
     if (node_) {
+      LGI << "Triggering automated DHT search for: " << peer_id.ToString();
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connecting});
       node_->Dial(peer_id);
     }
   }
 
   void Disconnect(ContactID const& peer_id) override {
-    if (auto p = GetPeer(peer_id)) {
-      p->data_channel_is_open = false;
-    }
+    if (auto p = GetPeer(peer_id)) p->data_channel_is_open = false;
     EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
   }
 
-  void CreateOffer(ContactID const&) override {
-  }
-  void CreateAnswer(ContactID const&) override {
-  }
-  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
-  }
+  void CreateOffer(ContactID const&) override {}
+  void CreateAnswer(ContactID const&) override {}
+  void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {}
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
     if (node_) return node_->SendMessage(peer_id, message);
@@ -152,23 +161,10 @@ class Libp2pDataTransport : public DataTransport::Interface {
 
   auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
     auto str = message.dump();
-    std::span<std::byte const> bytes(reinterpret_cast<std::byte const*>(str.data()), str.size());
-    return SendData(peer_id, bytes);
+    return SendData(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
   }
 
-  void SendSignalingMessage(Json const& message) const override {
-    std::string to = message.value("to", "");
-    if (!to.empty() && node_) {
-      try {
-        ContactID peer_id(to);
-        auto str = message.dump();
-        std::span<std::byte const> bytes(reinterpret_cast<std::byte const*>(str.data()), str.size());
-        node_->SendMessage(peer_id, bytes);
-      } catch (std::exception const& e) {
-        LGE << "Invalid ContactID in signaling message target: " << e.what();
-      }
-    }
-  }
+  void SendSignalingMessage(Json const&) const override {}
 };
 
 }  // namespace eillance::transport
