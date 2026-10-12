@@ -329,11 +329,8 @@ class ContactService {
         std::string name = profile.display_name ? *profile.display_name : peer_id.ToString().substr(0, 8);
         EventQueue::Instance().Push(EventNotifyContactRequest{peer_id, name});
       }
-      
-      nlohmann::json const ack_msg = {
-          {"type", "crcp_ack"},
-          {"profile", BuildMyProfileJson()}
-      };
+
+      nlohmann::json const ack_msg = {{"type", "crcp_ack"}, {"profile", BuildMyProfileJson()}};
       if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = transport_->SendJson(peer_id, ack_msg);
       }

@@ -218,7 +218,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
 
   if (isIncomingCall) {
     val callerContact = contacts.find { it.peerId == callState.peerId }
-    val callerName = callerContact?.name
+    val callerName = callerContact?.displayName
     val callerPhoto = callerContact?.photo
 
     IncomingCallScreen(
@@ -233,7 +233,7 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   } else if (isActiveCall) {
     // Resolve contact info for active call
     val activeContact = contacts.find { it.peerId == callState.peerId }
-    val contactName = activeContact?.name
+    val contactName = activeContact?.displayName
     val contactPhoto = activeContact?.photo
 
     CallScreen(

@@ -113,7 +113,7 @@ class IncomingCallActivity : ComponentActivity() {
     if (callState.isRinging && callState.callDirection == CallDirection.Incoming) {
       IncomingCallScreen(
         callerId = peerId,
-        callerName = contactInfo?.name,
+        callerName = contactInfo?.displayName,
         callerPhoto = contactInfo?.photo,
         callType = callState.callType,
         callVM = callVM,
@@ -130,7 +130,7 @@ class IncomingCallActivity : ComponentActivity() {
       CallScreen(
         callVM = callVM,
         callState = callState,
-        contactName = contactInfo?.name,
+        contactName = contactInfo?.displayName,
         contactPhoto = contactInfo?.photo
       )
     }

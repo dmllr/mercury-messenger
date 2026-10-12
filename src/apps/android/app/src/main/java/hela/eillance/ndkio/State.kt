@@ -168,6 +168,7 @@ data class Contact(
   val lastMessageAttachmentType: Int,
   val lastMessageDuration: Int
 ) {
+  val displayName: String get() = name.ifEmpty { peerId.take(8) }
   val status: ContactStatus get() = ContactStatus.fromInt(statusValue)
   val lastMsgKindEnum: HistoryEntryKind?
     get() = if (lastMessageKind != -1) HistoryEntryKind.fromInt(
