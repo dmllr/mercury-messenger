@@ -440,9 +440,7 @@ class FileTransferService {
       }
       if (!state.is_pumping) {
         state.is_pumping = true;
-        transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() {
-          PumpUploadBatch(peer_id, file_id);
-        });
+        transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() { PumpUploadBatch(peer_id, file_id); });
       }
     } else {
       std::ifstream file(attachment.file_path, std::ios::binary);
@@ -478,9 +476,7 @@ class FileTransferService {
       state.is_pumping = true;
       active_uploads_[attachment.id] = std::move(state);
 
-      transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() {
-        PumpUploadBatch(peer_id, file_id);
-      });
+      transfer_queue_.Dispatch([this, peer_id, file_id = attachment.id]() { PumpUploadBatch(peer_id, file_id); });
     }
   }
 
@@ -501,9 +497,7 @@ class FileTransferService {
       state.paused = false;
       if (!state.is_pumping) {
         state.is_pumping = true;
-        transfer_queue_.Dispatch([this, peer_id, file_id]() {
-          PumpUploadBatch(peer_id, file_id);
-        });
+        transfer_queue_.Dispatch([this, peer_id, file_id]() { PumpUploadBatch(peer_id, file_id); });
       }
     } else {
       auto attachment = storage_->GetAttachment(file_id);
@@ -542,7 +536,7 @@ class FileTransferService {
       return;
     }
 
-    std::size_t const batch_size = 4; // 4 chunks of 256KB -> 1MB per loop evaluation
+    std::size_t const batch_size = 4;  // 4 chunks of 256KB -> 1MB per loop evaluation
     std::vector<std::vector<std::byte>> buffers_to_send;
     std::vector<std::uint32_t> seqs_to_send;
 
@@ -590,7 +584,7 @@ class FileTransferService {
     }
 
     bool more_pending = !state.pending_chunks.empty();
-    lock.unlock(); // Drop lock during heavy asynchronous transfers
+    lock.unlock();  // Drop lock during heavy asynchronous transfers
 
     bool send_failed = false;
     std::size_t failed_index = 0;
@@ -620,7 +614,7 @@ class FileTransferService {
         PumpUploadBatch(peer_id, file_id);
       });
     } else if (more_pending) {
-      transfer_queue_.DispatchAfter(std::chrono::milliseconds(10),[this, peer_id, file_id]() {
+      transfer_queue_.DispatchAfter(std::chrono::milliseconds(10), [this, peer_id, file_id]() {
         PumpUploadBatch(peer_id, file_id);
       });
     } else {
@@ -701,7 +695,7 @@ class FileTransferService {
         }
         std::filesystem::path prog_path = state.progress_path;
 
-        lock.unlock(); // Drop lock during saving
+        lock.unlock();  // Drop lock during saving
         if (std::ofstream file_part(prog_path, std::ios::binary | std::ios::trunc); file_part) {
           file_part.write(reinterpret_cast<char const*>(packed.data()), packed.size());
         }
@@ -777,9 +771,7 @@ class FileTransferService {
 
       if (!state.is_pumping && !state.paused) {
         state.is_pumping = true;
-        transfer_queue_.Dispatch([this, peer_id, file_id]() {
-          PumpUploadBatch(peer_id, file_id);
-        });
+        transfer_queue_.Dispatch([this, peer_id, file_id]() { PumpUploadBatch(peer_id, file_id); });
       }
     } else {
       lock.unlock();

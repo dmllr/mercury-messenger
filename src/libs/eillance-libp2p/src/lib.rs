@@ -2,8 +2,7 @@ use futures::StreamExt;
 use libp2p::{
   Multiaddr, PeerId, StreamProtocol, SwarmBuilder, identify, identity,
   kad::{self, Behaviour as Kademlia, Config as KademliaConfig, store::MemoryStore},
-  mdns, noise, relay,
-  ping,
+  mdns, noise, ping, relay,
   request_response::{self, ProtocolSupport},
   swarm::{NetworkBehaviour, SwarmEvent},
   tcp, yamux,
@@ -771,13 +770,7 @@ pub extern "C" fn eillance_libp2p_node_free(ptr: *mut c_void) {
   );
 }
 
-fn send_internal(
-  ptr: *mut c_void,
-  peer_id_hex: *const c_char,
-  data: *const u8,
-  len: usize,
-  is_file: bool,
-) -> bool {
+fn send_internal(ptr: *mut c_void, peer_id_hex: *const c_char, data: *const u8, len: usize, is_file: bool) -> bool {
   run_ffi(
     AssertUnwindSafe(|| {
       if ptr.is_null() || peer_id_hex.is_null() || data.is_null() {
@@ -813,9 +806,9 @@ fn send_internal(
 
       if let Some(tx) = &node.command_tx {
         let cmd = if is_file {
-            Command::SendFile(peer_id, payload)
+          Command::SendFile(peer_id, payload)
         } else {
-            Command::SendChat(peer_id, payload)
+          Command::SendChat(peer_id, payload)
         };
         if tx.send(cmd).is_ok() {
           return true;
