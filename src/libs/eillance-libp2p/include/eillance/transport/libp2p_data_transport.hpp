@@ -162,9 +162,21 @@ class Libp2pDataTransport : public DataTransport::Interface {
             });
           }
       );
+
+      node_->SetOnProvidersDiscovered(
+          [this](std::string const& key_hex, std::vector<ContactID> const& providers) -> void {
+            rx_queue_.Dispatch([this, key_hex, providers]() -> void {
+              for (auto const& provider_id : providers) {
+                LGI << "Discovered provider " << provider_id.ToString() << " for DHT key " << key_hex;
+                node_->Dial(provider_id);
+              }
+            });
+          }
+      );
     }
 
     node_->Start();
+    node_->StartProviding(id_.ToString());
 
     if (!bootstrap_urls_.empty()) {
       for (auto const& url : bootstrap_urls_) {
@@ -262,8 +274,10 @@ class Libp2pDataTransport : public DataTransport::Interface {
         AddPeer(peer_id, p);
       }
       p->is_connecting = true;
-      LGD << "Triggering automated DHT search for: " << peer_id.ToString();
+      LGD << "Triggering DHT Provider search for: " << peer_id.ToString();
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connecting});
+
+      node_->GetProviders(peer_id.ToString());
       node_->Dial(peer_id);
     }
   }
