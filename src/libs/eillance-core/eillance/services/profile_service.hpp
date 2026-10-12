@@ -54,8 +54,7 @@ class ProfileService {
     msg["display_name"] = sm_->account->GetSettings()->GetMyDisplayName().value_or("");
     msg["bio"] = sm_->account->GetSettings()->GetMyBio().value_or("");
 
-    auto photo = sm_->account->GetSettings()->GetMyPhotoBase64();
-    if (photo && !photo->empty()) {
+    if (auto photo = sm_->account->GetSettings()->GetMyPhotoBase64(); photo && !photo->empty()) {
       msg["photo"] = *photo;
     } else {
       msg["photo"] = nullptr;

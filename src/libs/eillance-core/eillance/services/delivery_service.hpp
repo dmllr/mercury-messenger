@@ -240,7 +240,7 @@ class DeliveryService {
       }
     }
 
-    if (auto it = manual_retry_time_.find(peer_id); it != manual_retry_time_.end() && it->second > oldest) {
+    if (auto const it = manual_retry_time_.find(peer_id); it != manual_retry_time_.end() && it->second > oldest) {
       oldest = it->second;
     }
 

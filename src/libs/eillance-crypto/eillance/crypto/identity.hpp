@@ -193,7 +193,7 @@ class Identity {
     return priv_key;
   }
 
-  [[nodiscard]] auto Sign(std::span<std::byte const> message) -> std::vector<std::byte> {
+  [[nodiscard]] auto Sign(std::span<std::byte const> const message) const -> std::vector<std::byte> {
     EvpMdCtxPtr const ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!ctx) {
       return {};

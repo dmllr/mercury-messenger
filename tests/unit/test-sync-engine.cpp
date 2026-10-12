@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "eillance/services/sync_engine.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "mock_call_log.hpp"
 #include "mock_data_transport.hpp"
 #include "mock_persistent_storage.hpp"
@@ -345,14 +345,22 @@ TEST_F(SyncEngineTest, SyncHistoryLargerThanMaxBatchSize) {
 }
 
 TEST_F(SyncEngineTest, RestoreDeletedContactHistoryTriggersSyncedEvents) {
-  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"type", "chat"}, {"message_id", 1}, {"payload", {{"c", "Hello from A"}}}});
-  B->engine->AppendAction(TopicID(idA_), messaging::LedgerActionType::Message, {{"type", "chat"}, {"message_id", 2}, {"payload", {{"c", "Hello from B"}}}});
+  A->engine->AppendAction(
+      TopicID(idB_),
+      messaging::LedgerActionType::Message,
+      {{"type", "chat"}, {"message_id", 1}, {"payload", {{"c", "Hello from A"}}}}
+  );
+  B->engine->AppendAction(
+      TopicID(idA_),
+      messaging::LedgerActionType::Message,
+      {{"type", "chat"}, {"message_id", 2}, {"payload", {{"c", "Hello from B"}}}}
+  );
 
   PumpMessages();
 
   // B deletes contact A
   B->storage->DeleteLedgerEntriesAfter(TopicID(idA_), messaging::LedgerHash());
-  
+
   int synced_events_received = 0;
   auto sub_id = EventQueue::Instance().Subscribe<EventLedgerAppended>([&](auto const& e) {
     if (e.is_synced && e.entry.author_id == idB_) {
@@ -396,7 +404,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   sm.storage = A->storage;
   sm.data_transport = A->transport;
   sm.contact_manager = std::make_shared<identity::ContactManager>(A->storage);
-  
+
   auto messaging_service = std::make_shared<services::MessagingService>(&sm);
   sm.messaging = messaging_service;
 
@@ -406,11 +414,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   chat_entry.created_at = Timestamp{1000};
   chat_entry.type = messaging::LedgerActionType::Message;
 
-  nlohmann::json chat_json = {
-      {"type", "chat"},
-      {"message_id", 100},
-      {"payload", {{"c", "Hello"}}}
-  };
+  nlohmann::json chat_json = {{"type", "chat"}, {"message_id", 100}, {"payload", {{"c", "Hello"}}}};
   messaging_service->ProjectMessage(chat_entry, chat_json, true, false);
 
   messaging::LedgerEntry read_entry;
@@ -418,10 +422,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   read_entry.author_id = idB_;
   read_entry.created_at = Timestamp{1001};
   read_entry.type = messaging::LedgerActionType::Message;
-  nlohmann::json read_json = {
-      {"type", "message_read"},
-      {"message_ids", {100}}
-  };
+  nlohmann::json read_json = {{"type", "message_read"}, {"message_ids", {100}}};
   messaging_service->ProjectMessage(read_entry, read_json, false, false);
 
   messaging::LedgerEntry delivered_entry;
@@ -429,11 +430,7 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   delivered_entry.author_id = idB_;
   delivered_entry.created_at = Timestamp{1002};
   delivered_entry.type = messaging::LedgerActionType::Message;
-  nlohmann::json delivered_json = {
-      {"type", "message_receipt"},
-      {"status", "delivered"},
-      {"message_ids", {100}}
-  };
+  nlohmann::json delivered_json = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", {100}}};
   messaging_service->ProjectMessage(delivered_entry, delivered_json, false, false);
 
   auto entry = A->storage->GetHistoryEntry(idB_, 100);
