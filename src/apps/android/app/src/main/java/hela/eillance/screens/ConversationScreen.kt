@@ -83,6 +83,7 @@ import hela.eillance.MainViewModel
 import hela.eillance.SharedContent
 import hela.eillance.camera.R
 import hela.eillance.components.GlobalStatusBanner
+import hela.eillance.components.StatusSnackbar
 import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.CallState
@@ -141,6 +142,8 @@ fun ConversationScreen(
   val transferProgress by chatVM.transferProgress.collectAsState()
   val draftAttachments by chatVM.draftAttachments.collectAsState()
   val messageText by chatVM.messageText.collectAsState()
+  val peerNeedsUpdate by chatVM.peerNeedsUpdate.collectAsState()
+  val weNeedUpdate by chatVM.weNeedUpdate.collectAsState()
   val context = LocalContext.current
   val playSoundOnSend by settingsVM.playSoundOnSend.collectAsState()
   val playSoundOnReceive by settingsVM.playSoundOnReceive.collectAsState()
@@ -564,11 +567,23 @@ fun ConversationScreen(
           bannerState = bannerState,
           onResetCore = { mainViewModel.resetCore() },
           onCheckPermissions = { mainViewModel.checkAllPermissions() },
-          onIgnoreBattery = { mainViewModel.ignoreBatteryOptimization() },
-          onIgnoreCalls = { mainViewModel.ignoreCallPermissions() }
-        )
+      onIgnoreBattery = { mainViewModel.ignoreBatteryOptimization() },
+      onIgnoreCalls = { mainViewModel.ignoreCallPermissions() }
+    )
 
-        contact?.let {
+    if (weNeedUpdate) {
+      StatusSnackbar(
+        text = stringResource(R.string.version_we_need_update),
+        isError = true
+      )
+    } else if (peerNeedsUpdate) {
+      StatusSnackbar(
+        text = stringResource(R.string.version_peer_needs_update),
+        isError = true
+      )
+    }
+
+    contact?.let {
           ConnectionStatusBar(contact = it)
         }
 

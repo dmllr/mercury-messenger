@@ -60,6 +60,12 @@ class ConversationViewModel(
   private val _searchResults = MutableStateFlow<List<HistoryEntry>>(emptyList())
   val searchResults = _searchResults.asStateFlow()
 
+  private val _peerNeedsUpdate = MutableStateFlow(false)
+  val peerNeedsUpdate = _peerNeedsUpdate.asStateFlow()
+
+  private val _weNeedUpdate = MutableStateFlow(false)
+  val weNeedUpdate = _weNeedUpdate.asStateFlow()
+
   fun onMessageShown(messageId: Long) {
     if (nativePtr != 0L) nativeOnMessageShown(nativePtr, messageId)
   }
@@ -85,10 +91,21 @@ class ConversationViewModel(
       NativeEventBus.transferProgress.collect { (pid, attId, progress) ->
         if (pid == peerId) {
           onTransferProgress(attId, progress)
+      }
+    }
+  }
+  viewModelScope.launch {
+    NativeEventBus.peerVersionMismatch.collect { (pid, weAreOutdated) ->
+      if (pid == peerId) {
+        if (weAreOutdated) {
+          _weNeedUpdate.value = true
+        } else {
+          _peerNeedsUpdate.value = true
         }
       }
     }
   }
+}
 
   override fun onCleared() {
     if (nativePtr != 0L) {

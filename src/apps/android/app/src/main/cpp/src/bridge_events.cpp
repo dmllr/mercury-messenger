@@ -608,4 +608,15 @@ void InitEventBridge(JavaVM* jvm) {
       );
     }
   }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventPeerVersionMismatch>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onPeerVersionMismatch"), j_peer, static_cast<jboolean>(e.we_are_outdated));
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
 }

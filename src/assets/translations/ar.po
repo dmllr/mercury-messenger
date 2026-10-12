@@ -722,3 +722,8 @@ msgid "sort_name"
 msgstr "الاسم"
 msgid "sort_size"
 msgstr "الحجم"
+
+msgid "version_we_need_update"
+msgstr "نسختك من Mercury قديمة. يرجى تحديث التطبيق للتواصل مع جهة الاتصال هذه."
+msgid "version_peer_needs_update"
+msgstr "يستخدم الشخص الآخر نسخة قديمة من Mercury. قد لا يتم تسليم الرسائل حتى يقوم بالتحديث."
