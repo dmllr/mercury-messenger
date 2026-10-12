@@ -824,8 +824,6 @@ class SyncEngine {
     LGI << "[Sync] Received sync_batch from " << peer_id.ToString() << " for topic " << topic_id.ToString()
         << " batch_index: " << batch_index << " containing " << msg["entries"].size() << " entries.";
 
-    auto actually_new = ProcessReceivedEntries(peer_id, topic_id, msg["entries"]);
-
     std::vector<messaging::LedgerEntry> my_batch;
     size_t my_total_entries = 0;
 
@@ -855,6 +853,8 @@ class SyncEngine {
         my_batch.assign(session.my_entries_to_send.begin() + start_idx, session.my_entries_to_send.begin() + end_idx);
       }
     }
+
+    auto actually_new = ProcessReceivedEntries(peer_id, topic_id, msg["entries"]);
 
     for (auto const& e : actually_new) {
       EventQueue::Instance().Push(EventLedgerAppended{e, true});
