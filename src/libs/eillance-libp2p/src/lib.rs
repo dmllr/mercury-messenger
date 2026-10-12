@@ -33,6 +33,7 @@ unsafe impl Sync for Callbacks {}
 enum Command {
     Dial(PeerId),
     AddBootstrap(Multiaddr),
+    Listen(Multiaddr),
     SendMessage(PeerId, Vec<u8>, oneshot::Sender<bool>),
     Stop,
 }
@@ -114,8 +115,6 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
     let callbacks = node.callbacks.clone();
 
     node.runtime.spawn(async move {
-        let local_peer_id = PeerId::from(local_key.public());
-
         let mut swarm = SwarmBuilder::with_existing_identity(local_key)
             .with_tokio()
             .with_tcp(tcp::Config::default(), noise::Config::new, yamux::Config::default)
@@ -147,6 +146,9 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                     }
                     Some(Command::AddBootstrap(addr)) => {
                         let _ = swarm.dial(addr);
+                    }
+                    Some(Command::Listen(addr)) => {
+                        let _ = swarm.listen_on(addr);
                     }
                     Some(Command::SendMessage(peer_id, data, resp)) => {
                         swarm.behaviour_mut().req_resp.send_request(&peer_id, data);
@@ -207,6 +209,19 @@ pub extern "C" fn eillance_libp2p_node_stop(ptr: *mut c_void) {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_listen(ptr: *mut c_void, multiaddr: *const c_char) {
+    if ptr.is_null() || multiaddr.is_null() { return; }
+    let node = unsafe { &mut *(ptr as *mut Node) };
+    
+    let c_str = unsafe { CStr::from_ptr(multiaddr) };
+    let addr_str = match c_str.to_str() { Ok(s) => s, Err(_) => return };
+    let addr = match Multiaddr::from_str(addr_str) { Ok(a) => a, Err(_) => return };
+
+    if let Some(tx) = &node.command_tx {
+        let _ = tx.send(Command::Listen(addr));
+    }
+}
 #[no_mangle]
 pub extern "C" fn eillance_libp2p_node_free(ptr: *mut c_void) {
     if ptr.is_null() {
