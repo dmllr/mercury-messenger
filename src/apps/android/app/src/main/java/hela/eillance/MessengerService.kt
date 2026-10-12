@@ -13,10 +13,11 @@ import hela.eillance.camera.R
 import hela.eillance.ndkio.CallDirection
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.ServiceConnectionState
-import hela.eillance.service.BackgroundObservers
 import hela.eillance.service.CallHandler
 import hela.eillance.service.MercuryNotifications
 import hela.eillance.service.TelecomIntegration
+import hela.eillance.events.NativeEventBus
+import hela.eillance.ndkio.HistoryEntryKind
 import hela.eillance.telecom.MercuryConnection
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.webrtc.WebRtcDataTransport
@@ -35,6 +36,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import org.webrtc.VideoSink
+import kotlin.collections.filter
 
 class MessengerService : Service() {
 
@@ -50,7 +52,6 @@ class MessengerService : Service() {
   private lateinit var notifications: MercuryNotifications
   private lateinit var telecomIntegration: TelecomIntegration
   private lateinit var callHandler: CallHandler
-  private lateinit var observers: BackgroundObservers
 
   private val _errorEvents = MutableSharedFlow<String>()
   val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
@@ -69,13 +70,6 @@ class MessengerService : Service() {
     notifications = MercuryNotifications(this)
     telecomIntegration = TelecomIntegration(this)
     callHandler = CallHandler(this, notifications, serviceScope)
-    observers = BackgroundObservers(
-      this,
-      serviceScope,
-      notifications,
-      callHandler,
-      ::updateForegroundServiceNotification
-    )
 
     callHandler.init()
     telecomIntegration.registerPhoneAccount()
@@ -88,7 +82,7 @@ class MessengerService : Service() {
             start()
           }
           with(Dispatchers.Main) {
-            observers.setup(application)
+            setupEventBusObservers()
           }
           _isEngineReady.value = true
         } catch (e: Exception) {
@@ -100,8 +94,56 @@ class MessengerService : Service() {
     startForegroundService()
   }
 
+  private fun setupEventBusObservers() {
+    serviceScope.launch {
+      launch {
+        NativeEventBus.callState.collect { state ->
+          val isActive = state.isInCall || state.isRinging
+          updateForegroundServiceNotification(isActive, state.peerId, NativeEventBus.connectionState.value, state.callType == HistoryEntryKind.VideoCall)
+        }
+      }
+      launch {
+        NativeEventBus.connectionState.collect { state ->
+          val callState = NativeEventBus.callState.value
+          val isActive = callState.isInCall || callState.isRinging
+          updateForegroundServiceNotification(isActive, callState.peerId.ifEmpty { null }, state, callState.callType == HistoryEntryKind.VideoCall)
+        }
+      }
+      launch {
+        NativeEventBus.notifyNewMessage.collect { (peerId, name, messages) ->
+          val showContent = NativeEventBus.settings.value?.showNotificationContent ?: true
+          val allUnreadRegular = messages.filter {
+            it.callStatus != hela.eillance.ndkio.CallStatus.Missed &&
+            it.kind != hela.eillance.ndkio.HistoryEntryKind.SystemMessage
+          }
+          notifications.showNewMessageNotification(peerId, name, allUnreadRegular, showContent)
+        }
+      }
+      launch {
+        NativeEventBus.notifyMissedCall.collect { (peerId, name) ->
+          notifications.showMissedCallNotification(peerId, name)
+        }
+      }
+      launch {
+        NativeEventBus.notifyContactRequest.collect { (peerId, name) ->
+          notifications.showContactRequestNotification(peerId, name)
+        }
+      }
+      launch { NativeEventBus.cmdProcessIncomingTelecom.collect { callHandler.processIncomingTelecomCall(it) } }
+      launch { NativeEventBus.cmdProcessOutgoingTelecom.collect { callHandler.processOutgoingTelecomCall(it.first, it.second) } }
+      launch { NativeEventBus.cmdDisconnectTelecom.collect { callHandler.disconnectTelecomCall(it) } }
+      launch { NativeEventBus.cmdSetTelecomActive.collect { callHandler.setTelecomCallActive(it) } }
+      launch { NativeEventBus.cmdSetAudioMode.collect { callHandler.setAudioMode(it) } }
+      launch { NativeEventBus.cmdClearCommunicationDevice.collect { callHandler.clearCommunicationDevice() } }
+      launch { NativeEventBus.cmdPlaySound.collect { callHandler.playSound(it) } }
+      launch { NativeEventBus.cmdStopSound.collect { callHandler.stopSound() } }
+      launch { NativeEventBus.cmdSetMicrophoneMute.collect { callHandler.setMicrophoneMute(it) } }
+      launch { NativeEventBus.cmdSetSpeakerphone.collect { callHandler.setSpeakerphoneOn(it) } }
+    }
+  }
+
   fun resolveContactInfo(peerId: String): Contact? {
-    return observers.getContact(peerId)
+    return NativeEventBus.contacts.value.find { it.peerId == peerId }
   }
 
   fun restartCore() {
@@ -140,9 +182,6 @@ class MessengerService : Service() {
   fun showIncomingCallNotification(peerId: String) =
     notifications.showIncomingCallNotification(peerId)
 
-  // Accessors for Legacy / External Use
-  val backgroundCallVM: CallViewModel? get() = observers.callVM
-
   // --- Lifecycle & Intent Handling ---
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -161,7 +200,7 @@ class MessengerService : Service() {
         if (peerId != null) {
           serviceScope.launch {
             MessengerService.isEngineReady.first { it }
-            observers.markAllAsRead(peerId)
+            nativeMarkAllAsRead(peerId)
             notifications.cancelMessageNotification(peerId)
           }
         }
@@ -212,7 +251,7 @@ class MessengerService : Service() {
   // --- Internal Logic ---
 
   fun onActivityStopped() {
-    val currentState = callHandler.getLastCallState() ?: observers.callVM?.callState?.value
+    val currentState = callHandler.getLastCallState()
     if (currentState != null && currentState.isRinging && currentState.callDirection == CallDirection.Incoming) {
       notifications.showIncomingCallNotification(currentState.peerId)
     }
@@ -274,6 +313,11 @@ class MessengerService : Service() {
   private external fun nativeRestart()
   private external fun nativeOnAppForeground()
   private external fun nativeOnAppBackground()
+
+  external fun nativeAcceptCall()
+  external fun nativeRejectCall()
+  external fun nativeHangupCall()
+  external fun nativeMarkAllAsRead(peerId: String)
 
   companion object {
     var instance: MessengerService? = null

@@ -4,6 +4,7 @@ import hela.eillance.ndkio.CallState
 import hela.eillance.ndkio.Contact
 import hela.eillance.ndkio.HistoryPage
 import hela.eillance.ndkio.DraftAttachment
+import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.MyProfileInfo
 import hela.eillance.ndkio.ServiceConnectionState
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,9 +21,9 @@ object NativeEventBus {
   val transferProgress = MutableSharedFlow<Triple<String, String, Float>>(extraBufferCapacity = 100)
 
   // Notification Triggers
-  val notifyNewMessage = MutableSharedFlow<Pair<String, Long>>(extraBufferCapacity = 10)
-  val notifyMissedCall = MutableSharedFlow<String>(extraBufferCapacity = 10)
-  val notifyContactRequest = MutableSharedFlow<String>(extraBufferCapacity = 10)
+  val notifyNewMessage = MutableSharedFlow<Triple<String, String, List<HistoryEntry>>>(extraBufferCapacity = 10)
+  val notifyMissedCall = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 10)
+  val notifyContactRequest = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 10)
 
   // Hardware / OS Orchestration Commands
   val cmdProcessIncomingTelecom = MutableSharedFlow<String>(extraBufferCapacity = 10)
@@ -88,18 +89,18 @@ object NativeEventBus {
   }
 
   @JvmStatic
-  fun onNotifyNewMessage(peerId: String, messageId: Long) {
-    notifyNewMessage.tryEmit(peerId to messageId)
+  fun onNotifyNewMessage(peerId: String, contactName: String, messages: List<HistoryEntry>) {
+    notifyNewMessage.tryEmit(Triple(peerId, contactName, messages))
   }
 
   @JvmStatic
-  fun onNotifyMissedCall(peerId: String) {
-    notifyMissedCall.tryEmit(peerId)
+  fun onNotifyMissedCall(peerId: String, contactName: String) {
+    notifyMissedCall.tryEmit(peerId to contactName)
   }
 
   @JvmStatic
-  fun onNotifyContactRequest(peerId: String) {
-    notifyContactRequest.tryEmit(peerId)
+  fun onNotifyContactRequest(peerId: String, contactName: String) {
+    notifyContactRequest.tryEmit(peerId to contactName)
   }
 
   @JvmStatic

@@ -123,7 +123,7 @@ class MercuryNotifications(private val service: MessengerService) {
 
   fun showNewMessageNotification(
     peerId: String,
-    title: String,
+    displayName: String,
     messages: List<HistoryEntry>,
     showContent: Boolean
   ) {
@@ -138,7 +138,7 @@ class MercuryNotifications(private val service: MessengerService) {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
     val me = Person.Builder().setName(service.getString(R.string.app_name)).build()
-    val sender = Person.Builder().setName(title).build()
+    val sender = Person.Builder().setName(displayName).build()
     val style = NotificationCompat.MessagingStyle(me)
 
     if (messages.isNotEmpty()) {
@@ -198,7 +198,7 @@ class MercuryNotifications(private val service: MessengerService) {
     )
   }
 
-  fun showContactRequestNotification(peerId: String, title: String) {
+  fun showContactRequestNotification(peerId: String, displayName: String) {
     val intent = Intent(service, MessengerActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       putExtra(MessengerService.EXTRA_PEER_ID, peerId)
@@ -213,14 +213,14 @@ class MercuryNotifications(private val service: MessengerService) {
     val builder = NotificationCompat.Builder(service, MESSAGES_CHANNEL_ID)
       .setSmallIcon(R.drawable.ic_status_attention)
       .setContentTitle(service.getString(R.string.sys_contact_req))
-      .setContentText(title)
+      .setContentText(displayName)
       .setAutoCancel(true)
       .setContentIntent(pendingIntent)
 
     notificationManager.notify(MessengerService.MESSAGE_NOTIFICATION_ID_BASE + peerId.hashCode() + 10000, builder.build())
   }
 
-  fun showMissedCallNotification(peerId: String, title: String) {
+  fun showMissedCallNotification(peerId: String, displayName: String) {
     val intent = Intent(service, MessengerActivity::class.java).apply {
       flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
       putExtra(MessengerService.EXTRA_PEER_ID, peerId)
@@ -235,7 +235,7 @@ class MercuryNotifications(private val service: MessengerService) {
     val builder = NotificationCompat.Builder(service, MESSAGES_CHANNEL_ID)
       .setSmallIcon(android.R.drawable.stat_notify_missed_call)
       .setContentTitle(service.getString(R.string.call_missed))
-      .setContentText(title)
+      .setContentText(displayName)
       .setAutoCancel(true)
       .setContentIntent(pendingIntent)
 

@@ -752,7 +752,10 @@ class MessagingService {
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
     if (!is_system && !sm_->is_foreground) {
-      EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id});
+      auto contact = contact_manager_->GetContact(peer_id);
+      std::string name = contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+      auto unread = GetUnreadMessages(peer_id);
+      EventQueue::Instance().Push(EventNotifyNewMessage{peer_id, entry.id, name, std::move(unread)});
     }
   }
 
