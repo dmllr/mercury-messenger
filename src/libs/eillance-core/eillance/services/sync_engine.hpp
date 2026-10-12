@@ -34,6 +34,7 @@ class SyncEngine {
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
   std::unordered_map<std::string, std::vector<storage::LedgerEntry>> pending_sync_chain_;
+  std::unordered_map<std::string, std::string> active_sync_requests_;
 
   static auto ComputeSHA256(std::string const& data) -> std::string {
     unsigned char hash[EVP_MAX_MD_SIZE];
@@ -161,6 +162,7 @@ class SyncEngine {
         if (peer_head == my_head) {
           LGI << "[Sync] Peer head matches our head. Sync complete.";
           storage_->RemoveSyncRequest(topic_id, peer_id);
+          active_sync_requests_.erase(topic_id.ToString());
           nlohmann::json const confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
           transport_->SendJson(peer_id, confirm);
           return;
@@ -171,6 +173,11 @@ class SyncEngine {
           ProposeSync(topic_id, peer_id);
           return;
         }
+
+        if (active_sync_requests_[topic_id.ToString()] == peer_head) {
+          return;
+        }
+        active_sync_requests_[topic_id.ToString()] = peer_head;
 
         // Iterative backwards fetch
         pending_sync_chain_[topic_id.ToString()].clear();
@@ -293,6 +300,8 @@ class SyncEngine {
 
           storage_->ReplaceLedgerEntries(topic_id, actual_lca, combined);
 
+          active_sync_requests_.erase(topic_id.ToString());
+
           for (auto const& entry : new_entries) {
             EventQueue::Instance().Push(EventLedgerAppended{entry});
           }
@@ -307,6 +316,7 @@ class SyncEngine {
           transport_->SendJson(peer_id, req);
         }
       } else if (type == "sync_not_found") {
+        active_sync_requests_.erase(topic_id.ToString());
         pending_sync_chain_[topic_id.ToString()].clear();
       } else if (type == "sync_confirm") {
         std::string const peer_head = msg.value("head", "");
@@ -315,6 +325,7 @@ class SyncEngine {
         std::string const my_head = latest ? latest->hash : std::string(64, '0');
         if (my_head == peer_head) {
           storage_->RemoveSyncRequest(topic_id, peer_id);
+          active_sync_requests_.erase(topic_id.ToString());
           pending_sync_chain_[topic_id.ToString()].clear();
         } else {
           LGI << "[Sync] Head mismatch after confirm, requesting sync.";
@@ -332,7 +343,11 @@ class SyncEngine {
       return;
     }
     auto const reqs = storage_->GetSyncRequests();
+    std::unordered_set<ContactID> processed;
     for (auto const& req : reqs) {
+      if (processed.contains(req.target_peer_id)) continue;
+      processed.insert(req.target_peer_id);
+      
       auto contact = storage_->GetContact(req.target_peer_id);
       if (!contact || contact->status != identity::ContactStatus::confirmed) {
         continue;
