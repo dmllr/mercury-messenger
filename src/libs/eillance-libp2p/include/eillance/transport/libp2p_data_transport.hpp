@@ -104,6 +104,9 @@ class Libp2pDataTransport : public DataTransport::Interface {
               if (auto m_it = master_to_devices_.find(master_id); m_it != master_to_devices_.end()) {
                 std::erase(m_it->second, network_id);
                 no_more_devices = m_it->second.empty();
+                if (no_more_devices) {
+                  master_to_devices_.erase(m_it);
+                }
               }
               device_to_master_.erase(it);
             }
@@ -131,6 +134,13 @@ class Libp2pDataTransport : public DataTransport::Interface {
                   std::lock_guard<std::mutex> const lock(peer->queue_mutex);
                   if (seq >= peer->rx_seq) {
                     peer->out_of_order_queue[seq] = inner_msg;
+
+                    if (peer->out_of_order_queue.size() > 32) {
+                      LGW << "Out-of-order queue exceeded limit for " << peer_id.ToString()
+                          << ", advancing rx_seq to prevent stall.";
+                      peer->rx_seq = peer->out_of_order_queue.begin()->first;
+                    }
+
                     while (!peer->out_of_order_queue.empty()) {
                       auto it = peer->out_of_order_queue.begin();
                       if (it->first == peer->rx_seq) {

@@ -1,6 +1,6 @@
 use crate::behaviour::MercuryBehaviour;
 use crate::types::{Callbacks, Command, NodeRole};
-use crate::utils::{notify_disconnected, resolve_multiaddr};
+use crate::utils::{resolve_multiaddr};
 use futures::StreamExt;
 use libp2p::{Multiaddr, PeerId, Swarm};
 use std::collections::{HashMap, HashSet};
@@ -27,9 +27,10 @@ pub(crate) fn is_bootstrap_direct_ip(addr: &Multiaddr, bootstrap_addrs: &HashSet
 }
 
 pub struct EventLoopState {
-  pub pending_dials: HashSet<PeerId>,
+  pub pending_dials: HashMap<PeerId, std::time::Instant>,
   pub known_addresses: HashMap<PeerId, HashSet<Multiaddr>>,
   pub explicit_bootstrap_peers: HashSet<PeerId>,
+  pub explicit_bootstrap_urls: HashSet<Multiaddr>,
   pub active_relay_peers: HashMap<PeerId, Multiaddr>,
   pub bootstrap_addrs: HashSet<Multiaddr>,
   pub active_relay_listeners: HashMap<Multiaddr, libp2p::core::transport::ListenerId>,
@@ -48,9 +49,10 @@ pub struct EventLoopState {
 impl EventLoopState {
   pub fn new(role: NodeRole, callbacks: crate::types::Callbacks) -> Self {
     Self {
-      pending_dials: HashSet::new(),
+      pending_dials: HashMap::new(),
       known_addresses: HashMap::new(),
       explicit_bootstrap_peers: HashSet::new(),
+      explicit_bootstrap_urls: HashSet::new(),
       active_relay_peers: HashMap::new(),
       bootstrap_addrs: HashSet::new(),
       active_relay_listeners: HashMap::new(),
@@ -68,10 +70,10 @@ impl EventLoopState {
   }
 
   pub fn do_dial(&mut self, peer_val: PeerId, swarm: &mut Swarm<MercuryBehaviour>, callbacks: &Callbacks) {
-    if !self.pending_dials.contains(&peer_val) {
+    if !self.pending_dials.contains_key(&peer_val) {
       crate::node_log!(callbacks, 5, "Initiating DHT get_closest_peers for {}", peer_val);
       swarm.behaviour_mut().kademlia.get_closest_peers(peer_val);
-      self.pending_dials.insert(peer_val);
+      self.pending_dials.insert(peer_val, std::time::Instant::now());
     }
 
     for (_, relay_addr) in &self.active_relay_peers {
@@ -129,6 +131,24 @@ pub async fn run_event_loop(
             handle_keepalive(&mut state, &mut swarm, &callbacks);
         }
         _ = stats_interval.tick() => {
+            let now = std::time::Instant::now();
+            state.pending_dials.retain(|_, time| now.duration_since(*time).as_secs() < 120);
+
+            if state.known_addresses.len() > 2000 {
+                let mut to_remove = Vec::new();
+                for (peer, _) in state.known_addresses.iter() {
+                    if !state.explicit_bootstrap_peers.contains(peer) && !swarm.is_connected(peer) {
+                        to_remove.push(*peer);
+                    }
+                    if to_remove.len() >= 500 {
+                        break;
+                    }
+                }
+                for peer in to_remove {
+                    state.known_addresses.remove(&peer);
+                }
+            }
+
             let connected_peers = swarm.network_info().connection_counters().num_established();
             let mut bootstrap_connected = 0;
             for b in &state.explicit_bootstrap_peers {
@@ -136,6 +156,7 @@ pub async fn run_event_loop(
                     bootstrap_connected += 1;
                 }
             }
+
             let mut role_str = "simple_node";
             if state.turn_port.is_some() {
                 role_str = "turn_server";
@@ -147,6 +168,23 @@ pub async fn run_event_loop(
                 dht_peers += bucket.num_entries();
             }
             state.tick_counter = state.tick_counter.wrapping_add(1);
+
+            if state.tick_counter % 240 == 0 || (bootstrap_connected == 0 && state.tick_counter % 4 == 0) {
+                for addr in &state.explicit_bootstrap_urls {
+                    let tx_clone = tx.clone();
+                    let addr_clone = addr.clone();
+                    tokio::spawn(async move {
+                        if let Some(resolved) = resolve_multiaddr(addr_clone).await {
+                            let _ = tx_clone.send(Command::AddBootstrapResolved(resolved));
+                        }
+                    });
+                }
+            }
+
+            if state.tick_counter % 20 == 0 && state.has_bootstrapped {
+                let _ = swarm.behaviour_mut().kademlia.bootstrap();
+            }
+
             if state.tick_counter % 240 == 0 && state.has_bootstrapped {
                 for key_bytes in &state.providing_keys {
                     let key = libp2p::kad::RecordKey::new(key_bytes);
@@ -271,14 +309,11 @@ fn handle_command(
       state.do_dial(peer_id, swarm, callbacks);
     }
     Command::AddBootstrap(addr) => {
+      state.explicit_bootstrap_urls.insert(addr.clone());
       let tx_clone = tx.clone();
       tokio::spawn(async move {
-        loop {
-          if let Some(resolved) = resolve_multiaddr(addr.clone()).await {
-            let _ = tx_clone.send(Command::AddBootstrapResolved(resolved));
-            break;
-          }
-          tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        if let Some(resolved) = resolve_multiaddr(addr.clone()).await {
+          let _ = tx_clone.send(Command::AddBootstrapResolved(resolved));
         }
       });
     }
@@ -343,6 +378,7 @@ fn handle_command(
       state.active_relay_peers.clear();
       state.bootstrap_addrs.clear();
       state.explicit_bootstrap_peers.clear();
+      state.explicit_bootstrap_urls.clear();
       state.known_addresses.clear();
       state.public_ip = None;
       state.public_port = None;
@@ -352,6 +388,8 @@ fn handle_command(
         let _ = handle.close_tx.send(());
         crate::node_log!(callbacks, 3, "Node switches off a TURN server (network change)");
       }
+      let key_bytes = b"mercury/turn_relays".to_vec();
+      state.providing_keys.remove(&key_bytes);
       state.turn_port = None;
       swarm
         .behaviour_mut()
@@ -370,6 +408,8 @@ fn handle_command(
       crate::node_log!(callbacks, 3, "Node starts a TURN server on {}:{}", public_ip, port);
 
       let record_key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
+      state.providing_keys.insert(b"mercury/turn_relays".to_vec());
+
       if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(record_key) {
         crate::node_log!(callbacks, 2, "Failed to start providing TURN relay record: {:?}", e);
       } else {
@@ -396,6 +436,8 @@ fn handle_command(
           crate::node_log!(callbacks, 3, "Node switches off a TURN server");
         }
         state.turn_port = None;
+        let key_bytes = b"mercury/turn_relays".to_vec();
+        state.providing_keys.remove(&key_bytes);
         swarm
           .behaviour_mut()
           .kademlia
