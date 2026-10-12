@@ -76,19 +76,34 @@ impl EventLoopState {
       self.pending_dials.insert(peer_val, std::time::Instant::now());
     }
 
-    for (_, relay_addr) in &self.active_relay_peers {
-      let mut relayed = relay_addr.clone();
-      relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
-      relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
-      swarm.behaviour_mut().kademlia.add_address(&peer_val, relayed);
-    }
+    if !swarm.is_connected(&peer_val) {
+      let mut explicit_addrs = Vec::new();
 
-    for b_addr in &self.bootstrap_addrs {
-      if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
-        let mut relayed = b_addr.clone();
+      for (_, relay_addr) in &self.active_relay_peers {
+        let mut relayed = relay_addr.clone();
         relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
         relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
-        swarm.behaviour_mut().kademlia.add_address(&peer_val, relayed);
+        explicit_addrs.push(relayed);
+      }
+
+      for b_addr in &self.bootstrap_addrs {
+        if b_addr.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+          let mut relayed = b_addr.clone();
+          relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
+          relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
+          explicit_addrs.push(relayed);
+        }
+      }
+
+      explicit_addrs.sort();
+      explicit_addrs.dedup();
+
+      for relayed in explicit_addrs {
+        let opts = libp2p::swarm::dial_opts::DialOpts::unknown_peer_id().address(relayed).build();
+        match swarm.dial(opts) {
+          Ok(_) => crate::node_log!(callbacks, 5, "Dialing explicit relay address for {}", peer_val),
+          Err(e) => crate::node_log!(callbacks, 5, "Failed to dial explicit relay: {:?}", e),
+        }
       }
     }
 
