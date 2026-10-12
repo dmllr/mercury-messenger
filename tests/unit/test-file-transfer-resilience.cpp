@@ -100,12 +100,17 @@ class FileTransferResilienceTest : public ::testing::Test {
 };
 
 TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
+  auto peer = transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer != nullptr);
+
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other_cipher;
   peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
   other_cipher.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
-  transport_->AddPeer(peer1, peer);
 
   std::vector<float> progress_events;
   auto sub1 = EventQueue::Instance().Subscribe<EventTransferProgress>([&](auto const& e) {
@@ -173,11 +178,16 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
 }
 
 TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
+  auto peer = transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer != nullptr);
+
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher const other_cipher;
   peer->session_cipher->ComputeSharedSecret(other_cipher.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
 
   messaging::Attachment att;
   att.id = "bad_hash_file";
@@ -224,12 +234,16 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
 }
 
 TEST_F(FileTransferResilienceTest, StatusUpdateOrder_SmallFile) {
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
+  auto peer = transport_->GetPeer(peer1);
+  ASSERT_TRUE(peer != nullptr);
+
   peer->data_channel_is_open = true;
-  peer->session_cipher->ComputeSharedSecret(eillance::crypto::SessionCipher().GetPublicKey());
   eillance::crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  transport_->AddPeer(peer1, peer);
 
   std::vector<messaging::AttachmentStatus> status_sequence;
   auto sub = EventQueue::Instance().Subscribe<EventAttachmentStatusChanged>([&](auto const& e) {

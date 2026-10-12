@@ -14,6 +14,8 @@ class ConversationViewModelTest : public ViewModelTest {
     ViewModelTest::SetUp();
     // Pre-add contact so we can chat. Wait for it to propagate to storage.
     client_->AddContact(peer1, std::nullopt);
+    mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+    client_->Contacts()->ReloadCache();
 
     EventQueue::Instance().WaitFor(
         [&] { return client_->Contacts()->GetContact(peer1).has_value(); },

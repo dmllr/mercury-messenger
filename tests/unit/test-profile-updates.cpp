@@ -210,13 +210,8 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   client_->UpdateMyProfile({.display_name = "Approver", .bio = "Bio", .photo_base64 = ""});
 
   // Setup peer connection (e.g. request phase established connection)
-  client_->Connect(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-  auto const peer = mock_transport_->GetPeer(peer1);
-  ASSERT_TRUE(peer);
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  mock_transport_->AddPeer(peer1, peer);
   peer->data_channel_is_open = true;
 
   // Add contact in pending state (simulating request received)

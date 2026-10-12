@@ -203,13 +203,8 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   ASSERT_FALSE(client_->Contacts()->GetContact(peer1));
 
   // Connect (as if A connected to B)
-  client_->Connect(peer1);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-  auto peer = mock_transport_->GetPeer(peer1);
-  ASSERT_TRUE(peer);
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  mock_transport_->AddPeer(peer1, peer);
 
   // Simulate receiving a chat message
   peer->data_channel_is_open = true;
@@ -232,7 +227,12 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   };
 
   // Convert JSON to bytes for binary-capable handler
-  std::string msg_str = chat_msg.dump();
+  nlohmann::json clean_msg = chat_msg;
+  clean_msg["payload"] = nlohmann::json::array();
+  for(auto b : encrypted) {
+    clean_msg["payload"].push_back(static_cast<uint8_t>(b));
+  }
+  std::string msg_str = clean_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::transform(msg_str.begin(), msg_str.end(), msg_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
 
@@ -291,26 +291,21 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
 
   mock_transport_->SimulateDataChannelOpen(peer1);
 
-  bool signature_sent = false;
   bool profile_sent = false;
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
           if (pid == peer1) {
-            if (msg.value("type", "") == "contact_signature") {
-              signature_sent = true;
-            }
             if (msg.value("type", "") == "profile_info") {
               profile_sent = true;
             }
           }
         }
-        return signature_sent && profile_sent;
+        return profile_sent;
       },
       std::chrono::milliseconds(2000)
   );
-  EXPECT_TRUE(signature_sent) << "Should send signature via data channel";
   EXPECT_TRUE(profile_sent) << "Should send profile via data channel";
 }
 

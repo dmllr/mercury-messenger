@@ -62,6 +62,7 @@ class BotApiTest : public ::testing::Test {
     options.auto_reject_calls = true;
 
     bot_ = std::make_unique<mercury::bot::Bot>(client_, options);
+    bot_->Start();
   }
 
   void TearDown() override {
@@ -135,27 +136,29 @@ TEST_F(BotApiTest, AutoRejectCalls) {
 }
 
 TEST_F(BotApiTest, MessageHandling) {
-  bool message_received = false;
+  std::ignore = client_->AddContact(peer1, std::nullopt);
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+
+  std::atomic<bool> message_received{false};
   std::string received_text;
 
   bot_->OnMessage([&](mercury::bot::Message const& msg) -> void {
-    message_received = true;
     received_text = msg.text;
+    message_received = true;
   });
 
-  client_->Connect(peer1);
   eillance::EventQueue::Instance().WaitFor(
       [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
       std::chrono::milliseconds(2000)
   );
-
   auto peer = mock_data_transport_raw_->GetPeer(peer1);
-  ASSERT_TRUE(peer);
+  ASSERT_TRUE(peer != nullptr);
 
   peer->data_channel_is_open = true;
   eillance::crypto::SessionCipher other;
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
+  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
 
   std::string const plain = "Hello Bot";
   nlohmann::json payload_json;
@@ -170,29 +173,43 @@ TEST_F(BotApiTest, MessageHandling) {
       {"payload", std::vector<std::byte>(encrypted.begin(), encrypted.end())}
   };
 
-  std::string msg_str = chat_msg.dump();
+  // Transform the byte array to uint8 array to avoid nlohmann::json dump
+  // implicitly mangling the std::byte arrays when parsed back via string parsing.
+  nlohmann::json clean_msg = chat_msg;
+  clean_msg["payload"] = nlohmann::json::array();
+  for(auto b : encrypted) {
+    clean_msg["payload"].push_back(static_cast<uint8_t>(b));
+  }
+  std::string msg_str = clean_msg.dump();
   std::vector<std::byte> msg_bytes(msg_str.size());
   std::ranges::transform(msg_str, msg_bytes.begin(), [](char c) -> std::byte { return static_cast<std::byte>(c); });
 
-  eillance::EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
+  EventQueue::Instance().Push(eillance::EventDataChannelMessage{peer1, msg_bytes});
 
-  eillance::EventQueue::Instance().WaitFor([&]() { return message_received; }, std::chrono::milliseconds(2000));
+  EventQueue::Instance().WaitFor([&]() { return message_received.load(); }, std::chrono::milliseconds(2000));
 
   EXPECT_TRUE(message_received);
   EXPECT_EQ(received_text, "Hello Bot");
 }
 
 TEST_F(BotApiTest, SendMessage) {
-  client_->AddContact(peer1, std::nullopt);
+  std::ignore = client_->AddContact(peer1, std::nullopt);
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
 
-  auto peer = std::make_shared<transport::Peer>(peer1);
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
+  auto peer = mock_data_transport_raw_->GetPeer(peer1);
+  ASSERT_TRUE(peer != nullptr);
+
   peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
+  crypto::SessionCipher const other;
   peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  mock_data_transport_raw_->AddPeer(peer1, peer);
 
   bot_->SendMessage(peer1.ToString(), "Reply from Bot");
-  eillance::EventQueue::Instance().WaitFor(
+  EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
         for (auto const& [pid, msg] : mock_log_->sent_peer_messages) {
