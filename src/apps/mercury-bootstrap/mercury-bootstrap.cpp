@@ -5,6 +5,10 @@
 
 #include <openssl/rand.h>
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/resource.h>
+#endif
+
 #include "eillance/logging/logging.hpp"
 #include "eillance/transport/libp2p_node.hpp"
 #include "eillance/transport/network_config.hpp"
@@ -45,6 +49,14 @@ constexpr auto ParseLogLevel(std::string_view const level) -> plog::Severity {
 }  // namespace
 
 auto main(int argc, char* argv[]) -> int {
+#if defined(__unix__) || defined(__APPLE__)
+  struct rlimit rl;
+  if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+    rl.rlim_cur = rl.rlim_max;
+    setrlimit(RLIMIT_NOFILE, &rl);
+  }
+#endif
+
   eillance::utils::ArgsParser const args(argc, argv);
 
   static plog::ColorConsoleAppender<plog::TxtFormatter> appender;
