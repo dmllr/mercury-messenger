@@ -23,6 +23,7 @@
 namespace eillance::messaging {
 
 class DeliveryService {
+  services::ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<identity::ContactManager> contact_manager_;
   std::shared_ptr<transport::DataTransport> transport_;
@@ -44,7 +45,8 @@ class DeliveryService {
 
  public:
   explicit DeliveryService(services::ServiceManager* sm)
-      : storage_(sm->storage),
+      : sm_(sm),
+        storage_(sm->storage),
         contact_manager_(sm->contact_manager),
         transport_(sm->data_transport) {
     event_unsubs_.push_back(
@@ -299,6 +301,9 @@ class DeliveryService {
       if (contact.status != identity::ContactStatus::rejected) {
         AttemptDelivery(contact.peer_id, false);
       }
+    }
+    if (sm_->account) {
+      AttemptDelivery(sm_->account->GetId(), false);
     }
   }
 };
