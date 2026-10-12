@@ -112,7 +112,13 @@ pub async fn run_event_loop(
         }
         cmd = rx.recv() => {
             match cmd {
-                Some(Command::Stop) | None => break,
+                Some(Command::Stop) | None => {
+                    if let Some(handle) = state.turn_server_handle.take() {
+                        let _ = handle.close_tx.send(());
+                        node_log!(callbacks, 3, "Node switches off a TURN server");
+                    }
+                    break;
+                }
                 Some(c) => handle_command(c, &mut state, &mut swarm, &tx, &callbacks),
             }
         }
@@ -262,6 +268,8 @@ fn handle_command(
       state.public_ip = Some(public_ip);
       state.turn_server_handle = Some(handle);
 
+      node_log!(callbacks, 3, "Node starts a TURN server");
+
       let record_key = libp2p::kad::RecordKey::new(&"mercury/turn_relays");
       if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(record_key) {
         node_log!(callbacks, 2, "Failed to start providing TURN relay record: {:?}", e);
@@ -286,6 +294,7 @@ fn handle_command(
       } else {
         if let Some(handle) = state.turn_server_handle.take() {
           let _ = handle.close_tx.send(());
+          node_log!(callbacks, 3, "Node switches off a TURN server");
         }
         state.turn_port = None;
         swarm.behaviour_mut().kademlia.stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
@@ -306,6 +315,9 @@ fn handle_swarm_event(
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
       node_log!(callbacks, 3, "Listen Active. Multiaddr: {}", address);
+      if address.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit)) {
+        node_log!(callbacks, 3, "Node become relay");
+      }
     }
     SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
       let mut remote_addr = endpoint.get_remote_address().clone();
@@ -583,17 +595,22 @@ fn handle_swarm_event(
       node_log!(callbacks, 3, "Listener closed: {:?} {:?}", addresses, reason);
       state.active_relay_listeners.retain(|_, id| *id != listener_id);
 
+      let mut lost_relay = false;
       for addr in addresses {
         if addr
           .iter()
           .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
         {
+          lost_relay = true;
           let tx_clone = tx.clone();
           tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(2000)).await;
             let _ = tx_clone.send(Command::Listen(addr));
           });
         }
+      }
+      if lost_relay {
+        node_log!(callbacks, 3, "Node lost relay status");
       }
     }
     SwarmEvent::ListenerError { listener_id, error } => {
@@ -660,6 +677,7 @@ fn handle_swarm_event(
         state.is_public = false;
         if let Some(handle) = state.turn_server_handle.take() {
           let _ = handle.close_tx.send(());
+          node_log!(callbacks, 3, "Node switches off a TURN server");
         }
         state.turn_port = None;
         swarm.behaviour_mut().kademlia.stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
