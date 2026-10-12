@@ -121,6 +121,10 @@ class DeliveryService {
     dispatch_queue_.RemovePending();
   }
 
+  [[nodiscard]] auto GetQueue() -> DispatchQueue& {
+    return dispatch_queue_;
+  }
+
   void ConnectionAttemptFinished(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 

@@ -604,7 +604,7 @@ class Client final {
       -> messaging::HistoryPage {
     return sm_->messaging->GetHistoryPage(id, page_index, page_size);
   }
-  [[nodiscard]] auto GetFullMessageContent(TopicID const& id, uint64_t const msg_id) const
+  [[nodiscard]] auto GetFullMessageContent(TopicID const& id, std::uint64_t const msg_id) const
       -> std::optional<std::string> {
     return sm_->messaging->GetFullMessageContent(id, msg_id);
   }
@@ -621,7 +621,7 @@ class Client final {
   [[nodiscard]] auto SearchAllMessages(std::string const& query) const -> std::vector<messaging::HistoryEntryRecord> {
     return sm_->messaging->SearchAllMessages(query);
   }
-  [[nodiscard]] auto GetHistoryEntry(TopicID const& peer_id, uint64_t message_id) const
+  [[nodiscard]] auto GetHistoryEntry(TopicID const& peer_id, std::uint64_t const message_id) const
       -> std::optional<messaging::HistoryEntryRecord> {
     return sm_->storage->GetHistoryEntry(peer_id, message_id);
   }
@@ -827,14 +827,37 @@ class Client final {
       }
     }
 
-    background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
+    background_queue_.DispatchAfter(peerInactivityCheckInterval, [this]() -> void { CheckForInactivePeers(); });
   }
 
   void StartWatchdog() {
-    watchdog_ = std::make_unique<utils::Watchdog>(background_queue_, std::chrono::seconds(15), []() {
-      LGE << "Core Watchdog: Main queue stalled. Triggering fatal error.";
+    watchdog_ = std::make_unique<utils::Watchdog>([](std::string const& stalled_name) -> void {
+      LGE << "Core Watchdog: Target [" << stalled_name << "] stalled. Triggering fatal error.";
       EventQueue::Instance().Push(EventFatalError{});
     });
+
+    constexpr auto timeout = std::chrono::seconds(30);
+    constexpr auto expected_interval = std::chrono::seconds(5);
+
+    watchdog_->MonitorEventQueue(EventQueue::Instance(), timeout, expected_interval);
+    watchdog_->MonitorQueue("ClientBgQueue", background_queue_, timeout, expected_interval);
+
+    if (sm_->sync_engine) {
+      watchdog_->MonitorQueue("SyncEngine", sm_->sync_engine->GetQueue(), timeout, expected_interval);
+    }
+    if (sm_->delivery_service) {
+      watchdog_->MonitorQueue("DeliveryService", sm_->delivery_service->GetQueue(), timeout, expected_interval);
+    }
+    if (sm_->file_transfer) {
+      watchdog_->MonitorQueue("FileTransfer", sm_->file_transfer->GetQueue(), timeout, expected_interval);
+    }
+    if (sm_->messaging) {
+      watchdog_->MonitorQueue("MsgSvcBg", sm_->messaging->GetQueue(), timeout, expected_interval);
+    }
+    if (sm_->media_call) {
+      watchdog_->MonitorQueue("MediaCall", sm_->media_call->GetQueue(), timeout, expected_interval);
+    }
+
     watchdog_->Start();
   }
 
@@ -851,9 +874,10 @@ class Client final {
     int delay_ms = 0;
     for (auto const& contact : contacts) {
       if (contact.status == identity::ContactStatus::confirmed) {
-        background_queue_.DispatchAfter(std::chrono::milliseconds(delay_ms), [this, peer_id = contact.peer_id]() {
-          Connect(peer_id);
-        });
+        background_queue_.DispatchAfter(
+            std::chrono::milliseconds(delay_ms),
+            [this, peer_id = contact.peer_id]() -> void { Connect(peer_id); }
+        );
         delay_ms += 250;  // NOLINT(*-magic-numbers)
       }
     }
@@ -921,7 +945,7 @@ class Client final {
   struct DynamicTurnServer {
     ContactID peer_id;
     std::string ip;
-    uint16_t port;
+    std::uint16_t port;
     std::string username;
     std::string credential;
     std::chrono::steady_clock::time_point discovered_at;
