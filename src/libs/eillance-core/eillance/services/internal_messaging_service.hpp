@@ -309,9 +309,17 @@ class InternalMessagingService {
       return;
     }
 
+    bool const is_reply = message.value("is_reply", false);
+
     if (peer->crcp_verified) {
-      // Already verified. Ignore duplicate or reply key_exchanges to prevent cipher reset race condition
-      return;
+      if (is_reply) {
+        // Already verified. Ignore duplicate or reply key_exchanges to prevent cipher reset race condition
+        return;
+      } else {
+        LGI << "Peer " << network_id.ToString() << " initiated a new session. Resetting local cipher state.";
+        peer->crcp_verified = false;
+        peer->session_cipher->Reset();
+      }
     }
 
     ContactID const master_id = message.contains("m_id") ? ContactID(message["m_id"].get<std::string>()) : network_id;

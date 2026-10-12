@@ -71,7 +71,15 @@ pub(crate) fn handle_swarm_event(
         }
 
         if !state.pending_dials.contains_key(&peer_id) {
-          notify_disconnected(callbacks, swarm, &peer_id);
+          let mut actively_querying = false;
+          if let Some(pubkey) = peerid_to_pubkey(&peer_id) {
+            if state.pending_provider_queries.contains_key(&pubkey.to_vec()) {
+              actively_querying = true;
+            }
+          }
+          if !actively_querying {
+            notify_disconnected(callbacks, swarm, &peer_id);
+          }
         }
       }
     }
@@ -461,9 +469,10 @@ fn handle_kademlia(
       };
       if let Some(key) = key {
         if let Ok(peer) = PeerId::from_bytes(&key) {
-          if step.last && state.pending_dials.remove(&peer).is_some() {
-            if !swarm.is_connected(&peer) {
-              let mut explicit_addrs = Vec::new();
+          if step.last {
+            if let Some(_) = state.pending_dials.remove(&peer) {
+              if !swarm.is_connected(&peer) {
+                let mut explicit_addrs = Vec::new();
 
               if let Some(addrs) = state.known_addresses.get(&peer) {
                 for mut addr in addrs.clone() {
@@ -506,17 +515,16 @@ fn handle_kademlia(
               match swarm.dial(opts) {
                 Err(libp2p::swarm::DialError::NoAddresses) => {
                   crate::node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
-                  notify_disconnected(callbacks, swarm, &peer);
                 }
                 Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
                   // Already connected
                 }
                 Err(e) => {
                   crate::node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
-                  notify_disconnected(callbacks, swarm, &peer);
                 }
                 Ok(_) => {
                   crate::node_log!(callbacks, 4, "Fallback dial submitted for {}", peer);
+                  }
                 }
               }
             }
