@@ -35,13 +35,19 @@ class MessageHistory {
   auto AddTextEntry(TextEntryParams const& params) -> HistoryEntryRecord {
     // Received messages are by definition delivered. Sent messages start as sending.
     // We avoid MessageStatus::none for received messages to ensure they are visible in history queries immediately.
-    MessageStatus const initial_status =
+    MessageStatus initial_status =
         (params.direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::delivered;
+
+    if (params.kind == HistoryEntryKind::systemMessage) {
+      initial_status = MessageStatus::none;
+    }
 
     Time::Unit const ts = params.timestamp.value_or(Time::Now());
 
     uint64_t entry_id = params.id;
-    if (entry_id == 0) entry_id = GenerateMessageId();
+    if (entry_id == 0) {
+      entry_id = GenerateMessageId();
+    }
 
     return storage_->AddHistoryEntry({
         .id = entry_id,
@@ -59,7 +65,9 @@ class MessageHistory {
     Time::Unit const ts = params.timestamp.value_or(Time::Now());
 
     uint64_t entry_id = params.id;
-    if (entry_id == 0) entry_id = GenerateMessageId();
+    if (entry_id == 0) {
+      entry_id = GenerateMessageId();
+    }
 
     return storage_->AddHistoryEntry({
         .id = entry_id,
