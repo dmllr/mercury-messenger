@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include "eillance/client/client.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -22,7 +23,8 @@ class ProfileUpdatesTest : public ::testing::Test {
     auto media_transport_impl = std::make_unique<transport::MockMediaTransport>(mock_log_);
     auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
-    client_ = std::make_shared<Client>(storage_, media_transport);
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     (void)client_->Account()->GenerateNewIdentity();
     client_->Start();

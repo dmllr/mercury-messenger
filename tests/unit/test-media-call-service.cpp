@@ -9,6 +9,7 @@
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/sync_engine.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -29,7 +30,8 @@ class MediaCallServiceTest : public ::testing::Test {
     auto storage_impl = std::make_unique<storage::MockPersistentStorageImpl>();
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
-    client_ = std::make_shared<Client>(storage_, media_transport_);
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    client_ = std::make_shared<Client>(storage_, media_transport_, data_transport);
     std::ignore = client_->GenerateNewIdentity();
     client_->Start();
   }

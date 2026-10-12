@@ -11,7 +11,7 @@
 #include "eillance/services/ledger_projection_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/sync_engine.hpp"
-#include "eillance/transport/libp2p_data_transport.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_call_log.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -29,8 +29,8 @@ class AttachmentTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    auto libp2p_dt = std::make_unique<transport::Libp2pDataTransport>();
-    data_transport_ = std::make_shared<transport::DataTransport>(std::move(libp2p_dt));
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_dt));
 
     sm_ = std::make_unique<services::ServiceManager>();
     sm_->storage = storage_;

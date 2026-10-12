@@ -10,6 +10,7 @@
 #include "eillance/client/client.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/utils/event_queue.hpp"
+#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -31,8 +32,10 @@ class ViewModelTest : public ::testing::Test {
     mock_media_transport_ = media_transport_impl.get();
     auto media_transport = std::make_shared<transport::MediaTransport>(std::move(media_transport_impl));
 
+    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+
     // Client
-    client_ = std::make_shared<Client>(storage_, media_transport);
+    client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     // Identity
     (void)client_->GenerateNewIdentity();
