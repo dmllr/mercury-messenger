@@ -320,7 +320,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // --- Synchronization Ledger ---
-  void AddLedgerEntry(storage::LedgerEntry const& entry) override {
+  void AddLedgerEntry(messaging::LedgerEntry const& entry) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -333,13 +333,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_bind_int64(s.Get(), 3, entry.created_at.value);
     sqlite3_bind_int(s.Get(), 4, static_cast<int>(entry.type));
     BindText(s.Get(), 5, entry.payload);
-    BindText(s.Get(), 6, entry.prev_hash);
-    BindText(s.Get(), 7, entry.hash);
+    BindText(s.Get(), 6, entry.prev_hash.ToString());
+    BindText(s.Get(), 7, entry.hash.ToString());
     sqlite3_step(s.Get());
   }
 
-  auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash)
-      -> std::optional<storage::LedgerEntry> override {
+  auto GetLedgerEntryByHash(TopicID const& topic_id, messaging::LedgerHash const& hash)
+      -> std::optional<messaging::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -348,33 +348,33 @@ class SQLiteStorage final : public PersistentStorageImpl {
         "topic_id = ? AND hash = ? LIMIT 1;"
     );
     BindText(s.Get(), 1, topic_id.ToString());
-    BindText(s.Get(), 2, hash);
+    BindText(s.Get(), 2, hash.ToString());
     if (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      return storage::LedgerEntry{
+      return messaging::LedgerEntry{
           static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)),
           TopicID(ColumnString(s.Get(), 1)),
           ContactID(ColumnString(s.Get(), 2)),
           Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
-          static_cast<storage::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
+          static_cast<messaging::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
           ColumnString(s.Get(), 5),
-          ColumnString(s.Get(), 6),
-          ColumnString(s.Get(), 7)
+          messaging::LedgerHash(ColumnString(s.Get(), 6)),
+          messaging::LedgerHash(ColumnString(s.Get(), 7))
       };
     }
     return std::nullopt;
   }
 
-  auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash)
-      -> std::vector<storage::LedgerEntry> override {
+  auto GetLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash)
+      -> std::vector<messaging::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
-    std::vector<storage::LedgerEntry> entries;
+    std::vector<messaging::LedgerEntry> entries;
 
     uint64_t start_seq = 0;
-    if (hash != std::string(64, '0')) {
+    if (!hash.IsEmpty()) {
       SQLiteStatement const s_seq(db_, "SELECT seq_id FROM ledger_entries WHERE topic_id = ? AND hash = ?;");
       BindText(s_seq.Get(), 1, topic_id.ToString());
-      BindText(s_seq.Get(), 2, hash);
+      BindText(s_seq.Get(), 2, hash.ToString());
       if (sqlite3_step(s_seq.Get()) == SQLITE_ROW) {
         start_seq = sqlite3_column_int64(s_seq.Get(), 0);
       } else {
@@ -395,20 +395,20 @@ class SQLiteStorage final : public PersistentStorageImpl {
            TopicID(ColumnString(s.Get(), 1)),
            ContactID(ColumnString(s.Get(), 2)),
            Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
-           static_cast<storage::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
+           static_cast<messaging::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
            ColumnString(s.Get(), 5),
-           ColumnString(s.Get(), 6),
-           ColumnString(s.Get(), 7)}
+           messaging::LedgerHash(ColumnString(s.Get(), 6)),
+           messaging::LedgerHash(ColumnString(s.Get(), 7))}
       );
     }
     return entries;
   }
 
-  auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<storage::LedgerEntry> override {
-    return GetLedgerEntriesAfter(topic_id, std::string(64, '0'));
+  auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<messaging::LedgerEntry> override {
+    return GetLedgerEntriesAfter(topic_id, messaging::LedgerHash());
   }
 
-  auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<storage::LedgerEntry> override {
+  auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<messaging::LedgerEntry> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -418,25 +418,25 @@ class SQLiteStorage final : public PersistentStorageImpl {
     );
     BindText(s.Get(), 1, topic_id.ToString());
     if (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      return storage::LedgerEntry{
+      return messaging::LedgerEntry{
           static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)),
           TopicID(ColumnString(s.Get(), 1)),
           ContactID(ColumnString(s.Get(), 2)),
           Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
-          static_cast<storage::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
+          static_cast<messaging::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
           ColumnString(s.Get(), 5),
-          ColumnString(s.Get(), 6),
-          ColumnString(s.Get(), 7)
+          messaging::LedgerHash(ColumnString(s.Get(), 6)),
+          messaging::LedgerHash(ColumnString(s.Get(), 7))
       };
     }
     return std::nullopt;
   }
 
-  void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) override {
+  void DeleteLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
 
-    if (hash == std::string(64, '0')) {
+    if (hash.IsEmpty()) {
       SQLiteStatement const s_del(db_, "DELETE FROM ledger_entries WHERE topic_id = ?;");
       BindText(s_del.Get(), 1, topic_id.ToString());
       sqlite3_step(s_del.Get());
@@ -445,7 +445,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     SQLiteStatement const s_seq(db_, "SELECT seq_id FROM ledger_entries WHERE topic_id = ? AND hash = ?;");
     BindText(s_seq.Get(), 1, topic_id.ToString());
-    BindText(s_seq.Get(), 2, hash);
+    BindText(s_seq.Get(), 2, hash.ToString());
     if (sqlite3_step(s_seq.Get()) == SQLITE_ROW) {
       uint64_t const start_seq = sqlite3_column_int64(s_seq.Get(), 0);
       SQLiteStatement const s_del(db_, "DELETE FROM ledger_entries WHERE topic_id = ? AND seq_id > ?;");
@@ -455,21 +455,21 @@ class SQLiteStorage final : public PersistentStorageImpl {
     }
   }
 
-  auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> override {
+  auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<messaging::LedgerHash> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
-    std::vector<std::string> hashes;
+    std::vector<messaging::LedgerHash> hashes;
 
     SQLiteStatement const s(db_, "SELECT hash FROM ledger_entries WHERE topic_id = ? ORDER BY seq_id DESC;");
     BindText(s.Get(), 1, topic_id.ToString());
 
-    std::vector<std::string> all_hashes;
+    std::vector<messaging::LedgerHash> all_hashes;
     while (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      all_hashes.push_back(ColumnString(s.Get(), 0));
+      all_hashes.push_back(messaging::LedgerHash(ColumnString(s.Get(), 0)));
     }
 
     if (all_hashes.empty()) {
-      return {std::string(64, '0')};
+      return {messaging::LedgerHash()};
     }
 
     size_t step = 1;
@@ -481,41 +481,41 @@ class SQLiteStorage final : public PersistentStorageImpl {
       if (step < 1000) step *= 2;
     }
 
-    if (hashes.back() != std::string(64, '0')) {
-      hashes.push_back(std::string(64, '0'));
+    if (!hashes.back().IsEmpty()) {
+      hashes.push_back(messaging::LedgerHash());
     }
 
     return hashes;
   }
 
-  auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) -> bool override {
-    if (hash == std::string(64, '0')) return true;
+  auto HasLedgerEntry(TopicID const& topic_id, messaging::LedgerHash const& hash) -> bool override {
+    if (hash.IsEmpty()) return true;
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(db_, "SELECT 1 FROM ledger_entries WHERE topic_id = ? AND hash = ? LIMIT 1;");
     BindText(s.Get(), 1, topic_id.ToString());
-    BindText(s.Get(), 2, hash);
+    BindText(s.Get(), 2, hash.ToString());
     return sqlite3_step(s.Get()) == SQLITE_ROW;
   }
 
   void ReplaceLedgerEntries(
       TopicID const& topic_id,
-      std::string const& lca_hash,
-      std::vector<storage::LedgerEntry> const& entries
+      messaging::LedgerHash const& lca_hash,
+      std::vector<messaging::LedgerEntry> const& entries
   ) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
 
     sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
 
-    if (lca_hash == std::string(64, '0')) {
+    if (lca_hash.IsEmpty()) {
       SQLiteStatement const s_del(db_, "DELETE FROM ledger_entries WHERE topic_id = ?;");
       BindText(s_del.Get(), 1, topic_id.ToString());
       sqlite3_step(s_del.Get());
     } else {
       SQLiteStatement const s_seq(db_, "SELECT seq_id FROM ledger_entries WHERE topic_id = ? AND hash = ?;");
       BindText(s_seq.Get(), 1, topic_id.ToString());
-      BindText(s_seq.Get(), 2, lca_hash);
+      BindText(s_seq.Get(), 2, lca_hash.ToString());
       if (sqlite3_step(s_seq.Get()) == SQLITE_ROW) {
         uint64_t const start_seq = sqlite3_column_int64(s_seq.Get(), 0);
         SQLiteStatement const s_del(db_, "DELETE FROM ledger_entries WHERE topic_id = ? AND seq_id > ?;");
@@ -539,8 +539,8 @@ class SQLiteStorage final : public PersistentStorageImpl {
       sqlite3_bind_int64(s.Get(), 3, entry.created_at.value);
       sqlite3_bind_int(s.Get(), 4, static_cast<int>(entry.type));
       BindText(s.Get(), 5, entry.payload);
-      BindText(s.Get(), 6, entry.prev_hash);
-      BindText(s.Get(), 7, entry.hash);
+      BindText(s.Get(), 6, entry.prev_hash.ToString());
+      BindText(s.Get(), 7, entry.hash.ToString());
       sqlite3_step(s.Get());
     }
 
@@ -548,7 +548,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
   }
 
   // --- Sync Requests ---
-  void AddSyncRequest(storage::SyncRequest const& req) override {
+  void AddSyncRequest(messaging::SyncRequest const& req) override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
     SQLiteStatement const s(
@@ -562,10 +562,10 @@ class SQLiteStorage final : public PersistentStorageImpl {
     sqlite3_step(s.Get());
   }
 
-  auto GetSyncRequests() -> std::vector<storage::SyncRequest> override {
+  auto GetSyncRequests() -> std::vector<messaging::SyncRequest> override {
     std::lock_guard const lock(mutex_);
     INVARIANT(db_);
-    std::vector<storage::SyncRequest> reqs;
+    std::vector<messaging::SyncRequest> reqs;
     SQLiteStatement const statement(
         db_,
         "SELECT topic_id, target_peer_id, created_at, last_attempt FROM sync_requests ORDER BY created_at ASC;"

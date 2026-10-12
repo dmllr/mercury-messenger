@@ -53,7 +53,7 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
       {"from", peer1.ToString()},
       {"type", "sync_propose"},
       {"topic", peer1.ToString()},
-      {"head", std::string(64, '0')}
+      {"head", messaging::LedgerHash().ToString()}
   };
   std::string str = propose.dump();
   std::vector<std::byte> bytes(str.size());

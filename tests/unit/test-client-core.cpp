@@ -117,10 +117,10 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
 TEST_F(ClientCoreTest, ContactRequestProcessing) {
   nlohmann::json const req_msg = {{"type", "contact_add_request"}, {"profile", {{"display_name", "Peer One"}}}};
 
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
   entry.topic_id = TopicID(peer1);
   entry.author_id = peer1;
-  entry.type = storage::LedgerActionType::ContactState;
+  entry.type = messaging::LedgerActionType::ContactState;
   entry.payload = req_msg.dump();
 
   eillance::EventQueue::Instance().Push(EventLedgerAppended{entry});

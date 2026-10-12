@@ -157,19 +157,19 @@ TEST_F(SQLiteStorageTest, SyncLedger) {
        .topic_id = topic,
        .author_id = peer1,
        .created_at = Timestamp{100},
-       .type = storage::LedgerActionType::Message,
+       .type = messaging::LedgerActionType::Message,
        .payload = "data",
-       .prev_hash = "000",
-       .hash = "111"}
+       .prev_hash = messaging::LedgerHash(),
+       .hash = messaging::LedgerHash(std::string(64, '1'))}
   );
 
   auto latest = storage_->GetLatestLedgerEntry(topic);
   ASSERT_TRUE(latest);
-  EXPECT_EQ(latest->hash, "111");
+  EXPECT_EQ(latest->hash, messaging::LedgerHash(std::string(64, '1')));
 
   auto recent = storage_->GetRecentLedgerHashes(topic);
   ASSERT_FALSE(recent.empty());
-  EXPECT_EQ(recent[0], "111");
+  EXPECT_EQ(recent[0], messaging::LedgerHash(std::string(64, '1')));
 }
 
 TEST_F(SQLiteStorageTest, SyncRequests) {

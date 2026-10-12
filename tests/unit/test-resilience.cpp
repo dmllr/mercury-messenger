@@ -115,7 +115,7 @@ TEST_F(ResilienceTest, ReinstallRecovery_MessageReceipt) {
   payload_json["message_id"] = 100;
   payload_json["payload"] = {{"c", plain}, {"v", 2}};
 
-  storage::LedgerEntry l_entry;
+  messaging::LedgerEntry l_entry;
   l_entry.topic_id = TopicID(peer1);
   l_entry.author_id = peer1;
   client_->Messaging()->ProjectMessage(l_entry, payload_json, false);
@@ -145,10 +145,10 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
 
   nlohmann::json const req_msg = {{"type", "contact_add_request"}, {"profile", {{"display_name", "Reinstalled B"}}}};
 
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
   entry.topic_id = TopicID(peer1);
   entry.author_id = peer1;
-  entry.type = storage::LedgerActionType::ContactState;
+  entry.type = messaging::LedgerActionType::ContactState;
   entry.payload = req_msg.dump();
 
   auto peer = std::make_shared<transport::Peer>(peer1);
@@ -177,15 +177,15 @@ TEST_F(ResilienceTest, ReinstallRecovery_ContactAdd) {
 }
 
 TEST_F(ResilienceTest, LedgerDeduplicatesIdenticalEntries) {
-  storage::LedgerEntry entry;
+  messaging::LedgerEntry entry;
   entry.topic_id = TopicID(peer1);
   entry.author_id = peer1;
   entry.created_at = Timestamp{123};
-  entry.type = storage::LedgerActionType::Message;
+  entry.type = messaging::LedgerActionType::Message;
   entry.payload = "dummy payload";
-  entry.hash = "111";
+  entry.hash = messaging::LedgerHash(std::string(64, '1'));
 
-  storage_->ReplaceLedgerEntries(TopicID(peer1), std::string(64, '0'), {entry, entry});
+  storage_->ReplaceLedgerEntries(TopicID(peer1), messaging::LedgerHash(std::string(64, '0')), {entry, entry});
   auto entries = storage_->GetLedgerEntries(TopicID(peer1));
   EXPECT_EQ(entries.size(), 1);
 }

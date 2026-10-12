@@ -148,10 +148,10 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
 
   // Message Receipt (Delivery)
   nlohmann::json const action_payload = {{"type", "message_receipt"}, {"message_id", 999}, {"status", "delivered"}};
-  storage::LedgerEntry dummy_receipt;
+  messaging::LedgerEntry dummy_receipt;
   dummy_receipt.topic_id = TopicID(peer_id_);
   dummy_receipt.author_id = peer_id_;
-  dummy_receipt.type = storage::LedgerActionType::Message;
+  dummy_receipt.type = messaging::LedgerActionType::Message;
   dummy_receipt.payload = action_payload.dump();
   storage_->AddLedgerEntry(dummy_receipt);
 

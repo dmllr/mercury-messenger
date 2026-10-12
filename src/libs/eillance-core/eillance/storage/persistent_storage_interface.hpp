@@ -7,8 +7,8 @@
 #include <string_view>
 #include <vector>
 
+#include "eillance/identity/contact.hpp"
 #include "eillance/messaging/types.hpp"
-#include "eillance/storage/data_types.hpp"
 
 namespace eillance::storage {
 
@@ -39,23 +39,25 @@ class PersistentStorageImpl {
   virtual void Checkpoint() = 0;
 
   // --- Synchronization Ledger ---
-  virtual void AddLedgerEntry(LedgerEntry const& entry) = 0;
-  virtual auto GetLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) -> std::vector<LedgerEntry> = 0;
-  virtual auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<LedgerEntry> = 0;
-  virtual auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<LedgerEntry> = 0;
-  virtual auto GetLedgerEntryByHash(TopicID const& topic_id, std::string const& hash) -> std::optional<LedgerEntry> = 0;
-  virtual void DeleteLedgerEntriesAfter(TopicID const& topic_id, std::string const& hash) = 0;
-  virtual auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<std::string> = 0;
-  virtual auto HasLedgerEntry(TopicID const& topic_id, std::string const& hash) -> bool = 0;
+  virtual void AddLedgerEntry(messaging::LedgerEntry const& entry) = 0;
+  virtual auto GetLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash)
+      -> std::vector<messaging::LedgerEntry> = 0;
+  virtual auto GetLedgerEntries(TopicID const& topic_id) -> std::vector<messaging::LedgerEntry> = 0;
+  virtual auto GetLatestLedgerEntry(TopicID const& topic_id) -> std::optional<messaging::LedgerEntry> = 0;
+  virtual auto GetLedgerEntryByHash(TopicID const& topic_id, messaging::LedgerHash const& hash)
+      -> std::optional<messaging::LedgerEntry> = 0;
+  virtual void DeleteLedgerEntriesAfter(TopicID const& topic_id, messaging::LedgerHash const& hash) = 0;
+  virtual auto GetRecentLedgerHashes(TopicID const& topic_id) -> std::vector<messaging::LedgerHash> = 0;
+  virtual auto HasLedgerEntry(TopicID const& topic_id, messaging::LedgerHash const& hash) -> bool = 0;
   virtual void ReplaceLedgerEntries(
       TopicID const& topic_id,
-      std::string const& lca_hash,
-      std::vector<LedgerEntry> const& entries
+      messaging::LedgerHash const& lca_hash,
+      std::vector<messaging::LedgerEntry> const& entries
   ) = 0;
 
   // --- Sync Requests ---
-  virtual void AddSyncRequest(SyncRequest const& req) = 0;
-  virtual auto GetSyncRequests() -> std::vector<SyncRequest> = 0;
+  virtual void AddSyncRequest(messaging::SyncRequest const& req) = 0;
+  virtual auto GetSyncRequests() -> std::vector<messaging::SyncRequest> = 0;
   virtual void RemoveSyncRequest(TopicID const& topic_id, ContactID const& target_peer_id) = 0;
   virtual void
   UpdateSyncRequestAttempt(TopicID const& topic_id, ContactID const& target_peer_id, Timestamp attempt_time) = 0;

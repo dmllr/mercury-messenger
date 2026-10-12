@@ -202,7 +202,7 @@ TEST_F(MessagingServiceTest, SendMessage_AppendsToLedger) {
 
   auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
   ASSERT_EQ(entries.size(), 1);
-  EXPECT_EQ(entries[0].type, storage::LedgerActionType::Message);
+  EXPECT_EQ(entries[0].type, messaging::LedgerActionType::Message);
   EXPECT_TRUE(entries[0].payload.find("Ledger Message") != std::string::npos);
 
   eillance::EventQueue::Instance().Push(eillance::EventSendQueuedMessages{peer1});
