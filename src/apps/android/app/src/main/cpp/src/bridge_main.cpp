@@ -324,11 +324,14 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterClass(env, "hela/eillance/ndkio/ReactionEntry");
     classref.RegisterCtor(env, "hela/eillance/ndkio/ReactionEntry", "(Ljava/lang/String;I)V");
 
+    classref.RegisterClass(env, "hela/eillance/ndkio/PeerMessageStatus");
+    classref.RegisterCtor(env, "hela/eillance/ndkio/PeerMessageStatus", "(Ljava/lang/String;I)V");
+
     classref.RegisterClass(env, "hela/eillance/ndkio/HistoryEntry");
     classref.RegisterCtor(
         env,
         "hela/eillance/ndkio/HistoryEntry",
-        "(JIJLjava/lang/String;IIIIIZZZLjava/util/List;Ljava/util/List;J)V"
+        "(JIJLjava/lang/String;IIIIIZZZLjava/util/List;Ljava/util/List;JLjava/util/List;)V"
     );
 
     classref.RegisterCtor(

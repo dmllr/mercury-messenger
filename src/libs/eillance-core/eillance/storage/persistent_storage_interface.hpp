@@ -87,6 +87,12 @@ class PersistentStorageImpl {
       std::vector<uint64_t> const& message_ids,
       messaging::MessageStatus new_status
   ) = 0;
+  virtual void UpdateMessagePeerStatus(
+      TopicID const& topic_id,
+      uint64_t message_id,
+      ContactID const& peer_id,
+      messaging::MessageStatus new_status
+  ) = 0;
   virtual void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) = 0;
   virtual void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) = 0;
   virtual void ToggleReaction(
