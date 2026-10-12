@@ -484,6 +484,7 @@ class MessagingService {
     ContactID const peer_id(entry.topic_id.value.Span());
 
     if (!contact_manager_->GetContact(peer_id)) {
+      contact_manager_->AddContact(peer_id);
       contact_manager_->MarkAsConfirmed(peer_id);
       EventQueue::Instance().Push(EventContactRestored{peer_id});
     }

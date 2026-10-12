@@ -26,7 +26,9 @@ class ContactServiceTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_dt_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
     std::ignore = client_->GenerateNewIdentity();
     client_->UpdateMyProfile({.display_name = "Test User", .bio = "", .photo_base64 = ""});
@@ -42,6 +44,7 @@ class ContactServiceTest : public ::testing::Test {
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
+  transport::MockDataTransport* mock_dt_{};
   std::shared_ptr<Client> client_;
   std::shared_ptr<services::ContactService> contact_service_;
 
@@ -84,7 +87,7 @@ TEST_F(ContactServiceTest, ReceiveContactRequest) {
   nlohmann::json profile;
   profile["display_name"] = "Peer One";
 
-  contact_service_->OnContactAddRequest(peer1, std::nullopt, profile);
+  contact_service_->OnContactAddRequest(peer1, std::nullopt, profile, {});
 
   EventQueue::Instance().WaitFor([&] { return request_cb_called; }, std::chrono::seconds(1));
 
@@ -99,7 +102,7 @@ TEST_F(ContactServiceTest, ReceiveContactRequest) {
 TEST_F(ContactServiceTest, ConfirmContact) {
   // First receive a request
   nlohmann::json const profile;
-  contact_service_->OnContactAddRequest(peer1, std::nullopt, profile);
+  contact_service_->OnContactAddRequest(peer1, std::nullopt, profile, {});
 
   bool status_cb_called = false;
   auto sub = EventQueue::Instance().Subscribe<EventContactStatusChanged>([&](auto const& e) {
@@ -107,6 +110,10 @@ TEST_F(ContactServiceTest, ConfirmContact) {
       status_cb_called = true;
     }
   });
+
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->data_channel_is_open = true;
+  mock_dt_->AddPeer(peer1, peer);
 
   contact_service_->ConfirmContact(peer1);
 
@@ -116,23 +123,9 @@ TEST_F(ContactServiceTest, ConfirmContact) {
   EXPECT_TRUE(status_cb_called);
   EXPECT_TRUE(contact_service_->IsConfirmed(peer1));
 
-  EventQueue::Instance().WaitFor(
-      [&]() {
-        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
-        for (auto const& entry : entries) {
-          if (entry.type == storage::LedgerActionType::ContactState &&
-              entry.payload.find("contact_confirm") != std::string::npos)
-            return true;
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-
   bool signaling_sent = false;
-  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
-    if (entry.type == storage::LedgerActionType::ContactState &&
-        entry.payload.find("contact_confirm") != std::string::npos) {
+  for (auto const& [p, json] : mock_dt_->sent_jsons) {
+    if (p == peer1 && json.value("type", "") == "crcp_confirm") {
       signaling_sent = true;
       break;
     }

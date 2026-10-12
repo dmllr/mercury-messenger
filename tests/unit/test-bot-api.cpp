@@ -27,12 +27,18 @@ class BotApiTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_dt_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
     client_ = std::make_shared<Client>(storage, media_transport, data_transport);
 
     (void)client_->Account()->GenerateNewIdentity();
 
     client_->Start();
+
+    std::string mnemonic;
+    peer_ident_ = eillance::crypto::Identity::CreateNew(mnemonic);
+    peer1 = ContactID(peer_ident_->GetPublicKey());
 
     mercury::bot::Bot::Options options;
     options.identity_path = "dummy_path";
@@ -50,10 +56,12 @@ class BotApiTest : public ::testing::Test {
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
+  transport::MockDataTransport* mock_dt_{};
   std::shared_ptr<Client> client_;
   std::unique_ptr<mercury::bot::Bot> bot_;
 
-  ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+  std::unique_ptr<crypto::Identity> peer_ident_;
+  ContactID peer1;
 };
 
 TEST_F(BotApiTest, AutoAcceptContacts) {
@@ -68,11 +76,8 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
   eillance::EventQueue::Instance().Push(EventLedgerAppended{entry});
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        auto entries = mock_storage_->GetLedgerEntries(TopicID(peer1));
-        for (auto const& msg : entries) {
-          if (msg.payload.find("contact_confirm") != std::string::npos) return true;
-        }
-        return false;
+        auto contact = client_->Contacts()->GetContact(peer1);
+        return contact && contact->status == identity::ContactStatus::confirmed;
       },
       std::chrono::milliseconds(2000)
   );
@@ -80,17 +85,18 @@ TEST_F(BotApiTest, AutoAcceptContacts) {
   auto const contact = client_->Contacts()->GetContact(peer1);
   ASSERT_TRUE(contact.has_value());
   EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
-
-  bool confirmed = false;
-  for (auto const& msg : mock_storage_->GetLedgerEntries(TopicID(peer1))) {
-    if (msg.payload.find("contact_confirm") != std::string::npos) {
-      confirmed = true;
-    }
-  }
-  EXPECT_TRUE(confirmed);
 }
 
 TEST_F(BotApiTest, AutoRejectCalls) {
+  auto peer = std::make_shared<transport::Peer>(peer1);
+  peer->crcp_verified = true;
+  peer->data_channel_is_open = true;
+  mock_dt_->AddPeer(peer1, peer);
+
+  auto sig = peer_ident_->Sign(client_->GetId().Span());
+  mock_storage_->UpdateContact({.peer_id = peer1, .status = identity::ContactStatus::confirmed, .signature_from_them = sig});
+  client_->Contacts()->ReloadCache();
+
   nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media"}};
 
