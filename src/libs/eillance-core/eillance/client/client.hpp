@@ -102,8 +102,13 @@ class Client final {
                   << " but media is active. Reconnecting data.";
               Connect(event.peer_id);
             } else {
-              EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{event.peer_id, state});
-              sm_->media_transport->Disconnect(event.peer_id);
+              auto const media_state = sm_->media_transport->GetConnectionState(event.peer_id);
+              if (media_state != transport::PeerConnectionState::disconnected &&
+                  media_state != transport::PeerConnectionState::closed &&
+                  media_state != transport::PeerConnectionState::failed) {
+                EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{event.peer_id, state});
+                sm_->media_transport->Disconnect(event.peer_id);
+              }
               sm_->data_transport->RemovePeer(event.peer_id);
             }
           }
@@ -113,6 +118,19 @@ class Client final {
     event_unsubs_.emplace_back(
         EventQueue::Instance().Subscribe<EventServiceConnectionStateChanged>([this](auto const& event) -> void {
           auto const state = event.state;
+
+          if (state == ServiceConnectionState::online && last_network_state_ == ServiceConnectionState::online) {
+            LGI << "Network interface change detected (online -> online). Reconnecting transport.";
+            if (this->is_running_.load()) {
+              for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
+                EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
+              }
+              sm_->data_transport->Reconnect();
+              sm_->data_transport->DiscoverTurnRelays();
+            }
+            return;
+          }
+
           if (state == last_network_state_) {
             return;
           }
@@ -455,7 +473,7 @@ class Client final {
       return;
     }
 
-    auto const peer = sm_->data_transport->GetPeer(peer_id);
+    auto peer = sm_->data_transport->GetPeer(peer_id);
     if (peer && peer->data_channel_is_open) {
       return;
     }
@@ -464,11 +482,19 @@ class Client final {
         state == transport::PeerConnectionState::connected) {
       return;
     }
+
+    auto const now = Time::SteadyNow();
+    if (peer && (now - peer->last_connect_attempt.load() < 5000000ULL)) {
+      return;
+    }
+
     if (!peer) {
-      auto const new_peer = std::make_shared<transport::Peer>(peer_id);
-      sm_->data_transport->AddPeer(peer_id, new_peer);
+      peer = std::make_shared<transport::Peer>(peer_id);
+      peer->last_connect_attempt = now;
+      sm_->data_transport->AddPeer(peer_id, peer);
     } else {
-      peer->last_activity_time = Time::SteadyNow();
+      peer->last_activity_time = now;
+      peer->last_connect_attempt = now;
     }
     sm_->data_transport->Connect(peer_id);
   }
@@ -572,9 +598,13 @@ class Client final {
   void BroadcastProfileUpdate() {
     sm_->profile->MarkAllContactsProfileSyncNeeded();
     auto const contacts = sm_->contact->GetContacts();
+    int delay_ms = 0;
     for (auto const& contact : contacts) {
       if (contact.status == identity::ContactStatus::confirmed) {
-        Connect(contact.peer_id);
+        background_queue_.DispatchAfter(std::chrono::milliseconds(delay_ms), [this, peer_id = contact.peer_id]() {
+          Connect(peer_id);
+        });
+        delay_ms += 250;
       }
     }
   }

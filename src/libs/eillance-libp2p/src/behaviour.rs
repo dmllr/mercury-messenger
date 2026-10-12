@@ -2,7 +2,7 @@ use crate::types::{NodeRole, TurnAuthRequest, TurnAuthResponse};
 use libp2p::{
   PeerId, StreamProtocol, autonat, dcutr, identify,
   kad::{self, Behaviour as Kademlia, Config as KademliaConfig, store::MemoryStore},
-  mdns, relay,
+  mdns, ping, relay,
   request_response::{self, ProtocolSupport},
   swarm::NetworkBehaviour,
 };
@@ -20,6 +20,7 @@ pub struct MercuryBehaviour {
   pub autonat: autonat::Behaviour,
   pub mdns: mdns::tokio::Behaviour,
   pub identify: identify::Behaviour,
+  pub ping: ping::Behaviour,
 }
 
 pub fn build_behaviour(
@@ -32,12 +33,7 @@ pub fn build_behaviour(
   kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
   let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-  let is_mobile = matches!(role, NodeRole::MobileClient);
-  if is_mobile {
-    kademlia.set_mode(Some(kad::Mode::Client));
-  } else {
-    kademlia.set_mode(Some(kad::Mode::Server));
-  }
+  kademlia.set_mode(Some(kad::Mode::Server));
 
   let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
   let chat = request_response::cbor::Behaviour::new(
@@ -55,6 +51,11 @@ pub fn build_behaviour(
 
   let autonat = autonat::Behaviour::new(peer_id, autonat::Config::default());
   let identify = identify::Behaviour::new(identify::Config::new("/mercury/id/1.0.0".into(), key.public()));
+  let ping = ping::Behaviour::new(
+    ping::Config::new()
+      .with_interval(Duration::from_secs(15))
+      .with_timeout(Duration::from_secs(20)),
+  );
 
   let is_bootstrap = matches!(role, NodeRole::BootstrapNode);
   let relay_config = if is_bootstrap {
@@ -65,8 +66,9 @@ pub fn build_behaviour(
       max_circuits: 8192,
       max_circuits_per_peer: 1024,
       circuit_src_rate_limiters: vec![],
-      max_circuit_duration: Duration::from_secs(86400 * 365), // 1 year
-      max_circuit_bytes: u64::MAX,
+      max_circuit_duration: Duration::from_secs(86400 * 7), // 7 days
+      max_circuit_bytes: 1 << 40,                           // 1 TB
+      reservation_duration: Duration::from_secs(3600),      // 1 hour
       ..Default::default()
     }
   } else {
@@ -92,5 +94,6 @@ pub fn build_behaviour(
     autonat,
     mdns,
     identify,
+    ping,
   }
 }

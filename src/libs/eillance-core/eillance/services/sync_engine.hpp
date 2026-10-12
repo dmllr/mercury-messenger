@@ -126,7 +126,9 @@ class SyncEngine {
     if (auto peer = transport_->GetPeer(target_peer); peer && peer->data_channel_is_open) {
       ProposeSync(topic_id, target_peer);
     } else {
-      EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+      if (type != storage::LedgerActionType::ProfileUpdate) {
+        EventQueue::Instance().Push(EventConnectionRequested{target_peer});
+      }
     }
   }
 
@@ -333,7 +335,6 @@ class SyncEngine {
     for (auto const& req : reqs) {
       auto contact = storage_->GetContact(req.target_peer_id);
       if (!contact || contact->status != identity::ContactStatus::confirmed) {
-        LGE << "Sync error/rejection: Contact " << req.target_peer_id.ToString() << " is not confirmed.";
         continue;
       }
       if (auto const peer = transport_->GetPeer(req.target_peer_id); peer && peer->data_channel_is_open) {
@@ -348,8 +349,6 @@ class SyncEngine {
           };
           transport_->SendJson(req.target_peer_id, key_msg);
         }
-      } else {
-        EventQueue::Instance().Push(EventConnectionRequested{req.target_peer_id});
       }
     }
   }

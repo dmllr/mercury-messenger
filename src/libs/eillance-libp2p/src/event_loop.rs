@@ -2,12 +2,32 @@ use crate::behaviour::{MercuryBehaviour, MercuryBehaviourEvent};
 use crate::types::{Callbacks, Command, NodeRole};
 use crate::utils::{hex_encode, notify_connected, notify_disconnected, peerid_to_pubkey, resolve_multiaddr};
 use futures::StreamExt;
-use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, request_response, swarm::SwarmEvent};
+use libp2p::{Multiaddr, PeerId, Swarm, autonat, identify, kad, mdns, ping, request_response, swarm::SwarmEvent};
 use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
 use std::time::Duration;
 use tokio::sync::mpsc;
+
+fn is_bootstrap_direct_ip(addr: &Multiaddr, bootstrap_addrs: &HashSet<Multiaddr>) -> bool {
+  let has_circuit = addr
+    .iter()
+    .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit));
+  if has_circuit {
+    return false;
+  }
+  let a_components: Vec<_> = addr.iter().take(2).collect();
+  if a_components.is_empty() {
+    return false;
+  }
+  for b_addr in bootstrap_addrs {
+    let b_components: Vec<_> = b_addr.iter().take(2).collect();
+    if a_components == b_components {
+      return true;
+    }
+  }
+  false
+}
 
 pub struct EventLoopState {
   pub pending_dials: HashSet<PeerId>,
@@ -163,16 +183,18 @@ fn handle_keepalive(state: &mut EventLoopState, swarm: &mut Swarm<MercuryBehavio
         p2p_peer_id = Some(peer_id);
       }
     }
-    if let Some(peer_id) = p2p_peer_id {
-      if !swarm.is_connected(&peer_id) {
-        node_log!(
-          callbacks,
-          4,
-          "Periodic check: Bootstrap node {} not connected, dialing...",
-          peer_id
-        );
-        let _ = swarm.dial(b_addr.clone());
-      }
+    let should_dial = match p2p_peer_id {
+      Some(peer_id) => !swarm.is_connected(&peer_id),
+      None => true, // Missing PeerId suffix; dial anyway to attempt connection
+    };
+    if should_dial {
+      node_log!(
+        callbacks,
+        4,
+        "Periodic check: Bootstrap node {:?} not connected, dialing...",
+        b_addr
+      );
+      let _ = swarm.dial(b_addr.clone());
     }
   }
 
@@ -294,6 +316,28 @@ fn handle_command(
       let _ = swarm.disconnect_peer_id(peer_id);
       state.pending_dials.remove(&peer_id);
     }
+    Command::Reconnect => {
+      node_log!(callbacks, 3, "Reconnect command received. Disconnecting all peers.");
+      let peers: Vec<PeerId> = swarm.connected_peers().copied().collect();
+      for peer in peers {
+        let _ = swarm.disconnect_peer_id(peer);
+      }
+      state.pending_dials.clear();
+      state.active_relay_listeners.clear();
+      state.active_relay_peers.clear();
+      state.public_ip = None;
+      state.public_port = None;
+      state.is_public = false;
+      if let Some(handle) = state.turn_server_handle.take() {
+        let _ = handle.close_tx.send(());
+        node_log!(callbacks, 3, "Node switches off a TURN server (network change)");
+      }
+      state.turn_port = None;
+      swarm
+        .behaviour_mut()
+        .kademlia
+        .stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
+    }
     Command::TurnServerStarted {
       port,
       public_ip,
@@ -353,6 +397,13 @@ fn handle_swarm_event(
   match event {
     SwarmEvent::NewListenAddr { address, .. } => {
       node_log!(callbacks, 3, "Listen Active. Multiaddr: {}", address);
+      if address
+        .iter()
+        .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+      {
+        node_log!(callbacks, 3, "Node become relay");
+        return;
+      }
       if state.public_port.is_none() {
         for protocol in address.iter() {
           match protocol {
@@ -364,12 +415,6 @@ fn handle_swarm_event(
             _ => {}
           }
         }
-      }
-      if address
-        .iter()
-        .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
-      {
-        node_log!(callbacks, 3, "Node become relay");
       }
     }
     SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
@@ -421,22 +466,27 @@ fn handle_swarm_event(
         remote_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id));
       }
 
-      state
-        .known_addresses
-        .entry(peer_id)
-        .or_default()
-        .insert(remote_addr.clone());
-      swarm
-        .behaviour_mut()
-        .kademlia
-        .add_address(&peer_id, remote_addr.clone());
+      let circuit_count = remote_addr
+        .iter()
+        .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+        .count();
+      let is_circuit = circuit_count > 0;
+      if circuit_count <= 1 {
+        state
+          .known_addresses
+          .entry(peer_id)
+          .or_default()
+          .insert(remote_addr.clone());
+        swarm
+          .behaviour_mut()
+          .kademlia
+          .add_address(&peer_id, remote_addr.clone());
+      }
       node_log!(callbacks, 3, "Connection established with {}", peer_id);
 
-      let is_circuit = remote_addr
-        .iter()
-        .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit));
       let mut is_bootstrap = state.explicit_bootstrap_peers.contains(&peer_id);
       if !is_bootstrap && !is_circuit {
+        let mut new_b_addrs = Vec::new();
         for b_addr in &state.bootstrap_addrs {
           // A bootstrap address may lack the P2P protocol postfix prior to the first connection
           let b_addr_len = b_addr
@@ -446,14 +496,23 @@ fn handle_swarm_event(
           if remote_addr.iter().take(b_addr_len).eq(b_addr.iter().take(b_addr_len)) {
             is_bootstrap = true;
             state.explicit_bootstrap_peers.insert(peer_id);
+            if b_addr.iter().all(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))) {
+              let mut updated_b_addr = b_addr.clone();
+              updated_b_addr.push(libp2p::multiaddr::Protocol::P2p(peer_id));
+              new_b_addrs.push((b_addr.clone(), updated_b_addr));
+            }
             break;
           }
+        }
+        for (old, new) in new_b_addrs {
+          state.bootstrap_addrs.remove(&old);
+          state.bootstrap_addrs.insert(new);
         }
       }
 
       if endpoint.is_dialer() {
         let _ = swarm.behaviour_mut().kademlia.bootstrap();
-        if is_bootstrap && !is_circuit {
+        if is_bootstrap && !is_circuit && !matches!(role, NodeRole::BootstrapNode) {
           let mut relay_listen_addr = remote_addr.clone();
           relay_listen_addr.push(libp2p::multiaddr::Protocol::P2pCircuit);
           state.active_relay_peers.insert(peer_id, remote_addr);
@@ -475,7 +534,7 @@ fn handle_swarm_event(
       if !swarm.is_connected(&peer_id) {
         state.active_relay_peers.remove(&peer_id);
       }
-      if !state.explicit_bootstrap_peers.contains(&peer_id) {
+      if !state.explicit_bootstrap_peers.contains(&peer_id) && !state.pending_dials.contains(&peer_id) {
         notify_disconnected(callbacks, swarm, &peer_id);
       }
     }
@@ -536,10 +595,23 @@ fn handle_swarm_event(
         peer_id,
         info.listen_addrs
       );
-      let _ = swarm.add_external_address(info.observed_addr.clone());
+      let obs_circuit_count = info
+        .observed_addr
+        .iter()
+        .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+        .count();
+      if obs_circuit_count <= 1 && !is_bootstrap_direct_ip(&info.observed_addr, &state.bootstrap_addrs) {
+        let _ = swarm.add_external_address(info.observed_addr.clone());
+      }
       for addr in info.listen_addrs {
-        state.known_addresses.entry(peer_id).or_default().insert(addr.clone());
-        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+        let circuit_count = addr
+          .iter()
+          .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+          .count();
+        if circuit_count <= 1 && !is_bootstrap_direct_ip(&addr, &state.bootstrap_addrs) {
+          state.known_addresses.entry(peer_id).or_default().insert(addr.clone());
+          swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
+        }
       }
       if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
         node_log!(callbacks, 2, "Kademlia bootstrap failed: {:?}", e);
@@ -549,8 +621,15 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::ExternalAddrConfirmed { address } => {
+      let circuit_count = address
+        .iter()
+        .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+        .count();
+      if circuit_count > 1 || is_bootstrap_direct_ip(&address, &state.bootstrap_addrs) {
+        return;
+      }
       node_log!(callbacks, 3, "External address confirmed: {}", address);
-      if state.public_ip.is_none() {
+      if circuit_count == 0 && state.public_ip.is_none() {
         let mut public_ip = String::new();
         for protocol in address.iter() {
           match protocol {
@@ -574,8 +653,15 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::NewExternalAddrCandidate { address } => {
+      let circuit_count = address
+        .iter()
+        .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+        .count();
+      if circuit_count > 1 || is_bootstrap_direct_ip(&address, &state.bootstrap_addrs) {
+        return;
+      }
       node_log!(callbacks, 4, "New external address candidate: {}", address);
-      if state.public_ip.is_none() {
+      if circuit_count == 0 && state.public_ip.is_none() {
         let mut public_ip = String::new();
         for protocol in address.iter() {
           match protocol {
@@ -599,15 +685,21 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::NewExternalAddrOfPeer { peer_id, address } => {
-      node_log!(callbacks, 5, "NewExternalAddrOfPeer for {}: {}", peer_id, address);
-      state
-        .known_addresses
-        .entry(peer_id)
-        .or_default()
-        .insert(address.clone());
-      swarm.behaviour_mut().kademlia.add_address(&peer_id, address);
-      if state.pending_dials.contains(&peer_id) {
-        state.do_dial(peer_id, swarm, callbacks);
+      let circuit_count = address
+        .iter()
+        .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+        .count();
+      if circuit_count <= 1 && !is_bootstrap_direct_ip(&address, &state.bootstrap_addrs) {
+        node_log!(callbacks, 5, "NewExternalAddrOfPeer for {}: {}", peer_id, address);
+        state
+          .known_addresses
+          .entry(peer_id)
+          .or_default()
+          .insert(address.clone());
+        swarm.behaviour_mut().kademlia.add_address(&peer_id, address);
+        if state.pending_dials.contains(&peer_id) {
+          state.do_dial(peer_id, swarm, callbacks);
+        }
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
@@ -702,7 +794,13 @@ fn handle_swarm_event(
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(kad::Event::RoutingUpdated { peer, addresses, .. })) => {
       node_log!(callbacks, 5, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);
       for addr in addresses.iter() {
-        state.known_addresses.entry(peer).or_default().insert(addr.clone());
+        let circuit_count = addr
+          .iter()
+          .filter(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+          .count();
+        if circuit_count <= 1 && !is_bootstrap_direct_ip(addr, &state.bootstrap_addrs) {
+          state.known_addresses.entry(peer).or_default().insert(addr.clone());
+        }
       }
       if state.pending_dials.contains(&peer) {
         state.do_dial(peer, swarm, callbacks);
@@ -717,7 +815,7 @@ fn handle_swarm_event(
       addresses,
     } => {
       node_log!(callbacks, 3, "Listener closed: {:?} {:?}", addresses, reason);
-      
+
       let mut original_addr = None;
       for (addr, id) in &state.active_relay_listeners {
         if *id == listener_id {
@@ -729,7 +827,10 @@ fn handle_swarm_event(
       state.active_relay_listeners.retain(|_, id| *id != listener_id);
 
       if let Some(orig) = original_addr {
-        if orig.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit)) {
+        if orig
+          .iter()
+          .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+        {
           node_log!(callbacks, 3, "Node lost relay status");
           let tx_clone = tx.clone();
           tokio::spawn(async move {
@@ -827,6 +928,9 @@ fn handle_swarm_event(
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(autonat::Event::StatusChanged { old, new })) => {
       node_log!(callbacks, 3, "AutoNAT status changed: {:?} -> {:?}", old, new);
       if let autonat::NatStatus::Public(addr) = new {
+        if is_bootstrap_direct_ip(&addr, &state.bootstrap_addrs) {
+          return;
+        }
         state.is_public = true;
         if state.turn_port.is_none() {
           let mut public_ip = String::new();
@@ -983,6 +1087,9 @@ fn handle_swarm_event(
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::ResponseSent { peer, .. })) => {
       node_log!(callbacks, 5, "TurnAuth response sent to {}", peer);
+    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(e)) => {
+      node_log!(callbacks, 5, "Ping event: {:?}", e);
     }
     event => {
       node_log!(callbacks, 5, "Unhandled SwarmEvent: {:?}", event);

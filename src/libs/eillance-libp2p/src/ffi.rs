@@ -109,6 +109,22 @@ pub extern "C" fn eillance_libp2p_node_set_callbacks(
 }
 
 #[no_mangle]
+pub extern "C" fn eillance_libp2p_node_reconnect(ptr: *mut c_void) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if let Some(tx) = &node.command_tx {
+        let _ = tx.send(Command::Reconnect);
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
 pub extern "C" fn eillance_libp2p_node_discover_turn_relays(ptr: *mut c_void) {
   run_ffi(
     AssertUnwindSafe(|| {

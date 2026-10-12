@@ -27,6 +27,7 @@ struct Peer {
   std::atomic<bool> is_connecting{false};
   std::atomic<bool> is_circuit{false};
   std::atomic<Time::Unit> last_activity_time{0};
+  std::atomic<Time::Unit> last_connect_attempt{0};
   std::atomic<bool> crcp_verified{false};
   std::atomic<bool> has_media_peer_connection{false};
   std::atomic<bool> legacy_prompt_sent{false};
@@ -38,7 +39,8 @@ struct Peer {
 
 inline Peer::Peer(ContactID const& id)
     : id(id),
-      last_activity_time(Time::SteadyNow()) {
+      last_activity_time(Time::SteadyNow()),
+      last_connect_attempt(0) {
   session_cipher = std::make_unique<crypto::SessionCipher>();
 }
 

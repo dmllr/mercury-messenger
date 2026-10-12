@@ -120,6 +120,10 @@ class Libp2pNode final {
       eillance_libp2p_node_stop(node_);
     }
   }
+  void Reconnect() const {
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_reconnect(node_);
+  }
 
   void Disconnect(ContactID const& peer_id) const {
     INVARIANT_NOT_NULL(node_);

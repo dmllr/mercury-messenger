@@ -39,7 +39,7 @@ class DeliveryService {
   DispatchQueue dispatch_queue_{"DeliveryService", 1};
 
   static constexpr int initialRetryDelayS = 10;
-  static constexpr int maxRetryDelayS = 120;
+  static constexpr int maxRetryDelayS = 600;
 
  public:
   explicit DeliveryService(services::ServiceManager* sm)
@@ -57,6 +57,15 @@ class DeliveryService {
         EventQueue::Instance().Push(EventContactUnreachable{e.peer_id, false});
       }
     }));
+
+    event_unsubs_.push_back(
+        EventQueue::Instance().Subscribe<EventServiceConnectionStateChanged>([this](auto const& e) -> void {
+          if (e.state == ServiceConnectionState::online) {
+            std::lock_guard<std::recursive_mutex> const lock(mutex_);
+            retry_delays_s_.clear();
+          }
+        })
+    );
   }
 
   ~DeliveryService() {
@@ -174,8 +183,17 @@ class DeliveryService {
 
  private:
   [[nodiscard]] auto HasPendingWork(ContactID const& peer_id) const -> bool {
-    auto const syncs = storage_->GetSyncRequests();
-    if (std::ranges::any_of(syncs, [&peer_id](auto const& req) -> bool { return req.target_peer_id == peer_id; })) {
+    if (contact_manager_) {
+      if (auto const contact = contact_manager_->GetContact(peer_id);
+          contact && contact->status == identity::ContactStatus::pendingApproval) {
+        return true;
+      }
+    }
+
+    auto const sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
+    if (std::ranges::any_of(sending_msgs, [](auto const& msg) {
+          return msg.kind != messaging::HistoryEntryKind::systemMessage;
+        })) {
       return true;
     }
 
