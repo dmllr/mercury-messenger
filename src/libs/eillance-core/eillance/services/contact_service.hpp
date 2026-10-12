@@ -23,6 +23,8 @@
 namespace eillance::services {
 
 class ContactService {
+  using Json = nlohmann::json;
+
   std::unordered_map<ContactID, std::vector<std::byte>> pending_tokens_;
   std::mutex tokens_mutex_;
 
@@ -32,21 +34,21 @@ class ContactService {
         storage_(sm->storage),
         transport_(sm->data_transport),
         manager_(sm->contact_manager) {
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventContactRestored>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventContactRestored>([this](auto const& e) -> void {
       OnContactRestored(e.peer_id);
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventReloadContactCache>([this](auto const&) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventReloadContactCache>([this](auto const&) -> void {
       manager_->ReloadContacts();
     }));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) {
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
       auto contact = manager_->GetContact(e.peer_id);
       if (contact) {
         if (contact->status == identity::ContactStatus::pendingApproval ||
             contact->status == identity::ContactStatus::confirmed) {
           auto signature = sm_->account->Sign(e.peer_id.Span());
-          nlohmann::json content = {
+          Json content = {
               {"type", contact->status == identity::ContactStatus::pendingApproval ? "crcp_request" : "crcp_confirm"},
               {"signature", crypto::ToHex(signature)},
               {"profile", BuildMyProfileJson()}
@@ -68,7 +70,9 @@ class ContactService {
   }
 
   ~ContactService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
   }
 
   // Actions
@@ -91,7 +95,7 @@ class ContactService {
 
     if (manager_->AddContact(peer_id) || (existing && existing->status == identity::ContactStatus::pendingApproval)) {
       auto signature = sm_->account->Sign(peer_id.Span());
-      nlohmann::json content = {
+      Json content = {
           {"type", "crcp_request"},
           {"signature", crypto::ToHex(signature)},
           {"profile", BuildMyProfileJson()}
@@ -105,11 +109,8 @@ class ContactService {
       }
 
       if (!existing || existing->status != identity::ContactStatus::pendingApproval) {
-        sm_->messaging->AddSystemEntry(
-            peer_id,
-            nlohmann::json{{"action", "contact_request"}}.dump(),
-            messaging::MessageDirection::sent
-        );
+        sm_->messaging
+            ->AddSystemEntry(peer_id, Json{{"action", "contact_request"}}.dump(), messaging::MessageDirection::sent);
       }
 
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::pendingApproval});
@@ -123,7 +124,7 @@ class ContactService {
       std::lock_guard<std::mutex> const lock(tokens_mutex_);
       pending_tokens_.erase(peer_id);
     }
-    auto contact = manager_->GetContact(peer_id);
+    auto const contact = manager_->GetContact(peer_id);
     if (!contact) {
       return;
     }
@@ -135,24 +136,21 @@ class ContactService {
         return;
       }
       newly_confirmed = true;
-      sm_->messaging->AddSystemEntry(
-          peer_id,
-          nlohmann::json{{"action", "contact_confirm"}}.dump(),
-          messaging::MessageDirection::sent
-      );
+      sm_->messaging
+          ->AddSystemEntry(peer_id, Json{{"action", "contact_confirm"}}.dump(), messaging::MessageDirection::sent);
     } else if (contact->status != identity::ContactStatus::confirmed) {
       return;
     }
 
-    auto signature = sm_->account->Sign(peer_id.Span());
+    auto const signature = sm_->account->Sign(peer_id.Span());
     manager_->StoreMySignatureFor(peer_id, signature);
 
-    nlohmann::json const content = {
+    Json const content = {
         {"type", "crcp_confirm"},
         {"signature", crypto::ToHex(signature)},
         {"profile", BuildMyProfileJson()}
     };
-    if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+    if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = transport_->SendJson(peer_id, content);
     }
 
@@ -169,7 +167,7 @@ class ContactService {
       pending_tokens_.erase(peer_id);
     }
     if (notify_peer) {
-      nlohmann::json msg = {{"type", "crcp_reject"}};
+      Json const msg = {{"type", "crcp_reject"}};
       if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = transport_->SendJson(peer_id, msg);
       }
@@ -186,8 +184,10 @@ class ContactService {
     manager_->DeleteContact(peer_id);
   }
 
-  void ProjectContactState(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
-    if (is_mine) return;
+  void ProjectContactState(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+    if (is_mine) {
+      return;
+    }
     std::string const type = json.value("type", "");
     ContactID const peer(entry.topic_id.value.Span());
 
@@ -198,11 +198,13 @@ class ContactService {
         return;
       }
       std::optional<std::string> token;
-      if (json.contains("token")) token = json["token"];
-      nlohmann::json profile = json.value("profile", nlohmann::json::object());
+      if (json.contains("token")) {
+        token = json["token"];
+      }
+      Json const profile = json.value("profile", Json::object());
       OnContactAddRequest(peer, token, profile, std::vector<std::byte>{});
     } else if (type == "contact_confirm") {
-      nlohmann::json profile = json.value("profile", nlohmann::json::object());
+      Json const profile = json.value("profile", Json::object());
       OnContactConfirm(peer, crypto::FromHex(json.value("signature", "")), profile);
     } else if (type == "contact_removed") {
       OnContactRemoved(peer);
@@ -232,14 +234,14 @@ class ContactService {
     manager_->ReloadContacts();
   }
 
-  void ProcessCrcpMessage(ContactID const& peer_id, nlohmann::json const& json) {
+  void ProcessCrcpMessage(ContactID const& peer_id, Json const& json) {
     std::string const type = json.value("type", "");
 
     if (type == "crcp_request") {
       std::optional<std::string> token;
       if (json.contains("token")) token = json["token"];
-      nlohmann::json profile = json.value("profile", nlohmann::json::object());
-      std::string signature_hex = json.value("signature", "");
+      Json const profile = json.value("profile", Json::object());
+      std::string const signature_hex = json.value("signature", "");
 
       auto sig = crypto::FromHex(signature_hex);
       if (sig.empty() || !crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
@@ -247,12 +249,14 @@ class ContactService {
         return;
       }
 
-      if (auto peer = transport_->GetPeer(peer_id)) peer->crcp_verified = true;
+      if (auto peer = transport_->GetPeer(peer_id)) {
+        peer->crcp_verified = true;
+      }
 
       auto existing = manager_->GetContact(peer_id);
       if (existing && existing->status == identity::ContactStatus::confirmed) {
         manager_->StoreSignatureFrom(peer_id, sig);
-        identity::ProfileUpdate p_update = ParseProfileJson(profile);
+        identity::ProfileUpdate const p_update = ParseProfileJson(profile);
         manager_->UpdateContactProfile(peer_id, p_update);
         ConfirmContact(peer_id);
         return;
@@ -265,8 +269,8 @@ class ContactService {
 
       OnContactAddRequest(peer_id, token, profile, sig);
     } else if (type == "crcp_confirm") {
-      std::string signature_hex = json.value("signature", "");
-      nlohmann::json profile = json.value("profile", nlohmann::json::object());
+      std::string const signature_hex = json.value("signature", "");
+      Json const profile = json.value("profile", Json::object());
       auto sig = crypto::FromHex(signature_hex);
       if (sig.empty() || !crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
         LGE << "Invalid signature in CRCP confirm from " << peer_id.ToString();
@@ -277,8 +281,8 @@ class ContactService {
     } else if (type == "crcp_reject") {
       OnContactRemoved(peer_id);
     } else if (type == "crcp_ack") {
-      nlohmann::json profile = json.value("profile", nlohmann::json::object());
-      identity::ProfileUpdate p_update = ParseProfileJson(profile);
+      Json const profile = json.value("profile", Json::object());
+      identity::ProfileUpdate const p_update = ParseProfileJson(profile);
       manager_->UpdateContactProfile(peer_id, p_update);
       EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
     }
@@ -299,7 +303,7 @@ class ContactService {
   void OnContactAddRequest(
       ContactID const& peer_id,
       std::optional<std::string> const& token,
-      nlohmann::json const& profile_json,
+      Json const& profile_json,
       std::vector<std::byte> const& signature
   ) {
     identity::ProfileUpdate profile = ParseProfileJson(profile_json);
@@ -328,7 +332,7 @@ class ContactService {
       }
 
       if (status == identity::RequestStatus::New) {
-        nlohmann::json const content = {{"action", "contact_request_received"}};
+        Json const content = {{"action", "contact_request_received"}};
         sm_->messaging->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::received);
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
         EventQueue::Instance().Push(EventContactRequest{peer_id});
@@ -337,7 +341,7 @@ class ContactService {
         EventQueue::Instance().Push(EventNotifyContactRequest{peer_id, name});
       }
 
-      nlohmann::json const ack_msg = {{"type", "crcp_ack"}, {"profile", BuildMyProfileJson()}};
+      Json const ack_msg = {{"type", "crcp_ack"}, {"profile", BuildMyProfileJson()}};
       if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = transport_->SendJson(peer_id, ack_msg);
       }
@@ -351,8 +355,7 @@ class ContactService {
   void OnContactAddAck(ContactID const& peer_id) {
   }
 
-  void
-  OnContactConfirm(ContactID const& peer_id, std::vector<std::byte> const& sig, nlohmann::json const& profile_json) {
+  void OnContactConfirm(ContactID const& peer_id, std::vector<std::byte> const& sig, Json const& profile_json) {
     {
       std::lock_guard<std::mutex> const lock(tokens_mutex_);
       pending_tokens_.erase(peer_id);
@@ -369,7 +372,7 @@ class ContactService {
       if (!was_confirmed) {
         sm_->messaging->AddSystemEntry(
             peer_id,
-            nlohmann::json{{"action", "contact_confirm"}}.dump(),
+            Json{{"action", "contact_confirm"}}.dump(),
             messaging::MessageDirection::received
         );
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
@@ -402,8 +405,8 @@ class ContactService {
   }
 
  private:
-  nlohmann::json BuildMyProfileJson() const {
-    nlohmann::json profile = nlohmann::json::object();
+  Json BuildMyProfileJson() const {
+    Json profile = Json::object();
     if (auto name = sm_->account->GetSettings()->GetMyDisplayName(); name && !name->empty()) {
       profile["display_name"] = *name;
     }
@@ -416,7 +419,7 @@ class ContactService {
     return profile;
   }
 
-  identity::ProfileUpdate ParseProfileJson(nlohmann::json const& profile_json) const {
+  identity::ProfileUpdate ParseProfileJson(Json const& profile_json) const {
     identity::ProfileUpdate profile;
     if (profile_json.contains("display_name") && !profile_json["display_name"].is_null()) {
       auto val = profile_json["display_name"].get<std::string>();
