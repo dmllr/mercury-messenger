@@ -70,8 +70,6 @@ TEST_F(ContactsViewModelTest, AddContact) {
 
 TEST_F(ContactsViewModelTest, ContactConnectionState) {
   vm_->AddContact(peer1, std::nullopt);
-  // Simulate Transport adding the peer
-  mock_data_transport_->AddPeer(peer1, std::make_shared<transport::Peer>(peer1));
 
   auto const observer = std::make_shared<MockContactsObserver>();
 

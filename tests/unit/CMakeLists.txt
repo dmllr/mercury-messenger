@@ -53,7 +53,6 @@ add_executable(h-e-tests
   test-replies.cpp
   test-settings-manager.cpp
   test-settings-view-model.cpp
-  test-signaling-negotiations.cpp
   test-sqlite-storage.cpp
   test-sync-engine.cpp
   test-time.cpp
@@ -67,7 +66,6 @@ target_link_libraries(h-e-tests
   eillance-crypto
   eillance-capture
   eillance-rtc
-  eillance-h264
   eillance-bot-api
 )
 

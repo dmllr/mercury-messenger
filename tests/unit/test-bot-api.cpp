@@ -9,27 +9,10 @@
 #include "eillance/client/client.hpp"
 #include "eillance/utils/packet.hpp"
 #include "mercury/bot/bot.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
-
-class MockCapture {
- public:
-  void Configure(Config) {
-  }
-  void Engage() {
-  }
-  void Revoke() {
-  }
-  auto FetchBuffers() -> Packet {
-    return Packet();
-  }
-  auto GetSampleDuration() -> Time::Unit {
-    return 10000;
-  }
-};
 
 class BotApiTest : public ::testing::Test {
  protected:
@@ -40,17 +23,10 @@ class BotApiTest : public ::testing::Test {
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
 
-    mock_data_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_data_transport_raw_ = mock_data_transport_impl_.get();
-    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
-
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage, data_transport, media_transport);
-
-    client_->SetVideoCapture(std::make_unique<MockCapture>());
-    client_->SetAudioCapture(std::make_unique<MockCapture>());
+    client_ = std::make_shared<Client>(storage, media_transport);
 
     (void)client_->Account()->GenerateNewIdentity();
 
@@ -72,8 +48,6 @@ class BotApiTest : public ::testing::Test {
 
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
-  transport::MockDataTransport* mock_data_transport_raw_{};
   std::shared_ptr<Client> client_;
   std::unique_ptr<mercury::bot::Bot> bot_;
 
@@ -118,7 +92,11 @@ TEST_F(BotApiTest, AutoRejectCalls) {
   nlohmann::json const offer_msg =
       {{"from", peer1.ToString()}, {"type", "offer"}, {"context", "media"}, {"sdp", "dummy_sdp_media"}};
 
-  mock_data_transport_raw_->SimulatePeerMessage(peer1, offer_msg);
+  std::string const str = offer_msg.dump();
+  std::vector<std::byte> bytes(str.size());
+  std::memcpy(bytes.data(), str.data(), str.size());
+  eillance::EventQueue::Instance().Push(EventDataChannelMessage{peer1, bytes});
+
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
@@ -150,17 +128,9 @@ TEST_F(BotApiTest, MessageHandling) {
     message_received = true;
   });
 
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_data_transport_raw_->GetPeer(peer1) != nullptr; },
-      std::chrono::milliseconds(2000)
-  );
-  auto peer = mock_data_transport_raw_->GetPeer(peer1);
-  ASSERT_TRUE(peer != nullptr);
-
-  peer->data_channel_is_open = true;
-  eillance::crypto::SessionCipher other;
-  peer->session_cipher->ComputeSharedSecret(other.GetPublicKey());
-  other.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
+  // Simulate connected data channel internally to allow processing
+  eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
 
   std::string const plain = "Hello Bot";
   nlohmann::json payload_json;

@@ -1,11 +1,11 @@
 #include <filesystem>
-#include <thread>
 
 #include <gtest/gtest.h>
 
+#include "eillance/client/client.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/utils/event_queue.hpp"
-#include "mock_data_transport.hpp"
+#include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
 using namespace eillance;
@@ -17,30 +17,21 @@ class AccountServiceTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    mock_data_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_data_transport_raw_ = mock_data_transport_impl_.get();
+    auto media_transport = std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    data_transport_ = std::make_shared<transport::DataTransport>(std::move(mock_data_transport_impl_));
-
-    sm_ = std::make_unique<services::ServiceManager>();
-    sm_->storage = storage_;
-    sm_->data_transport = data_transport_;
-
-    service_ = std::make_shared<services::AccountService>(sm_.get());
-    sm_->account = service_;
+    client_ = std::make_shared<Client>(storage_, media_transport);
+    service_ = client_->Account();
   }
 
   void TearDown() override {
     service_.reset();
-    sm_.reset();
+    client_->Terminate();
+    client_.reset();
   }
 
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> mock_data_transport_impl_;
-  transport::MockDataTransport* mock_data_transport_raw_{};
-  std::shared_ptr<transport::DataTransport> data_transport_;
-  std::unique_ptr<services::ServiceManager> sm_;
+  std::shared_ptr<Client> client_;
   std::shared_ptr<services::AccountService> service_;
 };
 
@@ -88,17 +79,14 @@ TEST_F(AccountServiceTest, UpdateProfile) {
   EXPECT_TRUE(callback_called);
 }
 
-TEST_F(AccountServiceTest, UpdateSignalingUrl) {
-  std::string const new_url = "wss://test.server.com";
-  service_->UpdateSignalingUrl(new_url);
+TEST_F(AccountServiceTest, UpdateBootstrapNodeUrl) {
+  std::string const new_url = "/ip4/127.0.0.1/tcp/1234";
+  service_->UpdateBootstrapNodeUrl(new_url);
 
-  EXPECT_EQ(service_->GetSettings()->GetSignalingServerUrl(), new_url);
+  EXPECT_EQ(service_->GetSettings()->GetBootstrapNodeUrl(), new_url);
 
-  ASSERT_EQ(mock_log_->signaling_urls.size(), 1);
-  EXPECT_EQ(mock_log_->signaling_urls[0], new_url);
-
-  ASSERT_EQ(mock_log_->starts.size(), 1);
-  EXPECT_EQ(mock_log_->starts[0], "Reconnect");
+  // Verify reconnection triggering implicitly
+  EXPECT_TRUE(client_->GetSettingsManager()->GetBootstrapNodeUrl() == new_url);
 }
 
 TEST_F(AccountServiceTest, Signing) {

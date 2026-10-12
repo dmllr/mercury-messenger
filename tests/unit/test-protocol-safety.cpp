@@ -12,7 +12,6 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/crypto/crypto.hpp"
-#include "mock_data_transport.hpp"
 #include "mock_media_transport.hpp"
 #include "mock_persistent_storage.hpp"
 
@@ -78,13 +77,10 @@ class ProtocolSafetyTest : public ::testing::Test {
     storage_ = std::make_shared<storage::PersistentStorage>(std::move(storage_impl));
 
     mock_log_ = std::make_shared<transport::MockCallLog>();
-    mock_transport_impl_ = std::make_unique<transport::MockDataTransport>(mock_log_);
-    mock_transport_ = mock_transport_impl_.get();
-    auto transport = std::make_shared<transport::DataTransport>(std::move(mock_transport_impl_));
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    client_ = std::make_shared<Client>(storage_, transport, media_transport);
+    client_ = std::make_shared<Client>(storage_, media_transport);
 
     std::ignore = client_->GenerateNewIdentity();
 
@@ -93,12 +89,6 @@ class ProtocolSafetyTest : public ::testing::Test {
     // Establish a valid peer connection with crypto
     mock_storage_->UpdateContact({peer_id_, identity::ContactStatus::confirmed});
     client_->Contacts()->ReloadCache();
-    auto peer = std::make_shared<transport::Peer>(peer_id_);
-    transport->AddPeer(peer_id_, peer);
-
-    peer->data_channel_is_open = true;
-    peer->session_cipher->ComputeSharedSecret(test_verifier_cipher_.GetPublicKey());
-    test_verifier_cipher_.ComputeSharedSecret(peer->session_cipher->GetPublicKey());
   }
 
   void TearDown() override {
@@ -120,8 +110,6 @@ class ProtocolSafetyTest : public ::testing::Test {
   std::filesystem::path temp_dir_;
   storage::MockPersistentStorageImpl* mock_storage_{};
   std::shared_ptr<transport::MockCallLog> mock_log_;
-  std::unique_ptr<transport::MockDataTransport> mock_transport_impl_;
-  transport::MockDataTransport* mock_transport_{};
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
 

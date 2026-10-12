@@ -9,5 +9,5 @@ def test_compilation(compile_binaries):
     the session.
     """
     assert os.path.isdir(compile_binaries), f"Binary directory not found: {compile_binaries}"
-    assert os.path.isfile(os.path.join(compile_binaries, "mercury-server")), "mercury-server binary is missing."
+    assert os.path.isfile(os.path.join(compile_binaries, "mercury-bootstrap")), "mercury-bootstrap binary is missing."
     assert os.path.isfile(os.path.join(compile_binaries, "mercury-mock-app")), "mercury-mock-app binary is missing."

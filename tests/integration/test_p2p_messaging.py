@@ -27,7 +27,7 @@ def test_p2p_messaging_same_network(test_environment):
   # Signaling Server
   scenario.add_process(
     name="signaling",
-    executable="/app/bin/mercury-server",
+    executable="/app/bin/mercury-bootstrap",
     args=["--port", "8000"],
     networks={"net-main": signaling_ip}
   )
@@ -43,7 +43,7 @@ def test_p2p_messaging_same_network(test_environment):
     executable="/app/bin/mercury-mock-app",
     args=[
       "--key", key_a,
-      "--signaling-url", f"ws://{signaling_ip}:8000",
+      "--signaling-url", f"/ip4/{signaling_ip}/tcp/8000",
       "--db-path", "/tmp/a.db",
       "--script", script_a
     ],
@@ -57,7 +57,7 @@ def test_p2p_messaging_same_network(test_environment):
     executable="/app/bin/mercury-mock-app",
     args=[
       "--key", key_b,
-      "--signaling-url", f"ws://{signaling_ip}:8000",
+      "--signaling-url", f"/ip4/{signaling_ip}/tcp/8000",
       "--db-path", "/tmp/b.db",
       "--script", script_b
     ],
@@ -67,20 +67,17 @@ def test_p2p_messaging_same_network(test_environment):
   # Expectations
   # Signaling Server should see authentication
   scenario.expect_logs("signaling", [
-    f"Peer authenticated: {id_a}",
-    f"Peer authenticated: {id_b}"
+    "Bootstrap Node Active. Multiaddr:"
   ])
 
   # App A should confirm sending
   scenario.expect_logs("mercury-mock-app-a", [
-    "WebSocket connected, signaling ready",
     f"[mock] Message to {id_b} sent",
     f"[mock] Message to {id_b} delivered",
   ])
 
   # App B should receive message
   scenario.expect_logs("mercury-mock-app-b", [
-    "WebSocket connected, signaling ready",
     f"[mock] Message from {id_a} received: Hello B from A",
   ])
 

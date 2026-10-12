@@ -11,7 +11,7 @@ def test_delayed_receiver_start(test_environment):
   scenario = Scenario()
   scenario.add_network("net", "192.168.50.0/24", "192.168.50.1")
 
-  scenario.add_process("signaling", "/app/bin/mercury-server", ["--port", "8000"], {"net": "192.168.50.30"})
+  scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.50.30"})
 
   # App A sends message immediately then waits
   # We need to make sure A doesn't disconnect before B comes online if we want P2P delivery.
@@ -21,7 +21,7 @@ def test_delayed_receiver_start(test_environment):
   
   script_a = f"connect, wait 2, message {id_b} \"Delayed Msg\", wait 30, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app", 
-                       ["--key", key_a, "--signaling-url", "ws://192.168.50.30:8000", "--db-path", "/tmp/a.db", "--script", script_a],
+                       ["--key", key_a, "--signaling-url", "/ip4/192.168.50.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.50.31"})
 
   # App B starts after 5 seconds
@@ -30,7 +30,7 @@ def test_delayed_receiver_start(test_environment):
   # The mock app script runs sequentially.
   script_b = "wait 8, connect, wait 20, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app", 
-                       ["--key", key_b, "--signaling-url", "ws://192.168.50.30:8000", "--db-path", "/tmp/b.db", "--script", script_b],
+                       ["--key", key_b, "--signaling-url", "/ip4/192.168.50.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.50.32"})
 
   scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Delayed Msg"])

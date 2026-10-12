@@ -6,7 +6,7 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_custom_target(integration_tests
   COMMAND ${Python3_EXECUTABLE} -m pytest -v -s
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-  DEPENDS mercury-mock-app mercury-server
+  DEPENDS mercury-mock-app mercury-bootstrap
   COMMENT "Running integration tests with pytest"
 )
 
