@@ -161,6 +161,44 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     env->DeleteLocalRef(j_type);
   }
 
+  auto GetLocalDescription(ContactID const& peer_id) const -> std::optional<std::string> override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
+      return std::nullopt;
+    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
+    auto* mid = transport_holder.GetMethod("getLocalDescription");
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
+    auto* j_sdp = static_cast<jstring>(env->CallObjectMethod(transportJavaRef_, mid, j_peer_id));
+    env->DeleteLocalRef(j_peer_id);
+
+    if (j_sdp == nullptr) {
+      return std::nullopt;
+    }
+
+    char const* sdp_chars = env->GetStringUTFChars(j_sdp, nullptr);
+    std::string const sdp(sdp_chars);
+    env->ReleaseStringUTFChars(j_sdp, sdp_chars);
+    env->DeleteLocalRef(j_sdp);
+
+    return sdp;
+  }
+
+  auto GetConnectionState(ContactID const& peer_id) const -> transport::PeerConnectionState override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) {
+      return transport::PeerConnectionState::closed;
+    }
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
+    auto* const method = transport_holder.GetMethod("getPeerConnectionState");
+    auto* j_peer_id = env->NewStringUTF(peer_id.ToString().c_str());
+    auto const state_val = env->CallIntMethod(transportJavaRef_, method, j_peer_id);
+    env->DeleteLocalRef(j_peer_id);
+    return static_cast<transport::PeerConnectionState>(state_val);
+  }
+
   void StartLocalMedia(bool is_video) override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();

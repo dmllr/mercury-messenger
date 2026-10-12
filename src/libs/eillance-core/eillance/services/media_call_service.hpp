@@ -315,9 +315,14 @@ class MediaCallService {
     if (state_val == 2) {
       if (current_call_ && current_call_->peer_id == peer_id) {
         if (auto peer = data_transport_->GetPeer(peer_id)) {
-          if (peer->pending_offer_sdp) {
+          std::optional<std::string> sdp = peer->pending_offer_sdp;
+          if (!sdp) {
+            sdp = media_transport_->GetLocalDescription(peer_id);
+          }
+          
+          if (sdp) {
             std::string const type = current_call_->is_outgoing ? "offer" : "answer";
-            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *peer->pending_offer_sdp}};
+            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             } else {
@@ -336,6 +341,15 @@ class MediaCallService {
 
     if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
         state == transport::PeerConnectionState::disconnected) {
+      
+      auto const current_state = media_transport_->GetConnectionState(peer_id);
+      if (current_state != transport::PeerConnectionState::failed && 
+          current_state != transport::PeerConnectionState::closed && 
+          current_state != transport::PeerConnectionState::disconnected) {
+        LGI << "Ignoring stale media connection state event for " << peer_id.ToString();
+        return;
+      }
+      
       if (current_call_ && current_call_->peer_id == peer_id) {
         LGE << "Media connection dropped for call " << current_call_->call_id.ToString() << ". Forcing hangup.";
         TeardownCallInternal(peer_id);
@@ -474,12 +488,12 @@ class MediaCallService {
       data_transport_->AddPeer(peer_id, peer);
     }
 
-    if (auto target_peer = data_transport_->GetPeer(peer_id)) {
-      media_transport_->AttachToPeer(peer_id, target_peer);
-    }
-
     media_transport_->Disconnect(peer_id);
     media_transport_->Connect(peer_id);
+
+    if (auto const target_peer = data_transport_->GetPeer(peer_id)) {
+      media_transport_->AttachToPeer(peer_id, target_peer);
+    }
 
     peer->has_media_peer_connection = true;
     SetCallState(CallState::mediaConnecting);
@@ -507,7 +521,7 @@ class MediaCallService {
         );
       }
 
-      messaging::CallStatus final_status = messaging::CallStatus::missed;
+      auto final_status = messaging::CallStatus::missed;
       if (explicit_status) {
         final_status = *explicit_status;
       } else if (duration > 0) {
@@ -526,8 +540,8 @@ class MediaCallService {
         );
         if (!current_call_->is_outgoing && final_status == messaging::CallStatus::missed) {
           if (!sm_->is_foreground) {
-            auto contact = sm_->contact_manager->GetContact(peer_id);
-            std::string name =
+            auto const contact = sm_->contact_manager->GetContact(peer_id);
+            std::string const name =
                 contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
             EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
           }

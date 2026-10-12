@@ -75,16 +75,20 @@ def run_compile_container(client: docker.DockerClient, image: str, command: str,
     remove=False
   )
 
+  full_logs = []
   # Stream logs
   for line in container.logs(stream=True):
-    sys.stdout.write(line.decode('utf-8'))
+    decoded = line.decode('utf-8', errors='replace')
+    sys.stdout.write(decoded)
     sys.stdout.flush()
+    full_logs.append(decoded)
 
   result = container.wait()
   container.remove()
 
   if result['StatusCode'] != 0:
-    raise Exception(f"Compilation container exited with code {result['StatusCode']}")
+    logs_str = "".join(full_logs)
+    raise Exception(f"Compilation container exited with code {result['StatusCode']}\n\n=== COMPILATION LOGS ===\n{logs_str}\n========================\n")
 
 def create_container(
     client: docker.DockerClient,

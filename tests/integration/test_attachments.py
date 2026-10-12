@@ -21,12 +21,15 @@ def test_attachments(test_environment):
     "mkfile /tmp/f2.dat 2048, "
     "mkfile /tmp/f3.dat 100, "
     "mkfile /tmp/f4.dat 500, "
+    "mkfile /tmp/f5.dat 1024, "
+    "mkfile /tmp/f6.dat 2048, "
+    "mkfile /tmp/f7.dat 100, "
     "connect, wait 2, "
     f"attach {id_b} \"1 file\" /tmp/f1.dat, "
     "wait 5, "
-    f"attach {id_b} \"2 files\" /tmp/f1.dat /tmp/f2.dat, "
+    f"attach {id_b} \"2 files\" /tmp/f2.dat /tmp/f3.dat, "
     "wait 5, "
-    f"attach {id_b} \"4 files\" /tmp/f1.dat /tmp/f2.dat /tmp/f3.dat /tmp/f4.dat, "
+    f"attach {id_b} \"4 files\" /tmp/f4.dat /tmp/f5.dat /tmp/f6.dat /tmp/f7.dat, "
     "wait 10, disconnect"
   )
 
