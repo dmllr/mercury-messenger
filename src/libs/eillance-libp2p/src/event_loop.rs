@@ -93,6 +93,7 @@ impl EventLoopState {
     node_log!(callbacks, 5, "Dialing {} with addresses: {:?}", peer_val, addrs);
 
     let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
+      .condition(libp2p::swarm::dial_opts::PeerCondition::Always)
       .addresses(addrs)
       .build();
     match swarm.dial(opts) {
@@ -744,7 +745,7 @@ fn handle_swarm_event(
                 }
               }
               let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer)
-                .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+                .condition(libp2p::swarm::dial_opts::PeerCondition::Always)
                 .addresses(addrs)
                 .build();
               match swarm.dial(opts) {
@@ -1092,6 +1093,7 @@ fn handle_swarm_event(
       Err(e) => {
         node_log!(callbacks, 3, "Ping failure for {}: {:?}", peer, e);
         let _ = swarm.disconnect_peer_id(peer);
+        crate::utils::force_notify_disconnected(callbacks, &peer);
       }
     }
     event => {

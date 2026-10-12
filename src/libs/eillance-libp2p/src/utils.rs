@@ -99,6 +99,17 @@ pub fn notify_disconnected<T: NetworkBehaviour>(callbacks: &Callbacks, swarm: &l
   }
 }
 
+pub fn force_notify_disconnected(callbacks: &Callbacks, peer_id: &PeerId) {
+  if callbacks.on_disconnected != 0 {
+    let cb: extern "C" fn(*mut c_void, *const c_char) = unsafe { std::mem::transmute(callbacks.on_disconnected) };
+    if let Some(pk) = peerid_to_pubkey(peer_id) {
+      if let Ok(c_str) = CString::new(hex_encode(&pk)) {
+        cb(callbacks.context as *mut c_void, c_str.as_ptr());
+      }
+    }
+  }
+}
+
 pub async fn resolve_multiaddr(addr: Multiaddr) -> Option<Multiaddr> {
   let mut components = addr.iter();
   let first = components.next()?;
