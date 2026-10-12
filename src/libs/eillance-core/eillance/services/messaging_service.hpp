@@ -363,7 +363,7 @@ class MessagingService {
         std::lock_guard<std::recursive_mutex> const lock(svc.flushing_mutex_);
         svc.flushing_peers_.erase(pid);
       }
-    } guard{*this, peer_id};
+    } const guard{*this, peer_id};
 
     auto const peer = transport_->GetPeer(peer_id);
 
@@ -431,9 +431,7 @@ class MessagingService {
       }
     }
 
-    if (connection_requested) {
-      EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
-    } else {
+    if (!connection_requested) {
       auto remaining = storage_->GetPendingActions(peer_id);
       if (!remaining.empty()) {
         EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
