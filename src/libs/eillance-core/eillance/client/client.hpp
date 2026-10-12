@@ -575,12 +575,6 @@ class Client final {
       }
     }
 
-    static int turn_discovery_counter = 0;
-    if (++turn_discovery_counter >= 15) {
-      turn_discovery_counter = 0;
-      sm_->data_transport->DiscoverTurnRelays();
-    }
-
     background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
   }
 
