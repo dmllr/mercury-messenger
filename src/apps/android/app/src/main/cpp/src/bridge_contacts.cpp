@@ -136,6 +136,88 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewMode
   env->ReleaseStringUTFChars(peer_id, p);
 }
 
+extern "C" JNIEXPORT jstring JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeCreateGroup(
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jstring name,
+    jstring peer_ids_csv
+) {
+  if (!g_clientEngine) return nullptr;
+
+  char const* name_chars = env->GetStringUTFChars(name, nullptr);
+  char const* csv_chars = env->GetStringUTFChars(peer_ids_csv, nullptr);
+
+  std::string group_name(name_chars);
+  std::string csv(csv_chars);
+
+  env->ReleaseStringUTFChars(name, name_chars);
+  env->ReleaseStringUTFChars(peer_ids_csv, csv_chars);
+
+  std::vector<eillance::ContactID> members;
+  std::stringstream ss(csv);
+  std::string item;
+  while (std::getline(ss, item, ',')) {
+    if (!item.empty()) {
+      members.emplace_back(item);
+    }
+  }
+
+  auto gid = g_clientEngine->GetClient()->CreateGroup(group_name, members);
+  return env->NewStringUTF(gid.ToString().c_str());
+}
+
+extern "C" JNIEXPORT jobjectArray JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeGetGroupMembers(
+    JNIEnv* env, jobject, jlong ptr, jstring group_id) {
+  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
+  char const* gid_chars = env->GetStringUTFChars(group_id, nullptr);
+  auto members = vm->GetGroupMembers(gid_chars);
+  env->ReleaseStringUTFChars(group_id, gid_chars);
+
+  auto& class_refs = ClassRefs::Instance();
+  auto& gm_class = class_refs.Class("hela/eillance/ndkio/GroupMember");
+  jobjectArray j_members = env->NewObjectArray(static_cast<jsize>(members.size()), gm_class.Class(), nullptr);
+
+  for (size_t i = 0; i < members.size(); ++i) {
+    jstring pid = env->NewStringUTF(members[i].contact_id.ToString().c_str());
+    jobject j_mem = gm_class.NewObject(env, pid, static_cast<jint>(members[i].role));
+    env->SetObjectArrayElement(j_members, static_cast<jsize>(i), j_mem);
+    env->DeleteLocalRef(pid);
+    env->DeleteLocalRef(j_mem);
+  }
+  return j_members;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeAddGroupMember(
+    JNIEnv* env, jobject, jlong ptr, jstring group_id, jstring contact_id) {
+  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
+  char const* gid_chars = env->GetStringUTFChars(group_id, nullptr);
+  char const* cid_chars = env->GetStringUTFChars(contact_id, nullptr);
+  bool res = vm->AddGroupMember(gid_chars, cid_chars);
+  env->ReleaseStringUTFChars(group_id, gid_chars);
+  env->ReleaseStringUTFChars(contact_id, cid_chars);
+  return res ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeRemoveGroupMember(
+    JNIEnv* env, jobject, jlong ptr, jstring group_id, jstring contact_id) {
+  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
+  char const* gid_chars = env->GetStringUTFChars(group_id, nullptr);
+  char const* cid_chars = env->GetStringUTFChars(contact_id, nullptr);
+  bool res = vm->RemoveGroupMember(gid_chars, cid_chars);
+  env->ReleaseStringUTFChars(group_id, gid_chars);
+  env->ReleaseStringUTFChars(contact_id, cid_chars);
+  return res ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ContactsViewModel_nativeLeaveGroup(
+    JNIEnv* env, jobject, jlong ptr, jstring group_id) {
+  auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);
+  char const* gid_chars = env->GetStringUTFChars(group_id, nullptr);
+  vm->LeaveGroup(gid_chars);
+  env->ReleaseStringUTFChars(group_id, gid_chars);
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_hela_eillance_viewmodels_ContactsViewModel_nativeGenerateToken(JNIEnv* env, jobject /*instance*/, jlong ptr) {
   auto* vm = reinterpret_cast<eillance::view_model::ContactsViewModel*>(ptr);

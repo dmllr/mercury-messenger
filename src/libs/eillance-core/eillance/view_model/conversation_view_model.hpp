@@ -258,7 +258,7 @@ class ConversationViewModel {
       }
 
       // Access MessagingService directly since facade might not have the overload yet
-      auto entry = client->Messaging()->SendChatMessage(peer_id, content, reqs, reply_to_id);
+      auto entry = client->SendChatMessage(TopicID(peer_id), content, reqs, reply_to_id);
 
       std::lock_guard<std::mutex> const lock(mutex);
 
