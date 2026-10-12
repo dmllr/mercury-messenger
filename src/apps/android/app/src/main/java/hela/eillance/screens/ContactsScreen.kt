@@ -473,10 +473,11 @@ fun ContactsScreen(
                         text = { Text(stringResource(R.string.group_new)) },
                         onClick = { menuExpanded = false; showCreateGroupDialog = true }
                       )
-                      DropdownMenuItem(
-                        text = { Text(stringResource(R.string.channel_new)) },
-                        onClick = { menuExpanded = false; showCreateChannelDialog = true }
-                      )
+                      // Public channels are temporarily disabled in UI
+                      // DropdownMenuItem(
+                      //   text = { Text(stringResource(R.string.channel_new)) },
+                      //   onClick = { menuExpanded = false; showCreateChannelDialog = true }
+                      // )
                     }
                   }
                 }
