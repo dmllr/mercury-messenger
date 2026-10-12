@@ -95,7 +95,9 @@ class Client final {
               media_active = peer->has_media_peer_connection;
             }
 
-            if (media_active) {
+            if (media_active && last_network_state_ != ServiceConnectionState::noNetwork &&
+                last_network_state_ != ServiceConnectionState::failure &&
+                last_network_state_ != ServiceConnectionState::disconnected) {
               LGI << "Data connection lost for " << event.peer_id.ToString()
                   << " but media is active. Reconnecting data.";
               Connect(event.peer_id);
@@ -111,19 +113,21 @@ class Client final {
     event_unsubs_.emplace_back(
         EventQueue::Instance().Subscribe<EventServiceConnectionStateChanged>([this](auto const& event) -> void {
           auto const state = event.state;
+          if (state == last_network_state_) {
+            return;
+          }
+          last_network_state_ = state;
+
           if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
               state == ServiceConnectionState::disconnected) {
             for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
-              auto const pc_state = sm_->data_transport->GetConnectionState(id);
-              if (pc_state == transport::PeerConnectionState::newConnection ||
-                  pc_state == transport::PeerConnectionState::connecting) {
-                EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
-                sm_->data_transport->Disconnect(id);
-                sm_->media_transport->Disconnect(id);
-              }
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{id});
+              sm_->data_transport->Disconnect(id);
+              sm_->media_transport->Disconnect(id);
             }
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
+              sm_->data_transport->Reconnect();
               sm_->sync_engine->Start();
               sm_->data_transport->DiscoverTurnRelays();
             }
@@ -640,6 +644,8 @@ class Client final {
   };
   std::vector<DynamicTurnServer> dynamic_turn_servers_;
   std::mutex dynamic_turn_mutex_;
+
+  ServiceConnectionState last_network_state_{ServiceConnectionState::unknown};
 };
 
 }  // namespace eillance
