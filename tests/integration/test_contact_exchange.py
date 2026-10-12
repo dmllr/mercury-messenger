@@ -127,12 +127,12 @@ def test_call_unapproved_rejected(test_environment):
   scenario.add_network("net", "192.168.105.0/24", "192.168.105.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.105.30"})
 
-  script_a = f"connect, wait 15, call {id_b}, wait 35, disconnect"
+  script_a = f"connect, wait 5, call {id_b}, wait 45, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.105.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.105.31"})
 
-  script_b = "connect, wait 50, disconnect"
+  script_b = "connect, wait 60, disconnect"
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--no-auto-confirm", "--key", key_b, "--signaling-url", "/ip4/192.168.105.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.105.32"})
@@ -151,7 +151,7 @@ def test_call_unapproved_then_approved_sync(test_environment):
   scenario.add_network("net", "192.168.106.0/24", "192.168.106.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.106.30"})
 
-  script_a = f"connect, wait 15, call {id_b}, wait 10, hangup {id_b}, wait 45, disconnect"
+  script_a = f"connect, wait 5, call {id_b}, wait 10, hangup {id_b}, wait 55, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.106.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.106.31"})
@@ -175,7 +175,7 @@ def test_call_unapproved_then_approved_then_call(test_environment):
   scenario.add_network("net", "192.168.107.0/24", "192.168.107.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.107.30"})
 
-  script_a = f"connect, wait 15, call {id_b}, wait 10, hangup {id_b}, wait 25, call {id_b}, wait 45, disconnect"
+  script_a = f"connect, wait 5, call {id_b}, wait 10, hangup {id_b}, wait 25, call {id_b}, wait 45, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.107.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.107.31"})
