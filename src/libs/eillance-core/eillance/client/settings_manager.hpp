@@ -27,7 +27,7 @@ class SettingsManager {
   // Retrieves the libp2p bootstrap node URL. Returns an empty optional if not set.
   [[nodiscard]] auto GetBootstrapNodeUrl() const -> std::optional<std::string> {
     if (!bootstrapNodeUrl_ || bootstrapNodeUrl_->empty()) {
-      return "/dns4/app.hela.me/tcp/807";
+      return "/dns4/app.hela.me/tcp/10807";
     }
     return bootstrapNodeUrl_;
   }

@@ -23,7 +23,7 @@ The native C++ applications can be built and deployed using the following comman
 This single command configures the project, builds the `mercury-bootstrap`, strips the binary for size, and deploys it to the target machine via `scp`.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-bootstrap --config Release && strip build-deploy/bin/mercury-bootstrap && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "git config --global --add safe.directory /workspace && cmake -GNinja -DCMAKE_BUILD_TYPE=Release -B build-deploy && cmake --build build-deploy --target mercury-bootstrap --config Release && strip build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap && chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
 ```
 
 ### Manual Build Steps
@@ -42,18 +42,17 @@ docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
 This command compiles `mercury-bootstrap` native target.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv \
-  cmake --build build-deploy --config Release
+docker run --rm -v ${PWD}:/workspace -w /workspace mercury-devenv cmake --build build-deploy --target mercury-bootstrap --config Release
 ```
 
-The compiled binaries will be located at `build-deploy/bin/`.
+The compiled binary will be located at `build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap`.
 
 #### 3. Deploy
 
 Use `scp` to copy the `mercury-bootstrap` binary to your deployment machine. This example requires you to have SSH keys configured.
 
 ```shell
-docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/bin/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
+docker run --rm -v ${PWD}:/workspace -v ${HOME}/.ssh:/workspace/.ssh -w /workspace mercury-devenv bash -c "chmod 400 /workspace/.ssh/vm0.ssh.key && scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /workspace/.ssh/vm0.ssh.key build-deploy/src/apps/mercury-bootstrap/mercury-bootstrap ubuntu@vm0.hela.me:/var/app/mercury-bootstrap/"
 ```
 
 ### Running the Bootstrap Node
