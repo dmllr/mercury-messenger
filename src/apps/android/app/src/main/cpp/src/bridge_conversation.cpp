@@ -56,14 +56,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
   char const* n = env->GetStringUTFChars(name, nullptr);
   char const* t = env->GetStringUTFChars(thumb, nullptr);
 
-  vm->AddDraftAttachment({
-    .file_path = p,
-    .type = static_cast<eillance::messaging::AttachmentType>(type),
-    .mime_type = m,
-    .file_name = n,
-    .thumbnail_base64 = t,
-    .note = ""
-  });
+  vm->AddDraftAttachment(
+      {.file_path = p,
+       .type = static_cast<eillance::messaging::AttachmentType>(type),
+       .mime_type = m,
+       .file_name = n,
+       .thumbnail_base64 = t,
+       .note = ""}
+  );
 
   env->ReleaseStringUTFChars(path, p);
   env->ReleaseStringUTFChars(mime, m);
@@ -72,12 +72,21 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeRemoveDraftAttachment(
-    JNIEnv* /*env*/, jobject /*instance*/, jlong ptr, jint index) {
+    JNIEnv* /*env*/,
+    jobject /*instance*/,
+    jlong ptr,
+    jint index
+) {
   reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr)->RemoveDraftAttachment(index);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeUpdateDraftNote(
-    JNIEnv* env, jobject /*instance*/, jlong ptr, jint index, jstring note) {
+    JNIEnv* env,
+    jobject /*instance*/,
+    jlong ptr,
+    jint index,
+    jstring note
+) {
   auto* vm = reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr);
   char const* n = env->GetStringUTFChars(note, nullptr);
   vm->UpdateDraftNote(index, n);
@@ -85,7 +94,11 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationView
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_ConversationViewModel_nativeOnMessageShown(
-    JNIEnv* /*env*/, jobject /*instance*/, jlong ptr, jlong msg_id) {
+    JNIEnv* /*env*/,
+    jobject /*instance*/,
+    jlong ptr,
+    jlong msg_id
+) {
   reinterpret_cast<eillance::view_model::ConversationViewModel*>(ptr)->OnMessageShown(static_cast<uint64_t>(msg_id));
 }
 

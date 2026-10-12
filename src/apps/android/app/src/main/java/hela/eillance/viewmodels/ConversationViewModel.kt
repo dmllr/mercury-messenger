@@ -201,57 +201,6 @@ class ConversationViewModel(
     return null
   }
 
-  private fun resolveUniqueFile(
-    dir: File,
-    fileName: String,
-    contentResolver: ContentResolver,
-    sourceUri: Uri
-  ): File {
-    var file = File(dir, fileName)
-    if (!file.exists()) return file
-
-    // Deduplication check: If name exists, check if content is identical
-    try {
-      val sourceSize =
-        contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: -1L
-      if (sourceSize != -1L && file.length() == sourceSize) {
-        val sourceHash = calculateStreamHash(contentResolver.openInputStream(sourceUri))
-        val targetHash = calculateStreamHash(FileInputStream(file))
-        if (sourceHash != null && sourceHash == targetHash) {
-          return file // Reuse existing file
-        }
-      }
-    } catch (e: Exception) {
-      Log.w("ConversationVM", "Deduplication check failed, falling back to rename", e)
-    }
-
-    val name = file.nameWithoutExtension
-    val ext = file.extension
-    var counter = 1
-    while (file.exists()) {
-      file = File(dir, "$name($counter).$ext")
-      counter++
-    }
-    return file
-  }
-
-  private fun calculateStreamHash(inputStream: java.io.InputStream?): String? {
-    inputStream ?: return null
-    return try {
-      val digest = MessageDigest.getInstance("SHA-256")
-      val buffer = ByteArray(8192)
-      var bytesRead: Int
-      inputStream.use { stream ->
-        while (stream.read(buffer).also { bytesRead = it } != -1) {
-          digest.update(buffer, 0, bytesRead)
-        }
-      }
-      digest.digest().joinToString("") { "%02x".format(it) }
-    } catch (_: Exception) {
-      null
-    }
-  }
-
   fun updateMessageText(text: String) {
     _messageText.value = text
   }

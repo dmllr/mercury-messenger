@@ -55,8 +55,8 @@ class MessageHistory {
         ),
         .direction =
             (params.direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
-        .status = (params.direction == CallDirection::incoming && params.status == CallStatus::missed) 
-                      ? MessageStatus::delivered 
+        .status = (params.direction == CallDirection::incoming && params.status == CallStatus::missed)
+                      ? MessageStatus::delivered
                       : MessageStatus::read,
         .is_truncated = false,
         .data =

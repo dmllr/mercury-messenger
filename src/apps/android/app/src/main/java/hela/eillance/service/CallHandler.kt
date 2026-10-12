@@ -152,14 +152,7 @@ class CallHandler(
       if (activeConnection == connection) {
         activeConnection = null
         soundPlayer.stop()
-        val currentState = getLastCallState()
-        if (currentState != null && (currentState.isRinging || currentState.isInCall || currentState.isConnecting)) {
-          if (currentState.isRinging) {
-            service.nativeRejectCall()
-          } else {
-            service.nativeHangupCall()
-          }
-        }
+        service.nativeTelecomCallEnded()
       }
     }
   }

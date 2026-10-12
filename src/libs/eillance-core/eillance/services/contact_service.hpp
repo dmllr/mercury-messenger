@@ -73,7 +73,11 @@ class ContactService {
       storage_->AddPendingAction({.peer_id = peer_id, .payload = content.dump()});
 
       if (!existing || existing->status != identity::ContactStatus::pendingApproval) {
-        sm_->messaging->AddSystemEntry(peer_id, nlohmann::json{{"action", "contact_request"}}.dump(), messaging::MessageDirection::sent);
+        sm_->messaging->AddSystemEntry(
+            peer_id,
+            nlohmann::json{{"action", "contact_request"}}.dump(),
+            messaging::MessageDirection::sent
+        );
       }
 
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::pendingApproval});
@@ -92,7 +96,11 @@ class ContactService {
       if (!manager_->ConfirmContact(peer_id)) {
         return;
       }
-      sm_->messaging->AddSystemEntry(peer_id, nlohmann::json{{"action", "contact_confirm"}}.dump(), messaging::MessageDirection::sent);
+      sm_->messaging->AddSystemEntry(
+          peer_id,
+          nlohmann::json{{"action", "contact_confirm"}}.dump(),
+          messaging::MessageDirection::sent
+      );
     } else if (contact->status != identity::ContactStatus::confirmed) {
       return;
     }
@@ -117,10 +125,10 @@ class ContactService {
 
   void BlockContact(ContactID const& peer_id, bool notify_peer) {
     if (notify_peer) {
-      storage_->AddPendingAction({.peer_id = peer_id, .payload = nlohmann::json{
-          {"type", "contact_removed"},
-          {"to", peer_id.ToString()}
-      }.dump()});
+      storage_->AddPendingAction(
+          {.peer_id = peer_id, .payload = nlohmann::json{{"type", "contact_removed"}, {"to", peer_id.ToString()}}.dump()
+          }
+      );
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
     }
 
@@ -232,11 +240,13 @@ class ContactService {
         if (json.value("type", "") == "contact_add_request") {
           storage_->RemovePendingAction(action.id);
         }
-      } catch (...) {}
+      } catch (...) {
+      }
     }
   }
 
-  void OnContactConfirm(ContactID const& peer_id, std::string const& signature_hex, nlohmann::json const& profile_json) {
+  void
+  OnContactConfirm(ContactID const& peer_id, std::string const& signature_hex, nlohmann::json const& profile_json) {
     auto sig = crypto::FromHex(signature_hex);
     if (!crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
       LGE << "Invalid signature in contact_confirm from " << peer_id.ToString();
@@ -260,7 +270,11 @@ class ContactService {
       manager_->UpdateContactProfile(peer_id, profile);
 
       if (!was_confirmed) {
-        sm_->messaging->AddSystemEntry(peer_id, nlohmann::json{{"action", "contact_confirm"}}.dump(), messaging::MessageDirection::received);
+        sm_->messaging->AddSystemEntry(
+            peer_id,
+            nlohmann::json{{"action", "contact_confirm"}}.dump(),
+            messaging::MessageDirection::received
+        );
         sm_->messaging->MarkMessagesAsRead(peer_id, {});
       }
 
@@ -277,7 +291,8 @@ class ContactService {
         if (json.value("type", "") == "contact_confirm") {
           storage_->RemovePendingAction(action.id);
         }
-      } catch (...) {}
+      } catch (...) {
+      }
     }
     EventQueue::Instance().Push(EventConnectionRequested{peer_id});
   }
@@ -299,7 +314,8 @@ class ContactService {
         if (json.value("type", "") == "contact_removed") {
           storage_->RemovePendingAction(action.id);
         }
-      } catch (...) {}
+      } catch (...) {
+      }
     }
   }
 

@@ -112,11 +112,7 @@ class MessengerService : Service() {
       launch {
         NativeEventBus.notifyNewMessage.collect { (peerId, name, messages) ->
           val showContent = NativeEventBus.settings.value?.showNotificationContent ?: true
-          val allUnreadRegular = messages.filter {
-            it.callStatus != hela.eillance.ndkio.CallStatus.Missed &&
-            it.kind != hela.eillance.ndkio.HistoryEntryKind.SystemMessage
-          }
-          notifications.showNewMessageNotification(peerId, name, allUnreadRegular, showContent)
+          notifications.showNewMessageNotification(peerId, name, messages, showContent)
         }
       }
       launch {
@@ -317,7 +313,12 @@ class MessengerService : Service() {
   external fun nativeAcceptCall()
   external fun nativeRejectCall()
   external fun nativeHangupCall()
+  external fun nativeTelecomCallEnded()
   external fun nativeMarkAllAsRead(peerId: String)
+  external fun nativeUpdatePlatformPermissions(notif: Boolean, batt: Boolean, calls: Boolean)
+  external fun nativeIgnoreBattery()
+  external fun nativeIgnoreCalls()
+  external fun nativeResetIgnoredPermissions()
 
   companion object {
     var instance: MessengerService? = null

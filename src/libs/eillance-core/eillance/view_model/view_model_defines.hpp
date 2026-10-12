@@ -23,6 +23,7 @@ struct CallState {
   messaging::HistoryEntryKind call_type = messaging::HistoryEntryKind::voiceCall;
   bool is_muted = false;
   bool is_speaker_on = false;
+  uint32_t duration_seconds = 0;
 };
 
 struct MyProfile {

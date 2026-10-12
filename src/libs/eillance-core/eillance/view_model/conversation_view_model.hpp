@@ -8,9 +8,9 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
-#include <unordered_set>
 
 #include <ranges>
 
@@ -78,10 +78,7 @@ class ConversationViewModel {
   void SendText(std::string const& content) const {
     impl_->SendText(content);
   }
-  void SendMessage(
-      std::string const& content,
-      uint64_t reply_to_id = 0
-  ) const {
+  void SendMessage(std::string const& content, uint64_t reply_to_id = 0) const {
     impl_->SendMessage(content, reply_to_id);
   }
   void AddDraftAttachment(DraftAttachment const& draft) const {
@@ -202,10 +199,7 @@ class ConversationViewModel {
       SendMessage(content, 0);
     }
 
-    void SendMessage(
-        std::string const& content,
-        uint64_t reply_to_id
-    ) {
+    void SendMessage(std::string const& content, uint64_t reply_to_id) {
       std::vector<messaging::AttachmentRequest> reqs;
       {
         std::lock_guard<std::mutex> const lock(mutex);

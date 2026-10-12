@@ -494,7 +494,8 @@ class MediaCallService {
     }
   }
 
-  void TeardownCallInternal(ContactID const& peer_id, std::optional<messaging::CallStatus> explicit_status = std::nullopt) {
+  void
+  TeardownCallInternal(ContactID const& peer_id, std::optional<messaging::CallStatus> explicit_status = std::nullopt) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
 
     if (current_call_) {
@@ -526,7 +527,8 @@ class MediaCallService {
         if (!current_call_->is_outgoing && final_status == messaging::CallStatus::missed) {
           if (!sm_->is_foreground) {
             auto contact = sm_->contact_manager->GetContact(peer_id);
-            std::string name = contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
+            std::string name =
+                contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
             EventQueue::Instance().Push(EventNotifyMissedCall{peer_id, name});
           }
         }

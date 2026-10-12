@@ -15,6 +15,7 @@ object NativeEventBus {
   val profile = MutableStateFlow(MyProfileInfo())
   val callState = MutableStateFlow(CallState())
   val connectionState = MutableStateFlow(ServiceConnectionState.Unknown)
+  val permissionBanner = MutableStateFlow<Int>(0)
 
   val historyUpdates = MutableSharedFlow<Pair<String, HistoryPage>>(extraBufferCapacity = 10)
   val draftsUpdates = MutableSharedFlow<Pair<String, List<DraftAttachment>>>(extraBufferCapacity = 10)
@@ -86,6 +87,11 @@ object NativeEventBus {
     tUser: String?, tPass: String?, sndS: Boolean, sndR: Boolean, showNotifContent: Boolean
   ) {
     settings.value = SettingsWrapper(url, t, stun, turn, tUser, tPass, sndS, sndR, showNotifContent)
+  }
+
+  @JvmStatic
+  fun onPermissionBannerChanged(type: Int) {
+    permissionBanner.value = type
   }
 
   @JvmStatic
