@@ -192,6 +192,12 @@ struct EventTurnAuthResult {
   std::string credential;
 };
 
+struct EventSyncStateChanged {
+  ContactID peer_id;
+  bool is_syncing;
+  float progress;
+};
+
 // Explicit Hardware / OS Orchestration Commands
 enum class AudioRoutingMode : uint8_t { normal = 0, inCall = 1 };
 enum class SoundType : uint8_t { ringing = 0, ringback = 1, connecting = 2 };

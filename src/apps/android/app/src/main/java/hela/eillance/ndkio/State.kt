@@ -148,7 +148,9 @@ data class DraftAttachment(
 data class HistoryPage(
   val messages: List<HistoryEntry> = emptyList(),
   val hasOlderMessages: Boolean = false,
-  val isUnreachable: Boolean = false
+  val isUnreachable: Boolean = false,
+  val isSyncing: Boolean = false,
+  val syncProgress: Float = -1.0f
 )
 
 data class Contact(

@@ -190,8 +190,14 @@ void InitEventBridge(JavaVM* jvm) {
       }
       auto& page_holder = class_refs.Class("hela/eillance/ndkio/HistoryPage");
       jobject page_java =
-          page_holder
-              .NewObject(env, history_list, e.state.has_older_messages, static_cast<jboolean>(e.state.is_unreachable));
+          page_holder.NewObject(
+              env, 
+              history_list, 
+              e.state.has_older_messages, 
+              static_cast<jboolean>(e.state.is_unreachable),
+              static_cast<jboolean>(e.state.is_syncing),
+              e.state.sync_progress
+          );
       jstring j_peer_id = env->NewStringUTF(e.peer_id.ToString().c_str());
       auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
       env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onHistoryUpdated"), j_peer_id, page_java);

@@ -70,6 +70,29 @@ class ConversationViewModel {
         }
       }
     });
+    Subscribe<EventSyncStateChanged>(queue, [impl](EventSyncStateChanged const& event) -> void {
+      if (event.peer_id == impl->peer_id) {
+        std::lock_guard<std::mutex> const lock(impl->mutex);
+        if (impl->state.is_syncing != event.is_syncing || impl->state.sync_progress != event.progress) {
+          impl->state.is_syncing = event.is_syncing;
+          impl->state.sync_progress = event.progress;
+          EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+        }
+      }
+    });
+    Subscribe<EventDataPeerConnectionStateChanged>(queue, [impl](auto const& event) -> void {
+      if (event.peer_id == impl->peer_id) {
+        if (event.state == transport::PeerConnectionState::disconnected ||
+            event.state == transport::PeerConnectionState::closed ||
+            event.state == transport::PeerConnectionState::failed) {
+          std::lock_guard<std::mutex> const lock(impl->mutex);
+          if (impl->state.is_syncing) {
+            impl->state.is_syncing = false;
+            EventQueue::Instance().Push(EventConversationStateUpdated{impl->peer_id, impl->state});
+          }
+        }
+      }
+    });
     Subscribe<EventDataReloaded>(queue, [impl](auto const&) -> auto { impl->StartInitialLoad(); });
   }
 
