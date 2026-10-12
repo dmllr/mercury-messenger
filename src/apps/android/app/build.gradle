@@ -1,0 +1,262 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.3.10'
+    id 'org.jetbrains.kotlin.plugin.serialization' version '2.3.10'
+    id 'kotlin-parcelize'
+}
+
+def findGitRoot = { startDir ->
+    def dir = startDir
+    while (dir != null && !new File(dir, '.git').exists()) {
+        dir = dir.getParentFile()
+    }
+    if (dir == null) {
+        throw new GradleException("Could not find .git root from " + startDir)
+    }
+    return dir
+}
+def repoRoot = findGitRoot(project.projectDir)
+
+Properties keystoreProps = new Properties()
+def keystoreConfigFile = new File(repoRoot, 'keystore.config')
+
+if (keystoreConfigFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystoreConfigFile))
+} else {
+    throw new GradleException("""
+        Keystore configuration file 'keystore.config' not found. 
+        
+        Please create a file named 'keystore.config' in the root of the repository.
+        
+        Add the following properties to the file, replacing the placeholders with your actual keystore information:
+        
+        storeFile=<path_to_your_keystore_file>
+        storePassword=<your_keystore_password>
+        keyAlias=<your_key_alias>
+        keyPassword=<your_key_password>
+    """)
+}
+
+Properties versionProps = new Properties()
+def versionPropsFile = new File(repoRoot, 'version.properties')
+if (versionPropsFile.exists()) {
+    versionProps.load(new FileInputStream(versionPropsFile))
+}
+def vCode = (versionProps['VERSION_CODE'] ?: "0").toInteger()
+def runTasks = gradle.startParameter.taskNames
+if (runTasks.any { it.contains('bundleRelease') || it.contains('assembleRelease') }) {
+    vCode++
+    versionProps['VERSION_CODE'] = vCode.toString()
+    versionProps.store(versionPropsFile.newWriter(), null)
+}
+
+android {
+    signingConfigs {
+        debug {
+            storeFile file(keystoreProps['storeFile'])
+            storePassword keystoreProps['storePassword']
+            keyAlias keystoreProps['keyAlias']
+            keyPassword keystoreProps['keyPassword']
+        }
+        release {
+            storeFile file(keystoreProps['storeFile'])
+            storePassword keystoreProps['storePassword']
+            keyAlias keystoreProps['keyAlias']
+            keyPassword keystoreProps['keyPassword']
+        }
+    }
+
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "hela.eillance"
+        minSdkVersion 28
+        targetSdkVersion 36
+        versionCode vCode
+        versionName "1.1.${vCode}"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+            ndk {
+                debugSymbolLevel 'SYMBOL_TABLE'
+            }
+            externalNativeBuild {
+                cmake {
+                    // arguments "-DANDROID_STL=c++_shared"
+                }
+            }
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+            ndk {
+                debugSymbolLevel 'FULL'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            version "3.22.1"
+        }
+    }
+    buildFeatures {
+        compose true
+        buildConfig = true
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    packagingOptions {
+        resources.excludes.add("META-INF/*")
+        resources.excludes.add("META-INF/AL2.0")
+        resources.excludes.add("META-INF/LGPL2.1")
+        resources.excludes.add("META-INF/plexus/*")
+        resources.excludes.add("META-INF/sisu/*")
+        resources.excludes.add("licenses/*")
+    }
+    namespace 'hela.eillance.camera'
+    ndkVersion '29.0.13113456 rc1'
+    dependenciesInfo {
+        includeInApk false
+        includeInBundle false
+    }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.17.0'
+    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.preference:preference-ktx:1.2.1'
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+
+    // For in-app browser tabs (Custom Tabs)
+    implementation 'androidx.browser:browser:1.9.0'
+
+    // Google WebRTC
+    implementation 'com.dafruits:webrtc:123.0.0'
+
+    // CameraX for QR Scanner
+    implementation 'androidx.camera:camera-camera2:1.5.3'
+    implementation 'androidx.camera:camera-lifecycle:1.5.3'
+    implementation 'androidx.camera:camera-view:1.5.3'
+
+    // QR Code Generation & Scanning
+    implementation 'com.google.zxing:core:3.5.4'
+
+    // Networking for Signaling
+    implementation(platform("com.squareup.okhttp3:okhttp-bom:5.3.2"))
+    implementation("com.squareup.okhttp3:okhttp")
+    implementation("com.squareup.okhttp3:logging-interceptor")
+
+    // Compose
+    implementation platform('androidx.compose:compose-bom:2026.02.00')
+    implementation 'androidx.activity:activity-compose:1.12.4'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.10.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0'
+    implementation 'androidx.navigation:navigation-compose:2.9.7'
+
+    // Serialization
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.10.0"
+
+    // Image Loading
+    implementation "io.coil-kt:coil-compose:2.7.0"
+    implementation "io.coil-kt:coil-video:2.7.0"
+    implementation 'androidx.compose.ui:ui:1.10.3'
+
+    // Media3 (ExoPlayer)
+    implementation "androidx.media3:media3-exoplayer:1.9.2"
+    implementation "androidx.media3:media3-ui:1.9.2"
+    implementation "androidx.media3:media3-common:1.9.2"
+    implementation 'androidx.compose.runtime:runtime:1.10.3'
+    implementation 'androidx.documentfile:documentfile:1.1.0'
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.21.0'
+    testImplementation 'org.mockito:mockito-inline:5.10.0'
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2"
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
+    androidTestImplementation platform('androidx.compose:compose-bom:2026.02.00')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
+
+// Translation
+tasks.register('generateTranslations', Exec) {
+    description = "Generates Android string resources from .po files"
+    group = "build"
+
+    def gitRoot = providers.exec {
+        commandLine 'git', 'rev-parse', '--show-toplevel'
+    }.standardOutput.asText.map { it.trim() }
+
+    // Inputs: The .po directory
+    inputs.dir gitRoot.map { new File(it, "src/assets/translations") }
+
+    // Outputs: The Android values directories.
+    // Listing each language file is not strictly required, but helps Gradle verify integrity.
+    outputs.files file("src/main/res/values/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-ar/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-de/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-es/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-fr/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-id/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-it/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-ja/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-ko/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-pt/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-ru/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-tr/strings-autogenerated.xml")
+    outputs.files file("src/main/res/values-zh/strings-autogenerated.xml")
+
+    executable 'python3'
+    doFirst {
+        args new File(gitRoot.get(), "tools/translations/generate.py").absolutePath
+    }
+}
+preBuild.dependsOn generateTranslations
+
+tasks.register('copySounds', Copy) {
+    description = "Copies sound assets to Android resources"
+    group = "build"
+
+    def gitRoot = providers.exec {
+        commandLine 'git', 'rev-parse', '--show-toplevel'
+    }.standardOutput.asText.map { it.trim() }
+
+    from gitRoot.map { new File(it, "src/assets/sounds") }
+    into "src/main/res/raw"
+    include "*.wav", "*.mp3", "*.ogg"
+}
+preBuild.dependsOn copySounds

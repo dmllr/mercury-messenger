@@ -1,0 +1,252 @@
+#pragma once
+
+#include <any>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <typeindex>
+#include <typeinfo>
+#include <unordered_map>
+#include <vector>
+
+#include "eillance/logging/logging.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
+
+namespace eillance {
+
+class EventQueue {
+ public:
+  using SubscriberTypeId = std::size_t;
+
+ private:
+  struct Subscriber {
+    SubscriberTypeId id{0};
+    std::function<void(std::any const&)> callback;
+    std::atomic<bool> is_active{true};
+
+    Subscriber() = default;
+    Subscriber(SubscriberTypeId id_val, std::function<void(std::any const&)> cb)
+        : id(id_val),
+          callback(std::move(cb)) {
+    }
+  };
+
+  using SubVector = std::vector<std::shared_ptr<Subscriber>>;
+  using SubVectorPtr = std::shared_ptr<SubVector>;
+
+  std::mutex events_mutex_;
+  std::mutex subs_mutex_;
+  std::mutex wait_mutex_;
+
+  std::condition_variable sync_cv_;
+  std::condition_variable wait_cv_;
+
+  std::deque<std::pair<std::type_index, std::any>> events_{};
+  std::unordered_map<std::type_index, SubVectorPtr> subscribers_{};
+  std::unordered_map<SubscriberTypeId, std::type_index> subscriber_types_{};
+
+  DispatchQueue dispatchQueue_ = DispatchQueue("EventQueue", 1);
+
+  SubscriberTypeId nextId_ = 0;
+  std::atomic<std::thread::id> dispatch_thread_id_{std::thread::id()};
+  std::atomic<SubscriberTypeId> executing_subscriber_id_{0};
+
+  struct TerminationEvent {
+    bool terminate{true};
+  };
+
+ public:
+  static auto Instance() -> EventQueue& {
+    static auto instance{EventQueue()};
+    return instance;
+  }
+
+  EventQueue() {
+    dispatchQueue_.Dispatch([this]() -> void { DispatchLoop(); });
+  }
+
+  EventQueue(EventQueue&&) = delete;
+  EventQueue(EventQueue const&) = delete;
+  auto operator=(EventQueue&&) -> EventQueue& = delete;
+  auto operator=(EventQueue const&) -> EventQueue& = delete;
+
+  ~EventQueue() {
+    dispatchQueue_.RemovePending();
+    Push(TerminationEvent{});
+  }
+
+  template <typename EventType>
+  auto Subscribe(std::function<void(EventType const&)> const& callback) -> SubscriberTypeId {
+    auto const lock = std::lock_guard<std::mutex>(subs_mutex_);
+    SubscriberTypeId const id = ++nextId_;  // Start IDs from 1 since 0 signifies 'no execution'
+
+    auto sub = std::make_shared<Subscriber>(id, [callback](std::any const& event) -> void {
+      callback(std::any_cast<EventType>(event));
+    });
+
+    auto& subs_ptr = subscribers_[typeid(EventType)];
+    auto new_subs = subs_ptr ? std::make_shared<SubVector>(*subs_ptr) : std::make_shared<SubVector>();
+
+    new_subs->push_back(std::move(sub));
+    subs_ptr = std::move(new_subs);
+    subscriber_types_.emplace(id, typeid(EventType));
+
+    return id;
+  }
+
+  void Unsubscribe(SubscriberTypeId id) {
+    std::shared_ptr<Subscriber> removed_sub;
+
+    {
+      std::lock_guard<std::mutex> const lock(subs_mutex_);
+      auto const type_it = subscriber_types_.find(id);
+      if (type_it != subscriber_types_.end()) {
+        auto& subs_ptr = subscribers_[type_it->second];
+        if (subs_ptr) {
+          // Copy-on-Write (CoW) to avoid mutating the vector actively used by DispatchLoop
+          auto new_subs = std::make_shared<SubVector>(*subs_ptr);
+          for (size_t i = 0; i < new_subs->size(); ++i) {
+            if ((*new_subs)[i]->id == id) {
+              removed_sub = (*new_subs)[i];
+              if (i != new_subs->size() - 1) {
+                std::swap((*new_subs)[i], new_subs->back());
+              }
+              new_subs->pop_back();
+              break;
+            }
+          }
+          subs_ptr = std::move(new_subs);
+        }
+        subscriber_types_.erase(type_it);
+      }
+    }
+
+    if (removed_sub) {
+      removed_sub->is_active.store(false, std::memory_order_seq_cst);
+    }
+
+    // Prevent race conditions where unsubscription happens while the callback is currently executing.
+    // If called from the dispatch thread itself, skipping the block prevents deadlocks.
+    if (std::this_thread::get_id() != dispatch_thread_id_.load(std::memory_order_acquire)) {
+      while (executing_subscriber_id_.load(std::memory_order_seq_cst) == id) {
+        std::this_thread::yield();
+      }
+    }
+  }
+
+  template <typename EventType>
+  void Push(EventType const& event) {
+    bool was_empty = false;
+    {
+      std::lock_guard<std::mutex> const lock(events_mutex_);
+      was_empty = events_.empty();
+      events_.emplace_back(typeid(EventType), std::any(event));
+    }
+
+    // MPSC Optimization: Only notify the condition variable if we transitioned from empty to non-empty.
+    // Drastically reduces kernel wake-up contention under high parallel loads.
+    if (was_empty) {
+      sync_cv_.notify_one();
+    }
+  }
+
+  template <typename Func>
+  auto WaitFor(Func condition, std::chrono::milliseconds const timeout) -> bool {
+    auto const start = std::chrono::steady_clock::now();
+    std::unique_lock<std::mutex> lock(wait_mutex_);
+
+    while (!condition()) {
+      if (auto now = std::chrono::steady_clock::now(); now - start > timeout) {
+        return false;
+      }
+      wait_cv_.wait_for(lock, std::chrono::milliseconds(10));
+    }
+    return true;
+  }
+
+ private:
+  void DispatchLoop() {
+    dispatch_thread_id_.store(std::this_thread::get_id(), std::memory_order_release);
+
+    while (true) {
+      std::deque<std::pair<std::type_index, std::any>> local_events;
+
+      {
+        std::unique_lock<std::mutex> lock(events_mutex_);
+        sync_cv_.wait(lock, [this]() -> bool { return !events_.empty(); });
+        // O(1) swap ensures the producer queue is unblocked immediately
+        local_events.swap(events_);
+      }
+
+      bool terminate_found = false;
+      std::unordered_map<std::type_index, SubVectorPtr> batch_subs_cache;
+
+      for (auto& [fst, snd] : local_events) {
+        auto const& type = fst;
+        auto const& contents = snd;
+
+        if (type == typeid(TerminationEvent)) {
+          terminate_found = true;
+          continue;  // Guarantee "all in MUST out" by finishing the current batch processing
+        }
+
+        SubVectorPtr current_subs;
+        if (auto const cache_it = batch_subs_cache.find(type); cache_it != batch_subs_cache.end()) {
+          current_subs = cache_it->second;
+        } else {
+          std::lock_guard<std::mutex> const lock(subs_mutex_);
+          if (auto const it = subscribers_.find(type); it != subscribers_.end()) {
+            current_subs = it->second;
+          }
+          batch_subs_cache[type] = current_subs;
+        }
+
+        if (!current_subs) {
+          continue;
+        }
+
+        for (auto const& sub_ptr : *current_subs) {
+          if (!sub_ptr->is_active.load(std::memory_order_seq_cst)) {
+            continue;
+          }
+
+          executing_subscriber_id_.store(sub_ptr->id, std::memory_order_seq_cst);
+
+          // Double-check to avoid race with Unsubscribe updating is_active and yielding.
+          // Requires seq_cst to act as a proper Dekker's algorithm memory barrier.
+          if (!sub_ptr->is_active.load(std::memory_order_seq_cst)) {
+            executing_subscriber_id_.store(0, std::memory_order_seq_cst);
+            continue;
+          }
+
+          try {
+            sub_ptr->callback(contents);
+          } catch (std::exception const& e) {
+            LGE << "EventQueue dispatch error: " << e.what() << "[Event Type: " << type.name() << "]" << std::endl;
+          } catch (...) {
+            LGE << "EventQueue dispatch error: Unknown exception [Event Type: " << type.name() << "]" << std::endl;
+          }
+
+          executing_subscriber_id_.store(0, std::memory_order_seq_cst);
+        }
+      }
+
+      // Notify external observers once per batch instead of per-event to maximize processing speed
+      {
+        std::lock_guard<std::mutex> const lock(wait_mutex_);
+        wait_cv_.notify_all();
+      }
+
+      if (terminate_found) {
+        return;
+      }
+    }
+  }
+};
+
+}  // namespace eillance

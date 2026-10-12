@@ -1,0 +1,76 @@
+name: Create CLI Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build_and_release_cli:
+    name: Build CLI App (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build clang lld libssl-dev pkg-config go yasm nasm \
+          libx11-dev libxext-dev libxfixes-dev libxi-dev libavcodec-dev libavformat-dev libswscale-dev libavdevice-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install go ninja openssl@3 pkg-config ffmpeg opencv
+          echo "OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install cmake ninja go yasm
+
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msvc@v2
+        with:
+          architecture: x64
+
+      - name: Configure CMake
+        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -G Ninja
+
+      - name: Build CLI
+        run: cmake --build build --config Release --target mercury-cli
+
+      - name: Prepare Artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ARTIFACT_NAME="mercury-cli-windows.zip"
+          Compress-Archive -Path build/src/apps/mercury-cli/Release/mercury-cli.exe -DestinationPath $ARTIFACT_NAME
+          echo "ARTIFACT_PATH=$ARTIFACT_NAME" >> $env:GITHUB_ENV
+
+      - name: Prepare Artifact (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          ARTIFACT_NAME="mercury-cli-$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]').tar.gz"
+          strip build/src/apps/mercury-cli/mercury-cli
+          tar -czvf $ARTIFACT_NAME -C build/src/apps/mercury-cli mercury-cli
+          echo "ARTIFACT_PATH=$ARTIFACT_NAME" >> $GITHUB_ENV
+
+      - name: Upload Artifact to Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "${{ env.ARTIFACT_PATH }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true

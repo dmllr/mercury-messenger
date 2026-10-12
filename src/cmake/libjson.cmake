@@ -1,0 +1,6 @@
+SET(JSON_BuildTests OFF CACHE BOOL "Build the unit tests when BUILD_TESTING is enabled.")
+SET(JSON_Install OFF CACHE BOOL "Install CMake targets during install step.")
+if(NOT TARGET nlohmann_json)
+  import_remote("https://github.com/nlohmann/json.git" TAG "master" DST "${REPO_ROOT}/_imported" ALIAS json)
+  set(nlohmann_json_FOUND On CACHE INTERNAL "")
+endif()

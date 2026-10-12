@@ -1,0 +1,69 @@
+#pragma once
+
+#include <algorithm>
+#include <charconv>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+namespace eillance::utils {
+
+struct ArgsParser final {
+  ArgsParser(int const& argc, char** argv) {
+    for (int i = 1; i < argc; ++i) {
+      std::string const token(argv[i]);  // NOLINT(*-pro-bounds-pointer-arithmetic)
+      if (auto const pos = token.find('='); pos != std::string::npos) {
+        std::string const key = token.substr(0, pos);
+        std::string const value = token.substr(pos + 1);
+        key_value_map_[key] = value;
+      } else {
+        tokens_.emplace_back(token);
+      }
+    }
+  }
+
+  [[nodiscard]] auto Get(std::string const& option) const -> std::optional<std::string> {
+    if (auto const it = key_value_map_.find(option); it != key_value_map_.end()) {
+      return it->second;
+    }
+    if (auto it = std::ranges::find(tokens_, option);
+        it != tokens_.end() && ++it != tokens_.end()) {  // NOLINT(*-inc-dec-in-conditions)
+      return *it;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto GetPositional(size_t const index) const -> std::optional<std::string> {
+    if (index < tokens_.size()) {
+      return tokens_[index];
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto GetInt(std::string const& option) const -> std::optional<int> {
+    auto str_val = Get(option);
+    if (!str_val) {
+      return std::nullopt;
+    }
+
+    int value{};
+    auto [ptr, ec] =
+        // NOLINTNEXTLINE(*-narrowing-conversions)
+        std::from_chars(str_val->data(), std::next(str_val->data(), str_val->size()), value);
+    if (ec == std::errc{}) {
+      return value;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto Has(std::string const& option) const -> bool {
+    return key_value_map_.contains(option) || std::ranges::find(tokens_, option) != tokens_.end();
+  }
+
+ private:
+  std::vector<std::string> tokens_{};
+  std::unordered_map<std::string, std::string> key_value_map_{};
+};
+
+}  // namespace eillance::utils

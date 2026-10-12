@@ -1,0 +1,16 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index d272f0ba..d48b3812 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -515,11 +515,6 @@ install(TARGETS datachannel EXPORT LibDataChannelTargets
+ 	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ )
+ 
+-if(MSVC)
+-	install(FILES $<TARGET_PDB_FILE:datachannel>
+-    DESTINATION ${CMAKE_INSTALL_BINDIR} OPTIONAL)
+-endif()
+-
+ install(FILES ${LIBDATACHANNEL_HEADERS}
+ 	DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/rtc
+ )

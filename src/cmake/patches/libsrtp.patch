@@ -1,0 +1,26 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 7d737e8..36584d1 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -95,7 +95,9 @@ if(ENABLE_OPENSSL)
+   if(ENABLE_NSS OR ENABLE_MBEDTLS)
+     message(FATAL_ERROR "ssl conflict. can not enable openssl and mbedtls or nss simultaneously.")
+   endif()
+-  find_package(OpenSSL 1.1.0 REQUIRED)
++  if (NOT TARGET OpenSSL::Crypto)
++    find_package(OpenSSL 1.1.0 REQUIRED)
++  endif()
+   set(OPENSSL ${ENABLE_OPENSSL} CACHE BOOL INTERNAL)
+   set(GCM ${ENABLE_OPENSSL} CACHE BOOL INTERNAL)
+ endif()
+@@ -104,7 +106,9 @@ if(ENABLE_MBEDTLS)
+   if(ENABLE_OPENSSL OR ENABLE_NSS)
+     message(FATAL_ERROR "ssl conflict. can not enable mbedtls and openssl or nss simultaneously.")
+   endif()
+-  find_package(MbedTLS REQUIRED)
++  if(NOT TARGET MbedTLS::MbedTLS)
++    find_package(MbedTLS REQUIRED)
++  endif()
+   set(MBEDTLS ${ENABLE_MBEDTLS} CACHE BOOL INTERNAL)
+   set(GCM ${ENABLE_MBEDTLS} CACHE BOOL INTERNAL)
+ endif()

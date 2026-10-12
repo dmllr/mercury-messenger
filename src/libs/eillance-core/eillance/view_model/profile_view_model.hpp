@@ -1,0 +1,146 @@
+#pragma once
+
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "eillance/client/client.hpp"
+#include "eillance/events/client_events.hpp"
+#include "eillance/utils/event_queue.hpp"
+#include "view_model_defines.hpp"
+
+namespace eillance::view_model {
+
+class ProfileViewModel {
+ public:
+  explicit ProfileViewModel(std::shared_ptr<Client> client)
+      : impl_(std::make_shared<Impl>(std::move(client))) {
+    auto& queue = EventQueue::Instance();
+    auto impl = impl_;
+    Subscribe<EventMyProfileUpdated>(queue, [impl](auto const&) { impl->RefreshFromSettings(); });
+    impl_->RefreshFromSettings();
+  }
+
+  ~ProfileViewModel() {
+    for (auto const id : eventUnsubscribers_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
+  }
+
+  [[nodiscard]] auto GetProfile() const -> MyProfile {
+    return impl_->GetProfile();
+  }
+
+  // Actions
+  void UpdateProfile(identity::ProfileUpdate const& profile) {
+    impl_->UpdateProfile(profile);
+  }
+
+  // Creation/Restore
+  auto GenerateNewIdentity() -> std::string {
+    return impl_->GenerateNewIdentity();
+  }
+  auto RestoreIdentity(std::string const& mnemonic) -> bool {
+    return impl_->RestoreIdentity(mnemonic);
+  }
+  [[nodiscard]] auto GetMnemonic() -> std::optional<std::string> {
+    return impl_->client->GetMnemonic();
+  }
+  auto CreateBackup(std::string const& path, std::string const& password) -> bool {
+    return impl_->client->CreateBackup(path, password);
+  }
+  auto RestoreBackup(std::string const& path, std::string const& password) -> bool {
+    return impl_->RestoreBackup(path, password);
+  }
+
+ private:
+  struct Impl : public std::enable_shared_from_this<Impl> {
+    std::shared_ptr<Client> client;
+
+    mutable std::mutex mutex;
+    MyProfile profile;
+
+    explicit Impl(std::shared_ptr<Client> client)
+        : client(std::move(client)) {
+    }
+
+    auto GetProfile() const -> MyProfile {
+      std::lock_guard<std::mutex> const lock(mutex);
+      return profile;
+    }
+
+    void UpdateProfile(identity::ProfileUpdate const& profile) {
+      client->UpdateMyProfile(profile);
+    }
+
+    auto GenerateNewIdentity() -> std::string {
+      auto mnemonic = client->GenerateNewIdentity();
+      if (!mnemonic.empty()) RefreshFromSettings();
+      return mnemonic;
+    }
+
+    auto RestoreIdentity(std::string const& mnemonic) -> bool {
+      if (client->RestoreIdentity(mnemonic)) {
+        RefreshFromSettings();
+        return true;
+      }
+      return false;
+    }
+
+    auto RestoreBackup(std::string const& path, std::string const& password) -> bool {
+      if (client->RestoreBackup(path, password)) {
+        RefreshFromSettings();
+        return true;
+      }
+      return false;
+    }
+
+    void RefreshFromSettings() {
+      std::lock_guard<std::mutex> const lock(mutex);
+      bool changed = false;
+      bool const exists = client->IdentityExists();
+      if (profile.identity_exists != exists) {
+        profile.identity_exists = exists;
+        changed = true;
+      }
+
+      if (exists) {
+        auto id = client->GetId();
+        if (profile.my_id != id) {
+          profile.my_id = id;
+          changed = true;
+        }
+
+        auto const* settings = client->GetSettingsManager();
+        auto name = settings->GetMyDisplayName();
+        auto bio = settings->GetMyBio();
+        auto photo = settings->GetMyPhotoBase64();
+
+        if (profile.my_display_name != name || profile.my_bio != bio || profile.my_photo != photo) {
+          profile.my_display_name = name;
+          profile.my_bio = bio;
+          profile.my_photo = photo;
+          changed = true;
+        }
+      }
+
+      if (changed) EventQueue::Instance().Push(EventProfileStateUpdated{profile});
+    }
+  };
+
+  std::shared_ptr<Impl> impl_;
+
+  // Unsubscribers must be kept in the wrapper to handle event deregistration on destruction
+  std::vector<EventQueue::SubscriberTypeId> eventUnsubscribers_;
+
+  template <typename EventType>
+  void Subscribe(EventQueue& queue, std::function<void(EventType const&)> const& callback) {
+    auto id = queue.Subscribe<EventType>(std::move(callback));
+    eventUnsubscribers_.push_back(id);
+  }
+};
+
+}  // namespace eillance::view_model

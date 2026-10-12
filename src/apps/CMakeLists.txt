@@ -1,0 +1,6 @@
+add_subdirectory(mercury-cli)
+add_subdirectory(mercury-bot)
+set(EILLANCE_BUILD_QT_APP Off)
+if(EILLANCE_BUILD_QT_APP)
+  add_subdirectory(mercury-qt)
+endif()

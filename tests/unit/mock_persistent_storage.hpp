@@ -1,0 +1,562 @@
+#pragma once
+
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <cstddef>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <ranges>
+
+#include "eillance/crypto/crypto.hpp"
+#include "eillance/storage/persistent_storage.hpp"
+
+namespace eillance::storage {
+
+class MockPersistentStorageImpl : public PersistentStorageImpl {
+  mutable std::recursive_mutex mutex_;
+  std::unordered_map<std::string, std::string> settings_;
+  std::unordered_map<ContactID, identity::Contact> contacts_;
+  std::unordered_map<ContactID, std::vector<messaging::HistoryEntryRecord>> history_;
+  std::unordered_map<uint64_t, std::string> large_messages_;
+  std::vector<PendingAction> pending_actions_;
+  std::atomic<uint64_t> next_history_id_{1};
+  std::atomic<int64_t> next_action_id_{1};
+  std::string db_path_ = "mock_db_path";
+
+  static auto ToLower(std::string const& str) -> std::string {
+    std::string lower = str;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+    return lower;
+  }
+
+ public:
+  // Public counter for testing rate-limiting or call frequency
+  std::atomic<int> unsuspend_call_count{0};
+
+  explicit MockPersistentStorageImpl(std::string path = "mock_db_path")
+      : db_path_(std::move(path)) {
+  }
+
+  // --- Path ---
+  auto GetPath() const -> std::string override {
+    return db_path_;
+  }
+
+  // --- Settings ---
+  auto GetSetting(std::string_view const key) -> std::optional<std::string> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = settings_.find(std::string(key)); itr != settings_.end()) {
+      return itr->second;
+    }
+    return std::nullopt;
+  }
+
+  void SetSetting(std::string_view const key, std::string_view const value) override {
+    std::lock_guard const lock(mutex_);
+    settings_[std::string(key)] = std::string(value);
+  }
+
+  void DeleteSetting(std::string_view const key) override {
+    std::lock_guard const lock(mutex_);
+    settings_.erase(std::string(key));
+  }
+
+  auto GetRaw(std::string const& key) -> std::optional<std::vector<std::byte>> override {
+    if (auto const val = GetSetting(key)) {
+      return crypto::FromHex(*val);
+    }
+    return std::nullopt;
+  }
+
+  auto SetRaw(std::string const& key, std::vector<std::byte> const& value) -> bool override {
+    SetSetting(key, crypto::ToHex(value));
+    return true;
+  }
+
+  // --- Contacts ---
+  auto GetContacts() -> std::vector<identity::Contact> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<identity::Contact> result;
+    result.reserve(contacts_.size());
+    for (auto const& contact : contacts_ | std::views::values) {
+      result.push_back(contact);
+    }
+    return result;
+  }
+
+  auto GetContact(ContactID const& peer_id) -> std::optional<identity::Contact> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = contacts_.find(peer_id); itr != contacts_.end()) {
+      return itr->second;
+    }
+    return std::nullopt;
+  }
+
+  void UpdateContact(identity::Contact const& contact) override {
+    std::lock_guard const lock(mutex_);
+    contacts_[contact.peer_id] = contact;
+  }
+
+  void RemoveContact(ContactID const& peer_id) override {
+    std::lock_guard const lock(mutex_);
+    contacts_.erase(peer_id);
+
+    if (auto it = history_.find(peer_id); it != history_.end()) {
+      for (auto const& entry : it->second) {
+        large_messages_.erase(entry.id);
+      }
+      history_.erase(it);
+    }
+
+    std::erase_if(pending_actions_, [&](auto const& action) { return action.peer_id == peer_id; });
+  }
+
+  // --- Lifecycle ---
+  void Close() override {
+  }
+  auto Open() -> bool override {
+    return true;
+  }
+  void Checkpoint() override {
+  }
+
+  // --- Resilience ---
+  void AddPendingAction(PendingActionParams const& params) override {
+    std::lock_guard const lock(mutex_);
+    pending_actions_.push_back(
+        {next_action_id_++, params.peer_id, params.payload, params.timestamp, params.ref_id, false, params.timestamp}
+    );
+  }
+
+  auto GetPendingActions(ContactID const& peer_id) -> std::vector<PendingAction> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<PendingAction> result;
+    for (auto const& action : pending_actions_) {
+      if (action.peer_id == peer_id && !action.is_suspended) {
+        result.push_back(action);
+      }
+    }
+    return result;
+  }
+
+  void RemovePendingAction(int64_t id) override {
+    std::lock_guard const lock(mutex_);
+    std::erase_if(pending_actions_, [id](auto const& action) { return action.id == id; });
+  }
+
+  void RemovePendingActionByRefId(ContactID const& peer_id, int64_t ref_id) override {
+    std::lock_guard const lock(mutex_);
+    std::erase_if(pending_actions_, [&](auto const& action) {
+      return action.peer_id == peer_id && action.ref_id.has_value() && action.ref_id.value() == ref_id;
+    });
+  }
+
+  void SuspendTimedOutActions(uint64_t threshold_timestamp) override {
+    std::lock_guard const lock(mutex_);
+    for (auto& action : pending_actions_) {
+      if (!action.is_suspended && action.window_start_at < threshold_timestamp) {
+        action.is_suspended = true;
+      }
+    }
+  }
+
+  void UnsuspendActionsForPeer(ContactID const& peer_id, uint64_t new_window_start) override {
+    ++unsuspend_call_count;
+    std::lock_guard const lock(mutex_);
+    for (auto& action : pending_actions_) {
+      if (action.peer_id == peer_id && action.is_suspended) {
+        action.is_suspended = false;
+        action.window_start_at = new_window_start;
+      }
+    }
+  }
+
+  // --- History ---
+  auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord override {
+    std::lock_guard const lock(mutex_);
+    entry.id = next_history_id_++;
+
+    constexpr size_t k_max_inline_content_size = 2048;
+    if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+      if (msg_entry->content.length() > k_max_inline_content_size) {
+        large_messages_[entry.id] = msg_entry->content;
+        msg_entry->content = msg_entry->content.substr(0, k_max_inline_content_size);
+        entry.is_truncated = true;
+      } else {
+        entry.is_truncated = false;
+      }
+    }
+
+    history_[entry.peer_id].push_back(entry);
+    return entry;
+  }
+
+  void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) override {
+    std::lock_guard const lock(mutex_);
+    for (auto& history_vec : history_ | std::views::values) {
+      for (auto& existing_entry : history_vec) {
+        if (existing_entry.id == entry.id) {
+          existing_entry = entry;
+          return;
+        }
+      }
+    }
+  }
+
+  void UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status)
+      override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          entry.status = new_status;
+          return;
+        }
+      }
+    }
+  }
+
+  void UpdateMessageStatuses(
+      ContactID const& peer_id,
+      std::vector<uint64_t> const& message_ids,
+      messaging::MessageStatus new_status
+  ) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (std::ranges::find(message_ids, entry.id) != message_ids.end()) {
+          entry.status = new_status;
+        }
+      }
+    }
+  }
+
+  void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+            msg->content = new_content;
+            entry.is_edited = true;
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          entry.is_deleted = true;
+          if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+            msg->content = "";
+            msg->attachments.clear();
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  void ToggleReaction(
+      ContactID const& peer_id,
+      uint64_t message_id,
+      ContactID const& author_id,
+      messaging::Reaction reaction
+  ) override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto& entry : itr->second) {
+        if (entry.id == message_id) {
+          auto& reactions = entry.reactions;
+          auto it = std::ranges::find_if(reactions, [&](auto const& r) {
+            return r.author_id == author_id && r.reaction == reaction;
+          });
+          if (it != reactions.end()) {
+            reactions.erase(it);
+          } else {
+            reactions.push_back({author_id, reaction});
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  void UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded)
+      override {
+    std::lock_guard const lock(mutex_);
+    for (auto& history_vec : history_ | std::views::values) {
+      for (auto& entry : history_vec) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto& att : msg_entry->attachments) {
+            if (att.id == attachment_id) {
+              att.status = status;
+              att.is_downloaded = is_downloaded;
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> override {
+    std::lock_guard const lock(mutex_);
+    for (auto& history_vec : history_ | std::views::values) {
+      for (auto& entry : history_vec) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto& att : msg_entry->attachments) {
+            if (att.id == attachment_id) {
+              return att;
+            }
+          }
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::AttachmentRecord> results;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto const& att : msg_entry->attachments) {
+            if (att.is_downloaded && att.status == messaging::AttachmentStatus::done) {
+              results.push_back({att, entry.timestamp});
+            }
+          }
+        }
+      }
+    }
+    std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
+    return results;
+  }
+
+  auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
+      -> messaging::HistoryPage override {
+    std::lock_guard const lock(mutex_);
+    messaging::HistoryPage page;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      auto peer_history_copy = itr->second;  // Copy to sort
+      page.total_messages = peer_history_copy.size();
+
+      // Sort by timestamp descending to simulate DB query
+      std::ranges::sort(peer_history_copy, [](auto const& left, auto const& right) {
+        return left.timestamp > right.timestamp;
+      });
+
+      size_t const start = page_index * page_size;
+      if (start < peer_history_copy.size()) {
+        size_t const end = std::min(start + page_size, peer_history_copy.size());
+        page.messages.assign(peer_history_copy.begin() + start, peer_history_copy.begin() + end);
+      }
+
+      // Reverse to get ascending time order for display, matching SQLiteStorage behavior
+      std::ranges::reverse(page.messages);
+    } else {
+      page.total_messages = 0;
+    }
+    return page;
+  }
+
+  auto GetHistoryEntry(ContactID const& peer_id, uint64_t const message_id)
+      -> std::optional<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.id == message_id) {
+          return entry;
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto GetFullMessageContent(ContactID const& /*peer_id*/, std::uint64_t const message_id)
+      -> std::optional<std::string> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = large_messages_.find(message_id); itr != large_messages_.end()) {
+      return itr->second;
+    }
+    return std::nullopt;
+  }
+
+  auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::ChatSummary> summaries;
+
+    for (auto const& peer_id : peer_ids) {
+      if (auto const itr = history_.find(peer_id); itr != history_.end() && !itr->second.empty()) {
+        auto& peer_history = itr->second;
+        // Find the last message (most recent timestamp)
+        auto last_message_it = std::ranges::max_element(peer_history, [](auto const& left, auto const& right) {
+          return left.timestamp < right.timestamp;
+        });
+
+        uint32_t unread_count = 0;
+        for (auto const& entry : peer_history) {
+          if (entry.kind == messaging::HistoryEntryKind::textMessage &&
+              entry.direction == messaging::MessageDirection::received &&
+              entry.status != messaging::MessageStatus::read) {
+            unread_count++;
+          }
+        }
+        summaries.push_back({peer_id, *last_message_it, unread_count});
+      }
+    }
+
+    // Sort summaries by timestamp of the last message, descending
+    std::ranges::sort(summaries, [](auto const& left, auto const& right) {
+      return left.last_message.timestamp > right.last_message.timestamp;
+    });
+
+    return summaries;
+  }
+
+  auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus const status)
+      -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::HistoryEntryRecord> records;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.status == status) {
+          records.push_back(entry);
+        }
+      }
+    }
+    return records;
+  }
+
+  auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::Attachment> attachments;
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (auto* msg_entry = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          for (auto const& att : msg_entry->attachments) {
+            if ((att.status == messaging::AttachmentStatus::pending ||
+                 att.status == messaging::AttachmentStatus::transferring) &&
+                !att.is_downloaded) {
+              attachments.push_back(att);
+            }
+          }
+        }
+      }
+    }
+    return attachments;
+  }
+
+  auto GetRemoteIds(ContactID const& peer_id, std::vector<uint64_t> const& local_ids)
+      -> std::vector<uint64_t> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<uint64_t> remote_ids;
+    if (auto it = history_.find(peer_id); it != history_.end()) {
+      for (auto const& entry : it->second) {
+        if (std::ranges::find(local_ids, entry.id) != local_ids.end()) {
+          if (entry.remote_id) {
+            remote_ids.push_back(*entry.remote_id);
+          }
+        }
+      }
+    }
+    return remote_ids;
+  }
+
+  auto GetMessageIdByRemoteId(ContactID const& peer_id, uint64_t target_id) -> std::optional<uint64_t> override {
+    std::lock_guard const lock(mutex_);
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.remote_id == target_id) return entry.id;
+      }
+    }
+    return std::nullopt;
+  }
+
+  // --- Search ---
+  auto SearchMessages(ContactID const& peer_id, std::string const& query)
+      -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::HistoryEntryRecord> results;
+    std::string const query_lower = ToLower(query);
+
+    if (auto const itr = history_.find(peer_id); itr != history_.end()) {
+      for (auto const& entry : itr->second) {
+        if (entry.kind != messaging::HistoryEntryKind::textMessage &&
+            entry.kind != messaging::HistoryEntryKind::systemMessage) {
+          continue;
+        }
+        std::string content;
+        if (entry.is_truncated) {
+          if (auto const full = large_messages_.find(entry.id); full != large_messages_.end()) {
+            content = full->second;
+          } else if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+            content = msg->content;
+          }
+        } else if (auto* msg = std::get_if<messaging::MessageEntry>(&entry.data)) {
+          content = msg->content;
+        }
+
+        if (ToLower(content).find(query_lower) != std::string::npos) {
+          auto record = entry;
+          // Ensure returned record has full content for display context
+          if (entry.is_truncated) {
+            std::get<messaging::MessageEntry>(record.data).content = content;
+          }
+          results.push_back(record);
+        }
+      }
+    }
+    // Sort descending by timestamp
+    std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
+    return results;
+  }
+
+  auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> override {
+    std::lock_guard const lock(mutex_);
+    std::vector<messaging::HistoryEntryRecord> results;
+    for (auto const& peer_id : history_ | std::views::keys) {
+      auto peer_results = SearchMessages(peer_id, query);
+      results.insert(results.end(), peer_results.begin(), peer_results.end());
+    }
+    // Global sort descending
+    std::ranges::sort(results, [](auto const& left, auto const& right) { return left.timestamp > right.timestamp; });
+    return results;
+  }
+
+  // --- Debug ---
+  void DebugClearAllHistory() override {
+    std::lock_guard const lock(mutex_);
+    history_.clear();
+    large_messages_.clear();
+    pending_actions_.clear();
+  }
+
+  void DebugClearAllContacts() override {
+    std::lock_guard const lock(mutex_);
+    contacts_.clear();
+  }
+
+  void DebugRevokeAllContactApprovals() override {
+    std::lock_guard const lock(mutex_);
+    for (auto& contact : contacts_ | std::views::values) {
+      if (contact.status == identity::ContactStatus::confirmed) {
+        contact.status = identity::ContactStatus::pendingApproval;
+      }
+    }
+  }
+};
+
+}  // namespace eillance::storage
