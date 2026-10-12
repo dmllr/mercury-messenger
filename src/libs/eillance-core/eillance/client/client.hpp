@@ -379,7 +379,9 @@ class Client final {
       return;
     }
     auto const state = sm_->data_transport->GetConnectionState(peer_id);
-    if (state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection) {
+    if (state == transport::PeerConnectionState::connecting || 
+        state == transport::PeerConnectionState::newConnection || 
+        state == transport::PeerConnectionState::connected) {
       return;
     }
     if (!peer) {
