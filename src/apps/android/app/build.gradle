@@ -73,7 +73,7 @@ android {
         minSdkVersion 28
         targetSdkVersion 37
         versionCode vCode
-        versionName "2.1.${vCode}"
+        versionName "2.2.${vCode}"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
