@@ -13,14 +13,10 @@
 #include <plog/Appenders/RollingFileAppender.h>
 #include <plog/Formatters/TxtFormatter.h>
 
-#include "eillance/capture/audio_capture.hpp"
-#include "eillance/capture/video_capture.hpp"
 #include "eillance/client/client.hpp"
-#include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/logging/logging.hpp"
-#include "eillance/rtc/data_transport_impl_libdatachannel.hpp"
 #include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
@@ -206,16 +202,10 @@ auto main(int argc, char** argv) -> int {
   auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(config_path / "mercury.db");
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
 
-  auto data_transport =
-      std::make_shared<eillance::transport::DataTransport>(std::move(std::make_unique<eillance::rtc::RtcDataTransport>()
-      ));
   auto media_transport = std::make_shared<eillance::transport::MediaTransport>(
       std::move(std::make_unique<eillance::rtc::RtcMediaTransport>())
   );
-  auto client = std::make_shared<eillance::Client>(storage, data_transport, media_transport);
-
-  client->SetVideoCapture(std::make_unique<eillance::VideoCaptureCli>());
-  client->SetAudioCapture(std::make_unique<eillance::AudioCaptureCli>());
+  auto client = std::make_shared<eillance::Client>(storage, media_transport);
 
   // CLI Argument Handling (Backup/Restore)
   if (auto backup_path = args.Get("--backup")) {
@@ -270,7 +260,7 @@ auto main(int argc, char** argv) -> int {
   }
 
   if (auto cli_url = args.Get("--signaling-url")) {
-    client->UpdateSignalingUrl(*cli_url);
+    client->UpdateBootstrapNodeUrl(*cli_url);
   }
 
   // --- ViewModel Initialization ---
