@@ -102,22 +102,20 @@ class MessagingService {
         contact_manager_(sm->contact_manager) {
     history_ = std::make_unique<messaging::MessageHistory>(storage_);
 
-    event_unsubs_.push_back(
-        EventQueue::Instance().Subscribe<EventSyncStateChanged>([this](auto const& e) -> void {
-          std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
-          is_syncing_[e.peer_id] = e.is_syncing;
-          if (!e.is_syncing) {
-            if (pending_delivery_receipts_.contains(e.peer_id) && !pending_delivery_receipts_[e.peer_id].empty()) {
-              if (!delivery_receipts_debounce_active_[e.peer_id]) {
-                delivery_receipts_debounce_active_[e.peer_id] = true;
-                bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, peer_id = e.peer_id]() {
-                  FlushDeliveryReceipts(peer_id);
-                });
-              }
-            }
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSyncStateChanged>([this](auto const& e) -> void {
+      std::lock_guard<std::mutex> const lock(delivery_receipts_mutex_);
+      is_syncing_[e.peer_id] = e.is_syncing;
+      if (!e.is_syncing) {
+        if (pending_delivery_receipts_.contains(e.peer_id) && !pending_delivery_receipts_[e.peer_id].empty()) {
+          if (!delivery_receipts_debounce_active_[e.peer_id]) {
+            delivery_receipts_debounce_active_[e.peer_id] = true;
+            bg_queue_.DispatchAfter(std::chrono::milliseconds(250), [this, peer_id = e.peer_id]() {
+              FlushDeliveryReceipts(peer_id);
+            });
           }
-        })
-    );
+        }
+      }
+    }));
   }
 
   ~MessagingService() {

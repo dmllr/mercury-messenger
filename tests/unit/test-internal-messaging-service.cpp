@@ -51,9 +51,10 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
 
   nlohmann::json const propose = {
       {"from", peer1.ToString()},
-      {"type", "sync_propose"},
+      {"type", "sync_start"},
       {"topic", peer1.ToString()},
-      {"head", messaging::LedgerHash().ToString()}
+      {"head", messaging::LedgerHash().ToString()},
+      {"size", 0}
   };
   std::string str = propose.dump();
   std::vector<std::byte> bytes(str.size());
@@ -72,7 +73,7 @@ TEST_F(InternalMessagingServiceTest, ProcessSignalingMessage_SyncPropose) {
 
   // Make session cipher ready
   eillance::EventQueue::Instance().Push(EventDataChannelOpen{peer1});
-  eillance::crypto::SessionCipher dummy_cipher;
+  eillance::crypto::SessionCipher const dummy_cipher;
   nlohmann::json const key_msg = {
       {"type", "key_exchange"},
       {"key", dummy_cipher.GetPublicKey()},

@@ -28,6 +28,7 @@ struct PeerNode {
 
     peer_for_other = std::make_shared<transport::Peer>(other_id);
     peer_for_other->data_channel_is_open = true;
+    peer_for_other->crcp_verified = true;
     transport_mock->AddPeer(other_id, peer_for_other);
   }
 
@@ -76,7 +77,7 @@ class SyncEngineTest : public ::testing::Test {
       for (auto& [peer, msg] : a_msgs) {
         if (peer == B->id) {
           auto const type = msg.value("type", "");
-          if (type == "sync_provide_forward_batch" || type == "sync_provide_fork") {
+          if (type == "sync_batch" || type == "sync_batch_reply") {
             total_transferred_A_to_B_ += msg["entries"].size();
           }
           B->engine->ProcessSyncMessage(A->id, msg);
@@ -88,7 +89,7 @@ class SyncEngineTest : public ::testing::Test {
       for (auto& [peer, msg] : b_msgs) {
         if (peer == A->id) {
           auto const type = msg.value("type", "");
-          if (type == "sync_provide_forward_batch" || type == "sync_provide_fork") {
+          if (type == "sync_batch" || type == "sync_batch_reply") {
             total_transferred_B_to_A_ += msg["entries"].size();
           }
           A->engine->ProcessSyncMessage(B->id, msg);
@@ -110,11 +111,15 @@ TEST_F(SyncEngineTest, SyncProposeEmptyHead) {
   A->storage->AddSyncRequest({TopicID(idB_), idB_, Timestamp::Now(), Timestamp{0}});
 
   nlohmann::json const propose = {
-      {"type", "sync_propose"},
+      {"type", "sync_start"},
       {"topic", TopicID(idB_).ToString()},
-      {"head", messaging::LedgerHash().ToString()}
+      {"head", messaging::LedgerHash().ToString()},
+      {"size", 0}
   };
   A->engine->ProcessSyncMessage(idB_, propose);
+
+  // Need to process the mock event queue loop due to async finish wrapper
+  PumpMessages();
 
   auto const reqs = A->storage->GetSyncRequests();
   EXPECT_TRUE(reqs.empty());
@@ -127,7 +132,7 @@ TEST_F(SyncEngineTest, IterativeSyncMissingEntries) {
 
   PumpMessages();
 
-  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  auto const b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
   ASSERT_EQ(b_entries.size(), 3);
   EXPECT_EQ(b_entries[0].hash, A->storage->GetLedgerEntries(TopicID(idB_))[0].hash);
   EXPECT_EQ(b_entries[2].hash, A->storage->GetLedgerEntries(TopicID(idB_))[2].hash);
@@ -146,8 +151,8 @@ TEST_F(SyncEngineTest, ConflictResolutionTakeBoth) {
 
   PumpMessages();
 
-  auto a_entries = A->storage->GetLedgerEntries(TopicID(idB_));
-  auto b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  auto const a_entries = A->storage->GetLedgerEntries(TopicID(idB_));
+  auto const b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
 
   // LCA + A1 + B1 + A2 + B2 = 5 entries
   ASSERT_EQ(a_entries.size(), 5);

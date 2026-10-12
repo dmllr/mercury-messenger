@@ -67,8 +67,7 @@ class InternalMessagingService {
     event_unsubs_.push_back(
         EventQueue::Instance().Subscribe<EventDataPeerConnectionStateChanged>([this](auto const& e) {
           if (e.state == transport::PeerConnectionState::disconnected ||
-              e.state == transport::PeerConnectionState::failed ||
-              e.state == transport::PeerConnectionState::closed) {
+              e.state == transport::PeerConnectionState::failed || e.state == transport::PeerConnectionState::closed) {
             auto const current_state = data_transport_->GetConnectionState(e.peer_id);
             if (current_state != transport::PeerConnectionState::failed &&
                 current_state != transport::PeerConnectionState::closed &&
@@ -158,8 +157,7 @@ class InternalMessagingService {
     bool const is_confirmed = (contact && contact->status == identity::ContactStatus::confirmed);
 
     if (!is_confirmed && type != "call_reject" && type != "hangup") {
-      LGE << "CRCP Enforcement: Dropped message from unconfirmed peer: " << peer_id.ToString()
-          << " type: " << type;
+      LGE << "CRCP Enforcement: Dropped message from unconfirmed peer: " << peer_id.ToString() << " type: " << type;
       if (type == "call_request") {
         nlohmann::json const reject_msg = {
             {"type", "call_reject"},
