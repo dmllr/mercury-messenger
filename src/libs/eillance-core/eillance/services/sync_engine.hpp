@@ -187,7 +187,7 @@ class SyncEngine {
         std::string const my_head = latest ? latest->hash : std::string(64, '0');
 
         if (peer_head == my_head) {
-          LGI << "[Sync] Peer head matches our head. Sync complete.";
+          LGI << "[Sync] Peer head (" << peer_head << ") matches our head. Sync complete.";
           storage_->RemoveSyncRequest(topic_id, peer_id);
           active_sync_requests_.erase(topic_id.ToString());
           nlohmann::json const confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
@@ -196,20 +196,30 @@ class SyncEngine {
         }
 
         if (storage_->HasLedgerEntry(topic_id, peer_head)) {
-          // We have their head, but our head is strictly newer or different. Propose ours.
+          LGI << "[Sync] We already have peer's head (" << peer_head << ") but our head (" << my_head
+              << ") is different. Proposing our head.";
           ProposeSync(topic_id, peer_id);
           return;
         }
 
         auto const now = Time::SteadyNow();
         auto it = active_sync_requests_.find(topic_id.ToString());
-        if (it != active_sync_requests_.end() && it->second.hash == peer_head) {
-          if (now - it->second.timestamp < 5000000ULL) {
-            return;
+        if (it != active_sync_requests_.end()) {
+          if (it->second.hash == peer_head) {
+            if (now - it->second.timestamp < 5000000ULL) {
+              LGD << "[Sync] Ignoring redundant sync_propose for head " << peer_head;
+              return;
+            }
+          } else {
+            LGI << "[Sync] Peer proposed new head " << peer_head << " while we are syncing " << it->second.hash
+                << ". Resetting sync chain.";
+            pending_sync_chain_[topic_id.ToString()].clear();
           }
         }
         active_sync_requests_[topic_id.ToString()] = {peer_head, now};
 
+        LGI << "[Sync] Peer head (" << peer_head << ") is unknown to us (our head: " << my_head
+            << "). Starting iterative fetch.";
         // Iterative backwards fetch
         pending_sync_chain_[topic_id.ToString()].clear();
         nlohmann::json const req = {
@@ -225,6 +235,7 @@ class SyncEngine {
           auto peer = transport_->GetPeer(peer_id);
           if (peer && peer->session_cipher->IsReady()) {
             auto encrypted = peer->session_cipher->Encrypt(entry_opt->payload);
+            LGD << "[Sync] Providing entry " << req_hash << " to " << peer_id.ToString();
             nlohmann::json const reply = {
                 {"type", "sync_provide_entry"},
                 {"topic", topic_id.ToString()},
@@ -250,23 +261,42 @@ class SyncEngine {
         }
 
         auto e_json = msg["entry"];
+        std::string const received_hash = e_json.value("hash", "");
+
+        auto it = active_sync_requests_.find(topic_id.ToString());
+        if (it == active_sync_requests_.end()) {
+          LGE << "[Sync] Dropping unexpected sync_provide_entry for " << received_hash << " (no active sync)";
+          return;
+        }
+
+        auto& pending = pending_sync_chain_[topic_id.ToString()];
+        std::string const expected_hash = pending.empty() ? it->second.hash : pending.back().prev_hash;
+
+        if (received_hash != expected_hash) {
+          LGE << "[Sync] Dropping out-of-order sync_provide_entry. Expected: " << expected_hash
+              << ", got: " << received_hash;
+          return;
+        }
+
         storage::LedgerEntry e;
         e.topic_id = topic_id;
         e.author_id = ContactID(e_json["author"].get<std::string>());
         e.created_at = Timestamp{e_json["created"].get<uint64_t>()};
         e.type = static_cast<storage::LedgerActionType>(e_json["type"].get<int>());
         e.prev_hash = e_json.value("prev_hash", "");
-        e.hash = e_json.value("hash", "");
+        e.hash = received_hash;
 
         auto encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
         if (!encrypted_bytes.empty()) {
           auto decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
           if (!decrypted.empty()) {
             e.payload = decrypted;
+          } else {
+            LGE << "[Sync] Decryption failed for entry " << e.hash;
+            return;
           }
         }
 
-        auto& pending = pending_sync_chain_[topic_id.ToString()];
         if (pending.size() > 1000) {
           LGE << "[Sync] Sync chain too long, aborting iterative sync.";
           pending.clear();
@@ -276,6 +306,7 @@ class SyncEngine {
 
         if (e.prev_hash == std::string(64, '0') || storage_->HasLedgerEntry(topic_id, e.prev_hash)) {
           // LCA reached!
+          LGI << "[Sync] LCA reached at hash: " << e.prev_hash << ". Resolving " << pending.size() << " peer entries.";
           std::string actual_lca = e.prev_hash;
           if (!storage_->HasLedgerEntry(topic_id, actual_lca)) {
             actual_lca = std::string(64, '0');
@@ -302,8 +333,8 @@ class SyncEngine {
 
           // Unique deduplication
           auto unique_range = std::ranges::unique(combined, [](auto const& a, auto const& b) {
-            return a.created_at.value == b.created_at.value && a.author_id == b.author_id &&
-                   a.type == b.type && a.payload == b.payload;
+            return a.created_at.value == b.created_at.value && a.author_id == b.author_id && a.type == b.type &&
+                   a.payload == b.payload;
           });
           combined.erase(unique_range.begin(), unique_range.end());
 

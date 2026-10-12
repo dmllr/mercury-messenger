@@ -2,11 +2,13 @@
 
 #include <atomic>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <vector>
 
+#include <nlohmann/json.hpp>
 #include <span>
 
 #include "eillance/crypto/crypto.hpp"
@@ -34,6 +36,11 @@ struct Peer {
   std::unique_ptr<crypto::SessionCipher> session_cipher{};
 
   std::optional<std::string> pending_offer_sdp;
+
+  std::atomic<uint64_t> tx_seq{0};
+  std::atomic<uint64_t> rx_seq{0};
+  std::map<uint64_t, nlohmann::json> out_of_order_queue;
+  std::mutex queue_mutex;
   // NOLINTEND(*-non-private-member-variables-in-classes)
 };
 

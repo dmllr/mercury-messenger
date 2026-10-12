@@ -33,7 +33,7 @@ pub fn build_behaviour(
   kad_config.set_record_ttl(Some(Duration::from_secs(60 * 60)));
 
   let mut kademlia = Kademlia::with_config(peer_id, MemoryStore::new(peer_id), kad_config);
-  
+
   let is_bootstrap = matches!(role, NodeRole::BootstrapNode);
   if is_bootstrap {
     kademlia.set_mode(Some(kad::Mode::Server));
