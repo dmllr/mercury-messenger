@@ -429,6 +429,10 @@ class Client final {
     payload["members"] = members_array;
 
     sm_->sync_engine->AppendAction(TopicID(gid), messaging::LedgerActionType::GroupState, payload);
+    
+    Json sys_msg = {{"action", "group_created"}, {"name", name}};
+    sm_->messaging->SendSystemMessage(TopicID(gid).AsContactID(), sys_msg.dump(), true);
+    
     EventQueue::Instance().Push(EventGroupsStateUpdated{});
     return gid;
   }

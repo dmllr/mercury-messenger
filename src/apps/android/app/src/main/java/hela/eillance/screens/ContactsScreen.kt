@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -120,7 +121,7 @@ fun ContactsScreen(
 
   if (showCreateGroupDialog) {
     CreateGroupDialog(
-      contacts = contacts.filter { it.status == ContactStatus.confirmed },
+      contacts = contacts.filter { it.status == ContactStatus.confirmed && !it.isGroup && !it.isChannel },
       onDismissRequest = { showCreateGroupDialog = false },
       onCreateGroup = { name, ids -> contactsVM.createGroup(name, ids) }
     )
@@ -149,6 +150,15 @@ fun ContactsScreen(
   // Handle back press to cancel share
   BackHandler(enabled = !isSearchActive && pendingShare != null) {
     onCancelShare()
+  }
+
+  val listState = rememberLazyListState()
+  val topContact = contacts.firstOrNull()
+
+  LaunchedEffect(topContact?.peerId, topContact?.lastActivityTimestamp) {
+    if (topContact != null) {
+      listState.animateScrollToItem(0)
+    }
   }
 
   val hasConnectionIssues = connectionState == ServiceConnectionState.Failure ||
@@ -365,6 +375,7 @@ fun ContactsScreen(
               .fillMaxWidth()
           ) {
             LazyColumn(
+              state = listState,
               modifier = Modifier
                 .fillMaxSize()
                 .padding(2.dp),

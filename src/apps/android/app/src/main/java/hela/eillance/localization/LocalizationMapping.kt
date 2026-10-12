@@ -34,6 +34,7 @@ object LocalizationMapping {
       "contact_confirm", "contact_signature" -> R.string.sys_contact_confirm
       "profile_update", "profile_update_diff", "send_profile" -> R.string.sys_profile_update
       "unsupported_format" -> R.string.sys_unsupported
+      "group_created" -> R.string.sys_group_created
       "call_request" -> R.string.call_generic
       "call_accept" -> R.string.call_generic
       "call_missed" -> R.string.call_missed
