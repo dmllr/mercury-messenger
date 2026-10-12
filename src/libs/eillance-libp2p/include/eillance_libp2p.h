@@ -10,13 +10,20 @@ extern "C" {
 
 // NOLINTBEGIN(*-identifier-naming)
 
+typedef enum {
+  EILLANCE_NODE_ROLE_BOOTSTRAP_NODE = 0,
+  EILLANCE_NODE_ROLE_DESKTOP_CLIENT = 1,
+  EILLANCE_NODE_ROLE_MOBILE_CLIENT = 2,
+  EILLANCE_NODE_ROLE_BOT = 3
+} eillance_libp2p_node_role;
+
 typedef void (*eillance_libp2p_on_peer_connected_cb)(void* context, char const* peer_id_hex, bool is_circuit);
 typedef void (*eillance_libp2p_on_peer_disconnected_cb)(void* context, char const* peer_id_hex);
 typedef void (*eillance_libp2p_on_message_cb)(void* context, char const* peer_id_hex, uint8_t const* data, size_t len);
 typedef void (*eillance_libp2p_log_cb)(void* context, int level, char const* message);
 
 /* Creates a new libp2p node instance using a 32-byte Ed25519 secret key. Returns an opaque pointer. */
-auto eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes, bool is_server) -> void*;
+auto eillance_libp2p_node_new(uint8_t const* secret_key_32_bytes, eillance_libp2p_node_role role) -> void*;
 /* Starts the libp2p swarm background task. */
 void eillance_libp2p_node_start(void* node);
 /* Signals the node to cleanly shutdown its networking operations. */

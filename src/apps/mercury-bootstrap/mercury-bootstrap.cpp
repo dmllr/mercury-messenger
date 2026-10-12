@@ -70,7 +70,7 @@ auto main(int argc, char* argv[]) -> int {
     secret_key.push_back(static_cast<std::byte>(b));
   }
 
-  eillance::transport::Libp2pNode const node(secret_key, true);
+  eillance::transport::Libp2pNode const node(secret_key, eillance::transport::NodeRole::bootstrapNode);
   node.Start();
 
   // Listen on the specified port.
