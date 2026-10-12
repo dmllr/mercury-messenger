@@ -556,6 +556,12 @@ msgid "settings_sound_on_send"
 msgstr "Reproducir sonido al enviar mensaje"
 msgid "settings_sound_on_receive"
 msgstr "Reproducir sonido al recibir mensaje"
+msgid "profile_menu_licenses_title"
+msgstr "Licencias de código abierto"
+msgid "profile_menu_licenses_description"
+msgstr "Avisos de software de terceros"
+msgid "screen_title_licenses"
+msgstr "Licencias de código abierto"
 
 # Debug Screens
 msgid "debug_connections_empty"

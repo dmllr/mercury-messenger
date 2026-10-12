@@ -69,7 +69,8 @@ class SyncEngine {
         my_id_(my_id) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
       dispatchQueue_.Dispatch([this, peer_id = e.peer_id]() -> void {
-        if (auto const peer = transport_->GetPeer(peer_id); !peer || !peer->session_cipher->IsReady() || !peer->crcp_verified) {
+        if (auto const peer = transport_->GetPeer(peer_id);
+            !peer || !peer->session_cipher->IsReady() || !peer->crcp_verified) {
           return;
         }
         auto const reqs = storage_->GetSyncRequests();
@@ -162,7 +163,8 @@ class SyncEngine {
       }
       auto const latest = storage_->GetLatestLedgerEntry(topic_id);
       std::string const head = latest ? latest->hash : std::string(64, '0');
-      LGI << "[Sync] Proposing sync to " << target_peer.ToString() << " for topic " << topic_id.ToString() << " with head " << head;
+      LGI << "[Sync] Proposing sync to " << target_peer.ToString() << " for topic " << topic_id.ToString()
+          << " with head " << head;
       nlohmann::json const msg = {{"type", "sync_propose"}, {"topic", topic_id.ToString()}, {"head", head}};
       transport_->SendJson(target_peer, msg);
     });
@@ -375,7 +377,7 @@ class SyncEngine {
     for (auto const& req : reqs) {
       if (processed.contains(req.target_peer_id)) continue;
       processed.insert(req.target_peer_id);
-      
+
       auto contact = storage_->GetContact(req.target_peer_id);
       if (!contact || contact->status != identity::ContactStatus::confirmed) {
         continue;

@@ -556,6 +556,12 @@ msgid "settings_sound_on_send"
 msgstr "Звук при отправке"
 msgid "settings_sound_on_receive"
 msgstr "Звук при получении"
+msgid "profile_menu_licenses_title"
+msgstr "Лицензии открытого ПО"
+msgid "profile_menu_licenses_description"
+msgstr "Уведомления о стороннем ПО"
+msgid "screen_title_licenses"
+msgstr "Лицензии открытого ПО"
 
 # Debug Screens
 msgid "debug_connections_empty"
