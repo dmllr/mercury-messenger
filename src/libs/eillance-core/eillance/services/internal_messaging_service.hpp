@@ -133,7 +133,15 @@ class InternalMessagingService {
             {"reason", "unauthorized"}
         };
         std::ignore = data_transport_->SendJson(peer_id, reject_msg);
+      } else if (type != "peer_unwilling") {
+        nlohmann::json const reject_msg = {{"type", "peer_unwilling"}};
+        std::ignore = data_transport_->SendJson(peer_id, reject_msg);
       }
+      return;
+    }
+
+    if (type == "peer_unwilling") {
+      EventQueue::Instance().Push(EventContactUnwilling{peer_id, true});
       return;
     }
 
@@ -262,6 +270,18 @@ class InternalMessagingService {
       auto sig = crypto::FromHex(sig_hex);
       if (!sig.empty() && crypto::Identity::Verify(peer_id.Span(), sm_->account->GetId().Span(), sig)) {
         peer->crcp_verified = true;
+        auto contact = sm_->contact_manager->GetContact(peer_id);
+        if (!contact) {
+          if (sm_->contact_manager->AddContact(peer_id)) {
+            sm_->contact_manager->StoreSignatureFrom(peer_id, sig);
+            sm_->contact_manager->MarkAsConfirmed(peer_id);
+            EventQueue::Instance().Push(EventContactRestored{peer_id});
+          }
+        } else if (contact->status == identity::ContactStatus::pendingApproval) {
+          sm_->contact_manager->StoreSignatureFrom(peer_id, sig);
+          sm_->contact_manager->MarkAsConfirmed(peer_id);
+          EventQueue::Instance().Push(EventContactRestored{peer_id});
+        }
       }
 
       if (!message.value("is_reply", false)) {

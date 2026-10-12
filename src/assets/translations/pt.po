@@ -732,6 +732,8 @@ msgstr "Tamanho"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "Contato inacessível. Mensagens não entregues há mais de 24 horas."
+msgid "contact_unwilling"
+msgstr "O contato recusou a comunicação"
 
 # Versioning
 msgid "version_we_need_update"

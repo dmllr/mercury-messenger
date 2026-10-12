@@ -61,6 +61,7 @@ struct ConversationState {
   bool has_older_messages = false;
   std::vector<DraftAttachment> drafts{};
   bool is_unreachable = false;
+  bool is_unwilling = false;
   bool is_syncing = false;
   float sync_progress = -1.0f;
 };

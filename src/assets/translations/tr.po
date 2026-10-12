@@ -732,6 +732,8 @@ msgstr "Boyut"
 # Conversation screen
 msgid "contact_unreachable"
 msgstr "Kişiye ulaşılamıyor. Mesajlar 24 saatten uzun süredir iletilemedi."
+msgid "contact_unwilling"
+msgstr "Kişi iletişimi reddetti"
 
 # Versioning
 msgid "version_we_need_update"
