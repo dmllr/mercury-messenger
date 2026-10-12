@@ -167,6 +167,9 @@ class Libp2pDataTransport : public DataTransport::Interface {
         }
       }
     }
+    if (node_) {
+      node_->Disconnect(peer_id);
+    }
     if (changed) {
       EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
     }

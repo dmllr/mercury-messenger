@@ -35,8 +35,8 @@ class DeliveryService {
 
   DispatchQueue dispatchQueue_{"DeliveryService", 1};
 
-  static constexpr int initialRetryDelayS = 5;
-  static constexpr int maxRetryDelayS = 60;
+  static constexpr int initialRetryDelayS = 10;
+  static constexpr int maxRetryDelayS = 120;
   static constexpr uint64_t kSuspensionThresholdUs = 48 * 3600 * 1000000ULL;  // 2 days
   static constexpr std::chrono::hours kSuspensionCheckInterval{1};
 
@@ -105,6 +105,16 @@ class DeliveryService {
       has_work = std::ranges::any_of(attachments, [](auto const& att) -> bool {
         return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
       });
+    }
+
+      if (!has_work) {
+        auto const syncs = storage_->GetSyncRequests();
+        has_work = std::ranges::any_of(syncs, [&peer_id](auto const& req) { return req.target_peer_id == peer_id; });
+      }
+
+      if (!has_work) {
+      auto const syncs = storage_->GetSyncRequests();
+      has_work = std::ranges::any_of(syncs, [&peer_id](auto const& req) { return req.target_peer_id == peer_id; });
     }
 
     if (has_work) {
