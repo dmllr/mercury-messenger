@@ -7,6 +7,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #include "eillance/events/client_events.hpp"
 #include "eillance/events/service_connection_state.hpp"
@@ -142,10 +143,17 @@ class Client final {
 
           if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
               state == ServiceConnectionState::disconnected) {
+            std::unordered_set<ContactID> processed_masters;
             for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{sm_->data_transport->GetMasterId(id)});
-              sm_->data_transport->Disconnect(id);
-              sm_->media_transport->Disconnect(sm_->data_transport->GetMasterId(id));
+              auto const master_id = sm_->data_transport->GetMasterId(id);
+              if (processed_masters.contains(master_id)) {
+                continue;
+              }
+              processed_masters.insert(master_id);
+
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+              sm_->data_transport->Disconnect(master_id);
+              sm_->media_transport->Disconnect(master_id);
             }
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
@@ -288,11 +296,16 @@ class Client final {
     sm_->delivery_service->Stop();
     sm_->sync_engine->Stop();
 
+    std::unordered_set<ContactID> processed_masters;
     auto peers = sm_->data_transport->GetPeers();
     for (auto const& id : peers | std::views::keys) {
-      sm_->media_transport->Disconnect(sm_->data_transport->GetMasterId(id));
-      sm_->data_transport->Disconnect(id);
-      sm_->data_transport->RemovePeer(id);
+      auto const master_id = sm_->data_transport->GetMasterId(id);
+      if (processed_masters.contains(master_id)) continue;
+      processed_masters.insert(master_id);
+
+      sm_->media_transport->Disconnect(master_id);
+      sm_->data_transport->Disconnect(master_id);
+      sm_->data_transport->RemovePeer(master_id);
     }
     sm_->data_transport->Terminate();
   }
@@ -715,8 +728,14 @@ class Client final {
         std::chrono::duration_cast<std::chrono::microseconds>(sm_->account->GetSettings()->GetPeerInactivityTimeout())
             .count();
 
+    std::unordered_set<ContactID> disconnected_masters;
+
     for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
       auto const master_id = sm_->data_transport->GetMasterId(id);
+      if (disconnected_masters.contains(master_id)) {
+        continue;
+      }
+
       auto const state = sm_->data_transport->GetConnectionState(id);
       bool const is_data_connected = state == transport::PeerConnectionState::connected;
       bool const is_connecting =
@@ -730,14 +749,16 @@ class Client final {
       } else if (is_data_connected) {
         auto const lat = peer->last_activity_time.load();
         if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
-          LGI << "Peer " << id.ToString() << " inactive. Closing.";
-          sm_->data_transport->Disconnect(id);
+          LGI << "Peer " << master_id.ToString() << " inactive. Closing.";
+          sm_->data_transport->Disconnect(master_id);
+          disconnected_masters.insert(master_id);
         }
       } else if (is_connecting) {
         if (auto const lca = peer->last_connect_attempt.load(); now > lca && (now - lca) > 120ULL * Time::uS) {
-          LGI << "Peer " << id.ToString() << " stuck in connecting. Closing.";
+          LGI << "Peer " << master_id.ToString() << " stuck in connecting. Closing.";
           EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
-          sm_->data_transport->Disconnect(id);
+          sm_->data_transport->Disconnect(master_id);
+          disconnected_masters.insert(master_id);
         }
       }
     }
