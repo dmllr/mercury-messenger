@@ -276,12 +276,12 @@ class ContactService {
     manager_->ReloadContacts();
   }
 
-  void ProcessCrcpMessage(ContactID const& peer_id, Json const& json) {
-    if (peer_id == sm_->account->GetId()) return;
+  void ProcessCrcpMessage(ContactID const& peer_id, ContactID const& network_id, Json const& json) {
+    if (peer_id == sm_->account->GetId()) {
+      return;
+    }
 
-    std::string const type = json.value("type", "");
-
-    if (type == "crcp_request") {
+    if (std::string const type = json.value("type", ""); type == "crcp_request") {
       std::optional<std::string> token;
       if (json.contains("token")) {
         token = json["token"];
@@ -295,7 +295,7 @@ class ContactService {
         return;
       }
 
-      if (auto peer = transport_->GetPeer(peer_id)) {
+      if (auto peer = transport_->GetPeer(network_id)) {
         peer->crcp_verified = true;
       }
 
@@ -322,14 +322,15 @@ class ContactService {
         LGE << "Invalid signature in CRCP confirm from " << peer_id.ToString();
         return;
       }
-      if (auto peer = transport_->GetPeer(peer_id)) {
+      if (auto peer = transport_->GetPeer(network_id)) {
         peer->crcp_verified = true;
       }
       if (auto existing = manager_->GetContact(peer_id); existing) {
         OnContactConfirm(peer_id, sig, profile);
       } else {
-        LGI << "Received crcp_confirm from unknown peer (possibly restored from mnemonic). Treating as request.";
-        OnContactAddRequest(peer_id, std::nullopt, profile, sig);
+        LGI << "Received crcp_confirm from unknown peer (possibly restored from mnemonic). Auto-confirming.";
+        manager_->AddContact(peer_id);
+        OnContactConfirm(peer_id, sig, profile);
       }
     } else if (type == "crcp_reject") {
       OnContactRemoved(peer_id);
