@@ -1,0 +1,464 @@
+
+### English (en), default
+
+**App name:**
+Mercury - Private Messenger
+
+**Short description:**
+Truly private chats & calls, direct & encrypted device-to-device messaging.
+
+**Full description:**
+Mercury: Real Privacy is Peer-to-Peer.
+
+Mercury is built on a simple, powerful principle: your conversations are yours alone. We've engineered a secure messenger that connects you directly to your contacts, no central servers in the middle.
+
+Why Mercury is Different:
+
+Mercury isn't just another encrypted messenger; it's a fundamental shift in how you communicate. By leveraging true peer-to-peer (P2P) technology, your messages, voice and video calls, images and files are transmitted directly from your device to your contact's device. We don't have servers to store your data, because your data never passes through us in the first place.
+
+Your Privacy, Your Control:
+
+* Anonymous Identity: Get started without a phone number or email. Your identity is a secure, anonymous key generated and stored exclusively on your device. You are in complete control.
+* Self-Custody Keys: Your identity is protected by a 12-word recovery phrase. This and encrypted backups are the only ways to restore your account, ensuring only you have access.
+* Encrypted & Local Backups: Create a fully encrypted, password-protected backup of your identity, contacts, and message history. Store it wherever you trust.
+
+Core Features:
+
+* True Peer-to-Peer Communication: All messages and calls are sent directly between devices for maximum privacy and minimal latency.
+* End-to-End Encryption: Using a modern cryptographic stack (SSL, DTLS), every text, voice call, and video call is fully encrypted before it leaves your device.
+* High-Quality Voice & Video Calls: Experience crisp, clear calls powered by the WebRTC framework.
+* Secure Text Messaging: Chat with confidence, knowing your conversations are private and direct.
+* No Registration: Forget handing over personal data. Your anonymous ID is all you need.
+* Cross-Platform Core: Built on a high-performance C++ core, ensuring security and stability across platforms.
+
+Your private communication where you're not the product, but the owner.
+
+### Arabic (ar)
+
+**App name:**
+Mercury - مراسلة خاصة
+
+**Short description:**
+دردشات ومكالمات خاصة تماماً، رسائل مشفرة ومباشرة من جهاز إلى آخر.
+
+**Full description:**
+Mercury: الخصوصية الحقيقية تعني الاتصال من ند لند (P2P).
+
+تم بناء Mercury على مبدأ بسيط وقوي: محادثاتك ملك لك وحدك. لقد صممنا تطبيق مراسلة آمن يربطك مباشرة بجهات اتصالك، دون وجود خوادم مركزية في المنتصف.
+
+لماذا Mercury مختلف؟
+
+تطبيق Mercury ليس مجرد تطبيق مراسلة مشفر آخر؛ بل هو تحول جذري في طريقة تواصلك. من خلال الاعتماد على تقنية الند للند (P2P) الحقيقية، يتم نقل رسائلك، ومكالماتك الصوتية والمرئية، وصورك، وملفاتك مباشرة من جهازك إلى جهاز جهة الاتصال الخاصة بك. لا نملك خوادم لتخزين بياناتك، لأن بياناتك لا تمر عبرنا في المقام الأول.
+
+خصوصيتك، تحت سيطرتك:
+
+* هوية مجهولة: ابدأ باستخدام التطبيق دون الحاجة إلى رقم هاتف أو بريد إلكتروني. هويتك عبارة عن مفتاح آمن ومجهول يتم إنشاؤه وتخزينه حصرياً على جهازك. أنت المتحكم بالكامل.
+* مفاتيح ذاتية الحفظ: هويتك محمية بعبارة استرداد مكونة من 12 كلمة. هذه العبارة والنسخ الاحتياطية المشفرة هي الطرق الوحيدة لاستعادة حسابك، مما يضمن أنك الوحيد الذي يمتلك حق الوصول.
+* نسخ احتياطية مشفرة ومحلية: أنشئ نسخة احتياطية مشفرة بالكامل ومحمية بكلمة مرور لهويتك وجهات اتصالك وسجل رسائلك. احتفظ بها في أي مكان تثق به.
+
+الميزات الأساسية:
+
+* اتصال حقيقي من ند لند: يتم إرسال جميع الرسائل والمكالمات مباشرة بين الأجهزة لضمان أقصى درجات الخصوصية وأقل قدر من التأخير.
+* تشفير شامل (End-to-End): باستخدام تقنيات التشفير الحديثة (SSL, DTLS)، يتم تشفير كل رسالة نصية، ومكالمة صوتية، ومكالمة مرئية بالكامل قبل أن تغادر جهازك.
+* مكالمات صوتية ومرئية عالية الجودة: استمتع بمكالمات واضحة ونقية مدعومة بإطار عمل WebRTC.
+* مراسلة نصية آمنة: تواصل بثقة، مع العلم أن محادثاتك خاصة ومباشرة.
+* بدون تسجيل: انسَ أمر تسليم بياناتك الشخصية. مُعرّفك المجهول هو كل ما تحتاجه.
+* نواة متعددة المنصات: مبني على نواة C++ عالية الأداء، مما يضمن الأمان والاستقرار عبر مختلف الأنظمة الأساسية.
+
+تواصلك الخاص حيث لست أنت المنتج، بل المالك.
+
+***
+
+### French (fr)
+
+**App name:**
+Mercury - Messagerie privée
+
+**Short description:**
+Chats et appels 100% privés, messagerie chiffrée directe entre appareils.
+
+**Full description:**
+Mercury : La vraie confidentialité est Peer-to-Peer.
+
+Mercury repose sur un principe simple et puissant : vos conversations n'appartiennent qu'à vous. Nous avons conçu une messagerie sécurisée qui vous connecte directement à vos contacts, sans serveurs centraux intermédiaires.
+
+Pourquoi Mercury est différent :
+
+Mercury n'est pas qu'une simple messagerie chiffrée de plus ; c'est un changement fondamental dans votre façon de communiquer. En exploitant la véritable technologie Peer-to-Peer (P2P), vos messages, appels vocaux et vidéo, images et fichiers sont transmis directement de votre appareil à celui de votre contact. Nous n'avons pas de serveurs pour stocker vos données, car celles-ci ne transitent jamais par nous.
+
+Votre confidentialité, votre contrôle :
+
+* Identité anonyme : Commencez sans numéro de téléphone ni adresse e-mail. Votre identité est une clé sécurisée et anonyme générée et stockée exclusivement sur votre appareil. Vous avez le contrôle total.
+* Clés auto-détenues : Votre identité est protégée par une phrase de récupération de 12 mots. Cette phrase et les sauvegardes chiffrées sont les seuls moyens de restaurer votre compte, garantissant que vous seul y avez accès.
+* Sauvegardes chiffrées et locales : Créez une sauvegarde entièrement chiffrée et protégée par mot de passe de votre identité, de vos contacts et de votre historique de messages. Stockez-la où vous le souhaitez.
+
+Fonctionnalités principales :
+
+* Véritable communication Peer-to-Peer : Tous les messages et appels sont envoyés directement entre les appareils pour une confidentialité maximale et une latence minimale.
+* Chiffrement de bout en bout : Grâce à une pile cryptographique moderne (SSL, DTLS), chaque texte, appel vocal et appel vidéo est entièrement chiffré avant de quitter votre appareil.
+* Appels vocaux et vidéo de haute qualité : Profitez d'appels nets et clairs grâce au framework WebRTC.
+* Messagerie texte sécurisée : Discutez en toute confiance, sachant que vos conversations sont privées et directes.
+* Aucune inscription : Oubliez la transmission de données personnelles. Votre identifiant anonyme est tout ce dont vous avez besoin.
+* Cœur multiplateforme : Construit sur un cœur C++ haute performance, garantissant sécurité et stabilité sur toutes les plateformes.
+
+Votre communication privée où vous n'êtes pas le produit, mais le propriétaire.
+
+***
+
+### Italian (it)
+
+**App name:**
+Mercury - Chat privata
+
+**Short description:**
+Chat e chiamate private, messaggistica crittografata diretta tra dispositivi.
+
+**Full description:**
+Mercury: La vera privacy è Peer-to-Peer.
+
+Mercury si basa su un principio semplice e potente: le tue conversazioni sono solo tue. Abbiamo progettato un'app di messaggistica sicura che ti connette direttamente ai tuoi contatti, senza alcun server centrale nel mezzo.
+
+Perché Mercury è diverso:
+
+Mercury non è solo un'altra app crittografata; è un cambiamento fondamentale nel modo di comunicare. Sfruttando la vera tecnologia peer-to-peer (P2P), i tuoi messaggi, le chiamate vocali e video, le immagini e i file vengono trasmessi direttamente dal tuo dispositivo a quello del tuo contatto. Non abbiamo server per archiviare i tuoi dati, perché i tuoi dati non passano mai da noi.
+
+La tua privacy, il tuo controllo:
+
+* Identità anonima: Inizia senza bisogno di un numero di telefono o di un'email. La tua identità è una chiave sicura e anonima generata e archiviata esclusivamente sul tuo dispositivo. Hai il controllo totale.
+* Chiavi di autocustodia: La tua identità è protetta da una frase di recupero di 12 parole. Questa e i backup crittografati sono gli unici modi per ripristinare il tuo account, assicurando che solo tu vi abbia accesso.
+* Backup crittografati e locali: Crea un backup completamente crittografato e protetto da password della tua identità, dei tuoi contatti e della cronologia dei messaggi. Salvalo dove preferisci.
+
+Funzionalità principali:
+
+* Vera comunicazione Peer-to-Peer: Tutti i messaggi e le chiamate vengono inviati direttamente tra i dispositivi per la massima privacy e la minima latenza.
+* Crittografia end-to-end: Utilizzando uno stack crittografico moderno (SSL, DTLS), ogni testo, chiamata vocale e videochiamata viene completamente crittografato prima di lasciare il tuo dispositivo.
+* Chiamate vocali e video di alta qualità: Goditi chiamate nitide e chiare basate sul framework WebRTC.
+* Messaggistica di testo sicura: Chatta con sicurezza, sapendo che le tue conversazioni sono private e dirette.
+* Nessuna registrazione: Dimentica la cessione dei dati personali. Il tuo ID anonimo è tutto ciò che ti serve.
+* Core multipiattaforma: Basato su un core C++ ad alte prestazioni, che garantisce sicurezza e stabilità su tutte le piattaforme.
+
+La tua comunicazione privata dove non sei il prodotto, ma il proprietario.
+
+***
+
+### Korean (ko)
+
+**App name:**
+Mercury - 프라이빗 메신저
+
+**Short description:**
+완벽한 프라이빗 채팅 및 통화. 기기 간 직접 전송되는 암호화 메시징.
+
+**Full description:**
+Mercury: 진정한 프라이버시는 P2P에 있습니다.
+
+Mercury는 '당신의 대화는 오직 당신만의 것'이라는 단순하고 강력한 원칙을 바탕으로 만들어졌습니다. 우리는 중앙 서버를 거치지 않고 사용자와 연락처를 직접 연결하는 안전한 메신저를 개발했습니다.
+
+Mercury가 특별한 이유:
+
+Mercury는 단순한 암호화 메신저를 넘어, 커뮤니케이션 방식의 근본적인 변화를 의미합니다. 진정한 P2P(Peer-to-Peer) 기술을 활용하여 메시지, 음성 및 영상 통화, 이미지, 파일이 사용자의 기기에서 상대방의 기기로 직접 전송됩니다. 애초에 데이터가 당사를 거치지 않기 때문에 사용자 데이터를 저장할 서버조차 존재하지 않습니다.
+
+당신의 프라이버시, 당신의 통제권:
+
+* 익명 신원 보장: 전화번호나 이메일 없이 시작하세요. 당신의 신원은 오직 당신의 기기에서만 생성되고 안전하게 저장되는 익명 키입니다. 모든 통제권은 당신에게 있습니다.
+* 셀프 커스터디 키: 사용자의 신원은 12개의 단어로 구성된 복구 문구로 보호됩니다. 이 문구와 암호화된 백업만이 계정을 복원할 수 있는 유일한 방법이며, 오직 본인만 접근할 수 있습니다.
+* 암호화된 로컬 백업: 신원, 연락처, 메시지 기록을 완벽하게 암호화하고 비밀번호로 보호된 백업을 생성하세요. 신뢰할 수 있는 곳이라면 어디든 저장할 수 있습니다.
+
+핵심 기능:
+
+* 진정한 P2P 커뮤니케이션: 모든 메시지와 통화는 기기 간에 직접 전송되어 프라이버시를 극대화하고 지연 시간을 최소화합니다.
+* 종단 간 암호화(E2EE): 최신 암호화 스택(SSL, DTLS)을 사용하여 모든 텍스트, 음성 및 영상 통화가 기기를 떠나기 전에 완벽하게 암호화됩니다.
+* 고품질 음성 및 영상 통화: WebRTC 프레임워크를 기반으로 끊김 없이 선명한 통화를 경험하세요.
+* 안전한 텍스트 메시징: 대화가 직접적이고 안전하게 보호된다는 확신을 가지고 채팅하세요.
+* 가입 절차 없음: 개인정보를 넘겨줄 필요가 없습니다. 익명 ID 하나면 충분합니다.
+* 크로스 플랫폼 코어: 고성능 C++ 코어를 기반으로 구축되어 다양한 플랫폼에서 보안과 안정성을 보장합니다.
+
+당신이 상품이 아닌 주인이 되는 진정한 프라이빗 커뮤니케이션입니다.
+
+***
+
+### Russian (ru)
+
+**App name:**
+Mercury - Приватный чат
+
+**Short description:**
+Полностью приватные чаты и звонки, прямое зашифрованное P2P-общение.
+
+**Full description:**
+Mercury: Настоящая приватность — это Peer-to-Peer.
+
+Mercury создан на основе простого и надежного принципа: ваши переписки принадлежат только вам. Мы разработали безопасный мессенджер, который напрямую связывает вас с вашими контактами без каких-либо центральных серверов посередине.
+
+Почему Mercury отличается от других:
+
+Mercury — это не просто еще один зашифрованный мессенджер; это фундаментальный сдвиг в том, как вы общаетесь. Благодаря использованию истинной технологии peer-to-peer (P2P), ваши сообщения, голосовые и видеозвонки, изображения и файлы передаются напрямую с вашего устройства на устройство собеседника. У нас нет серверов для хранения ваших данных, потому что они через нас просто не проходят.
+
+Ваша приватность, ваш контроль:
+
+* Анонимность: Начните работу без номера телефона или электронной почты. Ваша личность — это безопасный анонимный ключ, который генерируется и хранится исключительно на вашем устройстве. Вы всё полностью контролируете.
+* Полный контроль над ключами: Ваш аккаунт защищен seed-фразой из 12 слов. Эта фраза и зашифрованные резервные копии — единственные способы восстановить ваш профиль, что гарантирует доступ только вам.
+* Зашифрованные локальные копии: Создавайте полностью зашифрованные, защищенные паролем резервные копии вашей личности, контактов и истории сообщений. Храните их там, где считаете нужным.
+
+Основные функции:
+
+* Истинное P2P-общение: Все сообщения и звонки отправляются напрямую между устройствами для максимальной приватности и минимальной задержки.
+* Сквозное шифрование (E2EE): Используя современные криптографические протоколы (SSL, DTLS), каждый текст, голосовой или видеозвонок полностью шифруется до того, как покинет ваше устройство.
+* Высокое качество звонков: Наслаждайтесь четкими и качественными вызовами благодаря технологии WebRTC.
+* Безопасный обмен сообщениями: Общайтесь с уверенностью, зная, что ваши разговоры защищены и передаются напрямую.
+* Без регистрации: Забудьте о передаче личных данных. Ваш анонимный ID — это всё, что нужно.
+* Кроссплатформенное ядро: Приложение построено на высокопроизводительном ядре C++, что обеспечивает безопасность и стабильность на любых платформах.
+
+Ваше приватное общение, где вы — не продукт, а полноправный владелец.
+
+***
+
+### Chinese (Simplified) (zh)
+
+**App name:**
+Mercury - 私密信使
+
+**Short description:**
+真正私密的聊天与通话，设备之间直接互连的加密通讯。
+
+**Full description:**
+Mercury：真正的隐私在于点对点（P2P）。
+
+Mercury 建立在一个简单而强大的原则之上：您的对话仅属于您自己。我们精心设计了一款安全的通讯软件，让您与联系人直接相连，中间没有任何中心化服务器。
+
+为什么 Mercury 与众不同：
+
+Mercury 不仅仅是另一款加密通讯软件；它是您沟通方式的根本转变。通过采用真正的点对点（P2P）技术，您的消息、语音和视频通话、图片以及文件都能从您的设备直接传输到对方的设备。我们没有用来存储您数据的服务器，因为您的数据从一开始就不会经过我们。
+
+您的隐私，由您掌控：
+
+* 匿名身份：无需手机号或邮箱即可开始使用。您的身份是一个仅在您设备上生成并安全存储的匿名密钥。您拥有完全的控制权。
+* 自托管密钥：您的身份由 12 个单词的恢复短语保护。这与加密备份是恢复账户的唯一方式，确保只有您自己能够访问。
+* 加密且本地的备份：为您的身份、联系人和聊天记录创建由密码保护的完全加密备份。您可以将其存放在任何您信任的地方。
+
+核心功能：
+
+* 真正的点对点通讯：所有的消息与通话都在设备之间直接发送，以实现最大程度的隐私保护与极低的延迟。
+* 端到端加密：采用现代密码学协议栈（SSL, DTLS），每条文本、语音及视频通话在离开您的设备前都会被全面加密。
+* 高质量语音与视频通话：依托 WebRTC 框架，体验清晰流畅的通话质量。
+* 安全的文字聊天：安心交流，您的对话绝对私密且直接。
+* 无需注册：忘记交出个人数据吧。您的匿名 ID 就是所需的一切。
+* 跨平台核心：基于高性能的 C++ 核心构建，确保各平台间的安全性与稳定性。
+
+在您的私密通讯中，您不是产品，而是真正的主人。
+
+***
+
+### German (de)
+
+**App name:**
+Mercury - Privater Messenger
+
+**Short description:**
+Echt private Chats & Anrufe, direkt & verschlüsselt von Gerät zu Gerät.
+
+**Full description:**
+Mercury: Echte Privatsphäre ist Peer-to-Peer.
+
+Mercury basiert auf einem einfachen, mächtigen Prinzip: Ihre Unterhaltungen gehören Ihnen allein. Wir haben einen sicheren Messenger entwickelt, der Sie direkt mit Ihren Kontakten verbindet, ohne zentrale Server in der Mitte.
+
+Warum Mercury anders ist:
+
+Mercury ist nicht einfach nur ein weiterer verschlüsselter Messenger; es ist ein grundlegender Wandel in der Art und Weise, wie Sie kommunizieren. Durch die Nutzung echter Peer-to-Peer (P2P)-Technologie werden Ihre Nachrichten, Sprach- und Videoanrufe, Bilder und Dateien direkt von Ihrem Gerät an das Gerät Ihres Kontakts übertragen. Wir haben keine Server, um Ihre Daten zu speichern, weil Ihre Daten uns gar nicht erst passieren.
+
+Ihre Privatsphäre, Ihre Kontrolle:
+
+* Anonyme Identität: Legen Sie los ohne Telefonnummer oder E-Mail. Ihre Identität ist ein sicherer, anonymer Schlüssel, der ausschließlich auf Ihrem Gerät generiert und gespeichert wird. Sie haben die volle Kontrolle.
+* Eigene Schlüsselverwaltung: Ihre Identität ist durch eine 12-Wörter-Wiederherstellungsphrase geschützt. Diese und verschlüsselte Backups sind die einzigen Möglichkeiten, Ihr Konto wiederherzustellen, um sicherzustellen, dass nur Sie Zugriff haben.
+* Verschlüsselte & lokale Backups: Erstellen Sie ein vollständig verschlüsseltes, passwortgeschütztes Backup Ihrer Identität, Kontakte und des Nachrichtenverlaufs. Speichern Sie es dort, wo Sie es für sicher halten.
+
+Hauptfunktionen:
+
+* Echte Peer-to-Peer-Kommunikation: Alle Nachrichten und Anrufe werden direkt zwischen den Geräten gesendet, für maximale Privatsphäre und minimale Latenz.
+* Ende-zu-Ende-Verschlüsselung: Mithilfe eines modernen kryptografischen Stacks (SSL, DTLS) wird jede Textnachricht, jeder Sprach- und Videoanruf vollständig verschlüsselt, bevor er Ihr Gerät verlässt.
+* Hochwertige Sprach- & Videoanrufe: Erleben Sie gestochen scharfe, klare Anrufe basierend auf dem WebRTC-Framework.
+* Sicheres Text-Messaging: Chatten Sie mit gutem Gewissen, in dem Wissen, dass Ihre Unterhaltungen privat und direkt sind.
+* Keine Registrierung: Vergessen Sie die Weitergabe persönlicher Daten. Ihre anonyme ID ist alles, was Sie brauchen.
+* Plattformübergreifender Kern: Basierend auf einem hochleistungsfähigen C++-Kern, der Sicherheit und Stabilität über alle Plattformen hinweg gewährleistet.
+
+Ihre private Kommunikation, bei der Sie nicht das Produkt, sondern der Eigentümer sind.
+
+***
+
+### Spanish (es)
+
+**App name:**
+Mercury - Mensajería Privada
+
+**Short description:**
+Chats y llamadas 100% privados, mensajería cifrada directa entre dispositivos.
+
+**Full description:**
+Mercury: La verdadera privacidad es Peer-to-Peer.
+
+Mercury se basa en un principio simple y poderoso: tus conversaciones son solo tuyas. Hemos diseñado una aplicación de mensajería segura que te conecta directamente con tus contactos, sin servidores centrales de por medio.
+
+Por qué Mercury es diferente:
+
+Mercury no es solo otra aplicación de mensajería cifrada; es un cambio fundamental en la forma de comunicarte. Al aprovechar la verdadera tecnología peer-to-peer (P2P), tus mensajes, llamadas de voz y video, imágenes y archivos se transmiten directamente desde tu dispositivo al de tu contacto. No tenemos servidores para almacenar tus datos, porque en primer lugar, tus datos nunca pasan por nosotros.
+
+Tu privacidad, tu control:
+
+* Identidad anónima: Empieza sin necesidad de un número de teléfono o correo electrónico. Tu identidad es una clave segura y anónima generada y almacenada exclusivamente en tu dispositivo. Tienes el control total.
+* Claves de autocustodia: Tu identidad está protegida por una frase de recuperación de 12 palabras. Esta y las copias de seguridad cifradas son las únicas formas de restaurar tu cuenta, garantizando que solo tú tengas acceso.
+* Copias de seguridad locales y cifradas: Crea una copia de seguridad completamente cifrada y protegida con contraseña de tu identidad, contactos e historial de mensajes. Guárdala donde prefieras.
+
+Características principales:
+
+* Verdadera comunicación Peer-to-Peer: Todos los mensajes y llamadas se envían directamente entre dispositivos para obtener máxima privacidad y mínima latencia.
+* Cifrado de extremo a extremo: Mediante una moderna pila criptográfica (SSL, DTLS), cada texto, llamada de voz y de video se cifra por completo antes de salir de tu dispositivo.
+* Llamadas de voz y video de alta calidad: Disfruta de llamadas nítidas y claras impulsadas por el framework WebRTC.
+* Mensajería de texto segura: Chatea con confianza, sabiendo que tus conversaciones son privadas y directas.
+* Sin registro: Olvídate de entregar datos personales. Tu ID anónima es todo lo que necesitas.
+* Núcleo multiplataforma: Construido sobre un núcleo C++ de alto rendimiento, asegurando seguridad y estabilidad en todas las plataformas.
+
+Tu comunicación privada donde no eres el producto, sino el propietario.
+
+***
+
+### Indonesian (id)
+
+**App name:**
+Mercury - Pesan Pribadi
+
+**Short description:**
+Obrolan & panggilan benar-benar privat, pesan terenkripsi antarperangkat.
+
+**Full description:**
+Mercury: Privasi Sejati adalah Peer-to-Peer.
+
+Mercury dibangun di atas prinsip yang sederhana dan kuat: percakapan Anda adalah milik Anda sepenuhnya. Kami merancang messenger aman yang menghubungkan Anda secara langsung dengan kontak Anda, tanpa peladen (server) pusat di tengah-tengahnya.
+
+Mengapa Mercury Berbeda:
+
+Mercury bukan sekadar aplikasi pesan terenkripsi biasa; ini adalah perubahan mendasar dalam cara Anda berkomunikasi. Dengan memanfaatkan teknologi peer-to-peer (P2P) sejati, pesan, panggilan suara dan video, gambar, serta file Anda dikirim langsung dari perangkat Anda ke perangkat kontak Anda. Kami tidak memiliki server untuk menyimpan data Anda, karena pada dasarnya data Anda tidak pernah melewati kami.
+
+Privasi Anda, Kendali Anda:
+
+* Identitas Anonim: Mulai tanpa nomor telepon atau email. Identitas Anda adalah kunci anonim yang aman, dihasilkan dan disimpan secara eksklusif di perangkat Anda. Anda memegang kendali penuh.
+* Kunci Pengawasan Mandiri: Identitas Anda dilindungi oleh frasa pemulihan 12 kata. Frasa ini dan cadangan terenkripsi adalah satu-satunya cara untuk memulihkan akun Anda, memastikan hanya Anda yang memiliki akses.
+* Cadangan Terenkripsi & Lokal: Buat cadangan terenkripsi yang dilindungi kata sandi untuk identitas, kontak, dan riwayat pesan Anda. Simpan di tempat yang Anda percayai.
+
+Fitur Utama:
+
+* Komunikasi Peer-to-Peer Sejati: Semua pesan dan panggilan dikirim langsung antarperangkat untuk privasi maksimal dan latensi minimal.
+* Enkripsi End-to-End: Menggunakan tumpukan kriptografi modern (SSL, DTLS), setiap teks, panggilan suara, dan panggilan video terenkripsi sepenuhnya sebelum meninggalkan perangkat Anda.
+* Panggilan Suara & Video Kualitas Tinggi: Nikmati panggilan jernih yang didukung oleh kerangka kerja WebRTC.
+* Pesan Teks Aman: Mengobrol dengan tenang, karena Anda tahu percakapan Anda bersifat privat dan langsung.
+* Tanpa Pendaftaran: Lupakan penyerahan data pribadi. ID anonim Anda adalah satu-satunya yang Anda butuhkan.
+* Inti Lintas Platform: Dibangun di atas inti C++ berkinerja tinggi, menjamin keamanan dan stabilitas di berbagai platform.
+
+Komunikasi pribadi Anda di mana Anda bukanlah produk, melainkan pemiliknya.
+
+***
+
+### Japanese (ja)
+
+**App name:**
+Mercury - プライベートメッセンジャー
+
+**Short description:**
+完全プライベートなチャットと通話。デバイス間で直接送受信する暗号化メッセージ。
+
+**Full description:**
+Mercury: 真のプライバシーはピアツーピアにあり。
+
+Mercuryは、「会話はあなただけのもの」というシンプルかつ強力な理念に基づいて構築されています。私たちは、中央サーバーを介さず、連絡先とあなたを直接結びつける安全なメッセンジャーを開発しました。
+
+Mercuryが特別な理由:
+
+Mercuryは単なる暗号化メッセンジャーではなく、コミュニケーションのあり方を根本から変えるものです。真のピアツーピア（P2P）テクノロジーを活用し、メッセージ、音声・ビデオ通話、画像、ファイルは、あなたのデバイスから相手のデバイスへ直接送信されます。データが私たちを経由することは一切ないため、あなたのデータを保存するサーバーすら存在しません。
+
+プライバシーをあなたの手に:
+
+* 匿名のアイデンティティ: 電話番号やメールアドレスなしで使い始められます。あなたのアイデンティティは、デバイス上でのみ生成・保存される安全で匿名のキーです。あなたがすべてを管理します。
+* セルフカストディ・キー: あなたのアカウントは12単語のリカバリーフレーズによって保護されます。これと暗号化されたバックアップだけがアカウントを復元する唯一の手段であり、あなた以外の誰もアクセスできません。
+* 暗号化されたローカルバックアップ: アイデンティティ、連絡先、メッセージ履歴の、パスワードで保護された完全な暗号化バックアップを作成できます。あなたが信頼する場所に保存してください。
+
+主な機能:
+
+* 真のピアツーピア通信: すべてのメッセージと通話はデバイス間で直接送受信され、最大限のプライバシーと最小限の遅延を実現します。
+* エンドツーエンド暗号化: 最新の暗号化スタック（SSL, DTLS）を使用し、すべてのテキスト、音声、ビデオ通話はデバイスを離れる前に完全に暗号化されます。
+* 高音質・高画質通話: WebRTCフレームワークを活用した、クリアで鮮明な通話を体験してください。
+* 安全なテキストメッセージング: 会話が直接的かつプライベートであることを確信して、安心してチャットを楽しめます。
+* 登録不要: 個人情報の提供は一切不要です。必要なのは匿名のIDだけ。
+* クロスプラットフォーム・コア: 高性能なC++コアを採用し、様々なプラットフォームをまたいでも安全性と安定性を保証します。
+
+あなたが商品ではなく、所有者となるプライベートなコミュニケーション。
+
+***
+
+### Portuguese (pt)
+
+**App name:**
+Mercury - Mensageiro Privado
+
+**Short description:**
+Chats e chamadas 100% privados, mensagens criptografadas entre dispositivos.
+
+**Full description:**
+Mercury: A verdadeira privacidade é Peer-to-Peer.
+
+O Mercury baseia-se num princípio simples e poderoso: as suas conversas são apenas suas. Desenvolvemos um mensageiro seguro que o liga diretamente aos seus contactos, sem servidores centrais pelo meio.
+
+Porque o Mercury é diferente:
+
+O Mercury não é apenas mais um mensageiro criptografado; é uma mudança fundamental na forma como comunica. Ao aproveitar a verdadeira tecnologia peer-to-peer (P2P), as suas mensagens, chamadas de voz e vídeo, imagens e ficheiros são transmitidos diretamente do seu dispositivo para o dispositivo do seu contacto. Não temos servidores para armazenar os seus dados, porque os seus dados nunca passam por nós.
+
+A sua privacidade, o seu controlo:
+
+* Identidade anónima: Comece sem número de telefone ou e-mail. A sua identidade é uma chave segura e anónima gerada e armazenada exclusivamente no seu dispositivo. Você tem o controlo total.
+* Chaves de auto-custódia: A sua identidade é protegida por uma frase de recuperação de 12 palavras. Esta frase e as cópias de segurança criptografadas são as únicas formas de restaurar a sua conta, garantindo que só você tem acesso.
+* Cópias de segurança locais e criptografadas: Crie uma cópia de segurança totalmente criptografada e protegida por palavra-passe da sua identidade, contactos e histórico de mensagens. Guarde-a onde confiar.
+
+Funcionalidades principais:
+
+* Verdadeira comunicação Peer-to-Peer: Todas as mensagens e chamadas são enviadas diretamente entre dispositivos para a máxima privacidade e mínima latência.
+* Criptografia ponta-a-ponta: Utilizando um stack criptográfico moderno (SSL, DTLS), cada texto, chamada de voz e de vídeo é totalmente criptografado antes de sair do seu dispositivo.
+* Chamadas de voz e vídeo de alta qualidade: Desfrute de chamadas nítidas e claras impulsionadas pelo framework WebRTC.
+* Mensagens de texto seguras: Converse com confiança, sabendo que as suas conversas são privadas e diretas.
+* Sem registo: Esqueça a partilha de dados pessoais. O seu ID anónimo é tudo o que precisa.
+* Núcleo multiplataforma: Construído num núcleo C++ de alto desempenho, garantindo segurança e estabilidade em todas as plataformas.
+
+Sua comunicação privada onde você não é o produto, mas o proprietário.
+
+***
+
+### Turkish (tr)
+
+**App name:**
+Mercury - Gizli Mesajlaşma
+
+**Short description:**
+Tamamen gizli sohbet ve aramalar, cihazlar arası doğrudan şifreli iletişim.
+
+**Full description:**
+Mercury: Gerçek Gizlilik Uçtan Ucadır (Peer-to-Peer).
+
+Mercury basit ve güçlü bir prensiple geliştirildi: konuşmalarınız sadece size aittir. Sizi kişilerinize doğrudan bağlayan, ortada hiçbir merkezi sunucunun bulunmadığı güvenli bir mesajlaşma uygulaması tasarladık.
+
+Mercury Neden Farklı?
+
+Mercury sadece şifreli bir mesajlaşma uygulaması değildir; iletişim kurma şeklinizde temel bir değişikliktir. Gerçek uçtan uca (P2P) teknolojisini kullanarak mesajlarınız, sesli ve görüntülü aramalarınız, resimleriniz ve dosyalarınız doğrudan cihazınızdan karşı tarafın cihazına iletilir. Verilerinizi depolayacak sunucularımız yok, çünkü verileriniz bizim üzerimizden hiçbir zaman geçmez.
+
+Sizin Gizliliğiniz, Sizin Kontrolünüz:
+
+* Anonim Kimlik: Telefon numarası veya e-posta olmadan kullanmaya başlayın. Kimliğiniz, özel olarak sadece cihazınızda oluşturulan ve saklanan güvenli, anonim bir anahtardır. Kontrol tamamen sizde.
+* Kendi Kendine Saklanan Anahtarlar (Self-Custody): Kimliğiniz 12 kelimelik bir kurtarma ifadesiyle korunur. Hesabınızı geri yüklemenin tek yolu bu ifade ve şifrelenmiş yedeklemelerdir; böylece erişimi olan tek kişi siz olursunuz.
+* Şifrelenmiş ve Yerel Yedekler: Kimliğinizin, kişilerinizin ve mesaj geçmişinizin tamamen şifrelenmiş, parola korumalı bir yedeğini oluşturun. Güvendiğiniz dilediğiniz yerde saklayın.
+
+Temel Özellikler:
+
+* Gerçek P2P İletişim: Maksimum gizlilik ve minimum gecikme için tüm mesajlar ve aramalar cihazlar arasında doğrudan gönderilir.
+* Uçtan Uca Şifreleme: Modern kriptografik altyapı (SSL, DTLS) kullanılarak, her metin, sesli arama ve görüntülü arama cihazınızdan çıkmadan önce tamamen şifrelenir.
+* Yüksek Kaliteli Sesli ve Görüntülü Aramalar: WebRTC altyapısıyla güçlendirilmiş net ve kesintisiz aramaların keyfini çıkarın.
+* Güvenli Mesajlaşma: Sohbetlerinizin tamamen gizli ve doğrudan yapıldığını bilerek güvenle mesajlaşın.
+* Kayıt Olmak Yok: Kişisel verilerinizi başkalarına vermeyi unutun. İhtiyacınız olan tek şey anonim kimliğinizdir.
+* Çapraz Platform Çekirdek: Tüm platformlarda güvenlik ve kararlılık sağlayan yüksek performanslı C++ çekirdeği üzerine inşa edilmiştir.
+
+Ürün değil, sahip olduğunuz özel iletişim alanınız.
