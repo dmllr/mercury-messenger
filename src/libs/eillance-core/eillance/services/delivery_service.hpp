@@ -29,6 +29,7 @@ class DeliveryService {
 
   std::unordered_set<ContactID> pendingConnections_{};
   std::unordered_map<ContactID, int> retryDelaysS_{};
+  std::unordered_set<ContactID> retryScheduled_{};
   std::recursive_mutex mutex_;
   std::vector<EventQueue::SubscriberTypeId> event_unsubs_;
 
@@ -44,16 +45,19 @@ class DeliveryService {
       : storage_(sm->storage),
         contactManager_(sm->contact_manager),
         transport_(sm->data_transport) {
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>([this](auto const& e) {
-      ConnectionAttemptFinished(e.peer_id);
-    }));
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>(
+        [this](auto const& e) -> void { ConnectionAttemptFinished(e.peer_id); }
+    ));
 
-    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventStopDeliveryService>([this](auto const&) { Stop(); })
-    );
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventStopDeliveryService>([this](auto const&) -> void {
+      Stop();
+    }));
   }
 
   ~DeliveryService() {
-    for (auto const id : event_unsubs_) EventQueue::Instance().Unsubscribe(id);
+    for (auto const id : event_unsubs_) {
+      EventQueue::Instance().Unsubscribe(id);
+    }
     Stop();
   }
 
@@ -61,7 +65,7 @@ class DeliveryService {
     if (isRunning_.exchange(true)) {
       return;
     }
-    dispatchQueue_.Dispatch([this] {
+    dispatchQueue_.Dispatch([this]() -> void {
       CheckForSuspensions();
       CheckForAllQueuedMessages();
     });
@@ -75,12 +79,18 @@ class DeliveryService {
     {
       std::lock_guard<std::recursive_mutex> const lock(mutex_);
       pendingConnections_.clear();
+      retryScheduled_.clear();
     }
     dispatchQueue_.RemovePending();
   }
 
   void ConnectionAttemptFinished(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
+
+    if (!pendingConnections_.contains(peer_id)) {
+      return;
+    }
+
     pendingConnections_.erase(peer_id);
 
     if (!isRunning_) {
@@ -92,7 +102,7 @@ class DeliveryService {
       has_work = true;
     } else {
       auto const attachments = storage_->GetPendingAttachments(peer_id);
-      has_work = std::ranges::any_of(attachments, [](auto const& att) {
+      has_work = std::ranges::any_of(attachments, [](auto const& att) -> bool {
         return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
       });
     }
@@ -108,6 +118,10 @@ class DeliveryService {
         return;
       }
 
+      if (retryScheduled_.contains(peer_id)) {
+        return;
+      }
+
       int& delay = retryDelaysS_[peer_id];
       if (delay == 0) {
         delay = initialRetryDelayS;
@@ -115,7 +129,14 @@ class DeliveryService {
 
       LGI << "Connection to " << peer_id << " failed or did not clear queue. Retrying in " << delay << "s.";
 
-      dispatchQueue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() { AttemptDelivery(peer_id); });
+      retryScheduled_.insert(peer_id);
+      dispatchQueue_.DispatchAfter(std::chrono::seconds(delay), [this, peer_id]() -> void {
+        {
+          std::lock_guard<std::recursive_mutex> const lock(mutex_);
+          retryScheduled_.erase(peer_id);
+        }
+        AttemptDelivery(peer_id);
+      });
       delay = std::min(delay * 2, maxRetryDelayS);
     } else {
       retryDelaysS_.erase(peer_id);
@@ -134,7 +155,7 @@ class DeliveryService {
         has_work = true;
       } else {
         auto const attachments = storage_->GetPendingAttachments(peer_id);
-        has_work = std::ranges::any_of(attachments, [](auto const& att) {
+        has_work = std::ranges::any_of(attachments, [](auto const& att) -> bool {
           return att.status == AttachmentStatus::pending || att.status == AttachmentStatus::transferring;
         });
       }
@@ -178,7 +199,7 @@ class DeliveryService {
     if (!isRunning_) {
       return;
     }
-    dispatchQueue_.DispatchAfter(kSuspensionCheckInterval, [this] {
+    dispatchQueue_.DispatchAfter(kSuspensionCheckInterval, [this]() -> void {
       CheckForSuspensions();
       ScheduleSuspensionCheck();
     });
