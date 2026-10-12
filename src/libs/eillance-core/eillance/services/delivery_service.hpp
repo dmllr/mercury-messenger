@@ -45,6 +45,13 @@ class DeliveryService {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventConnectionAttemptFinished>(
         [this](auto const& e) -> void { ConnectionAttemptFinished(e.peer_id); }
     ));
+
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelOpen>(
+        [this](auto const& e) -> void {
+          std::lock_guard<std::recursive_mutex> const lock(mutex_);
+          retry_delays_s_.erase(e.peer_id);
+        }
+    ));
   }
 
   ~DeliveryService() {

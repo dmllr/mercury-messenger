@@ -53,8 +53,8 @@ class Libp2pDataTransport : public DataTransport::Interface {
     if (!node_) {
       node_ = std::make_shared<Libp2pNode>(secret_key_);
 
-      node_->SetOnConnected([this](ContactID const& peer_id) -> void {
-        rx_queue_.Dispatch([this, peer_id]() -> void {
+      node_->SetOnConnected([this](ContactID const& peer_id, bool is_circuit) -> void {
+        rx_queue_.Dispatch([this, peer_id, is_circuit]() -> void {
           auto p = GetPeer(peer_id);
           if (!p) {
             p = std::make_shared<Peer>(peer_id);
@@ -62,7 +62,8 @@ class Libp2pDataTransport : public DataTransport::Interface {
           }
           p->data_channel_is_open = true;
           p->is_connecting = false;
-          LGI << "Peer connected: " << peer_id.ToString();
+          p->is_circuit = is_circuit;
+          LGI << "Peer connected: " << peer_id.ToString() << (is_circuit ? " (circuit)" : " (direct)");
           EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
           EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
         });
