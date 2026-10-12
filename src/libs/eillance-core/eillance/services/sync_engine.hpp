@@ -280,7 +280,7 @@ class SyncEngine {
     storage_->AddLedgerEntry(entry);
     lock.unlock();
 
-    EventQueue::Instance().Push(EventLedgerAppended{entry});
+    EventQueue::Instance().Push(EventLedgerAppended{entry, false});
 
     storage_->AddSyncRequest({topic_id, target_peer, Timestamp::Now(), Timestamp{0}});
 
@@ -530,10 +530,6 @@ class SyncEngine {
               storage_->AddLedgerEntry(e);
             }
           }
-
-          if (!actually_new.empty()) {
-            std::ignore = ValidateAndRepairChain(topic_id);
-          }
         }
 
         {
@@ -543,7 +539,7 @@ class SyncEngine {
         }
 
         for (auto const& e : actually_new) {
-          EventQueue::Instance().Push(EventLedgerAppended{e});
+          EventQueue::Instance().Push(EventLedgerAppended{e, true});
         }
 
         Json entries_json = Json::array();
@@ -603,14 +599,10 @@ class SyncEngine {
               storage_->AddLedgerEntry(e);
             }
           }
-
-          if (!actually_new.empty()) {
-            std::ignore = ValidateAndRepairChain(topic_id);
-          }
         }
 
         for (auto const& e : actually_new) {
-          EventQueue::Instance().Push(EventLedgerAppended{e});
+          EventQueue::Instance().Push(EventLedgerAppended{e, true});
         }
 
         bool has_more_batches = false;

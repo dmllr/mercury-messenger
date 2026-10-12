@@ -144,6 +144,7 @@ struct EventContactUnwilling {
 // --- Ledger Sync Events ---
 struct EventLedgerAppended {
   messaging::LedgerEntry entry;
+  bool is_synced = false;
 };
 
 // Orchestration Events replacing cross-service calls
