@@ -56,10 +56,12 @@ pub struct TurnServerHandle {
 }
 
 pub async fn start_turn_server(public_ip: String, requested_port: u16, auth: Arc<TurnAuthenticator>) -> Result<(u16, TurnServerHandle), String> {
-  let bind_addr = format!("0.0.0.0:{}", requested_port);
+  let is_ipv6 = public_ip.contains(':');
+  let bind_ip = if is_ipv6 { "::" } else { "0.0.0.0" };
+  let bind_addr = format!("{}:{}", bind_ip, requested_port);
   let udp_socket = match UdpSocket::bind(&bind_addr).await {
       Ok(s) => s,
-      Err(_) => UdpSocket::bind("0.0.0.0:0").await.map_err(|e| e.to_string())?,
+      Err(_) => UdpSocket::bind(format!("{}:0", bind_ip)).await.map_err(|e| e.to_string())?,
   };
   let port = udp_socket.local_addr().map_err(|e| e.to_string())?.port();
   let conn = Arc::new(udp_socket);
@@ -69,7 +71,7 @@ pub async fn start_turn_server(public_ip: String, requested_port: u16, auth: Arc
         conn: conn as std::sync::Arc<dyn webrtc_util::Conn + std::marker::Send + std::marker::Sync>,
         relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
             relay_address: public_ip.parse().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))),
-            address: "0.0.0.0".to_string(),
+            address: bind_ip.to_string(),
             min_port: 50000,
             max_port: 50500,
             max_retries: 10,
@@ -78,17 +80,16 @@ pub async fn start_turn_server(public_ip: String, requested_port: u16, auth: Arc
     }],
     realm: "mercury".to_string(),
     auth_handler: Arc::new(MercuryAuthHandler { auth }),
-    channel_bind_timeout: std::time::Duration::from_secs(0),
+    channel_bind_timeout: std::time::Duration::from_secs(600),
     alloc_close_notify: None,
   };
 
+  let server = Server::new(config).await.map_err(|e| e.to_string())?;
   let (close_tx, close_rx) = tokio::sync::oneshot::channel::<()>();
 
   tokio::spawn(async move {
-    if let Ok(server) = Server::new(config).await {
-       let _ = close_rx.await;
-       let _ = server.close().await;
-    }
+     let _ = close_rx.await;
+     let _ = server.close().await;
   });
 
   Ok((port, TurnServerHandle { close_tx }))

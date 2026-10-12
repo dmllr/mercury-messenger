@@ -125,6 +125,7 @@ class Client final {
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
               sm_->sync_engine->Start();
+              sm_->data_transport->DiscoverTurnRelays();
             }
           }
         })
@@ -146,22 +147,32 @@ class Client final {
     );
 
     event_unsubs_.emplace_back(
+        EventQueue::Instance().Subscribe<EventDataChannelOpen>([this](auto const& e) -> void {
+          background_queue_.DispatchAfter(std::chrono::seconds(2), [this, peer_id = e.peer_id]() {
+            sm_->data_transport->AuthTurnRelay(peer_id);
+          });
+        })
+    );
+
+    event_unsubs_.emplace_back(
         EventQueue::Instance().Subscribe<EventTurnRelaysDiscovered>([this](auto const& e) -> void {
           auto relays = e.peer_ids;
           std::mt19937 g(std::random_device{}());
           std::shuffle(relays.begin(), relays.end(), g);
           int count = 0;
           for (auto const& r : relays) {
-            if (count++ >= 3) break;
+            if (count++ >= 10) break;
             sm_->data_transport->AuthTurnRelay(r);
           }
         })
     );
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventTurnAuthResult>([this](auto const& e) -> void {
-      if (e.success) {
+      if (e.success && e.port > 0 && !e.public_ip.empty()) {
+        LGI << "Adding dynamic TURN server " << e.public_ip << ":" << e.port;
         {
           std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
+          std::erase_if(dynamic_turn_servers_, [&](auto const& s) { return s.peer_id == e.peer_id; });
           dynamic_turn_servers_.push_back(
               {e.peer_id, e.public_ip, e.port, e.username, e.credential, std::chrono::steady_clock::now()}
           );
@@ -577,6 +588,13 @@ class Client final {
         }
       }
     }
+
+    static int turn_discovery_counter = 0;
+    if (++turn_discovery_counter >= 15) {
+      turn_discovery_counter = 0;
+      sm_->data_transport->DiscoverTurnRelays();
+    }
+
     background_queue_.DispatchAfter(peerInactivityCheckInterval, [this] { CheckForInactivePeers(); });
   }
 
@@ -627,11 +645,24 @@ class Client final {
       });
 
       for (auto const& ts : dynamic_turn_servers_) {
+        std::string ip_str = ts.ip;
+        if (ip_str.find(':') != std::string::npos) {
+          ip_str = "[" + ip_str + "]";
+        }
+
         Json turn_server;
-        turn_server["urls"] = std::vector<std::string>{"turn:" + ts.ip + ":" + std::to_string(ts.port)};
+        turn_server["urls"] = std::vector<std::string>{
+            "turn:" + ip_str + ":" + std::to_string(ts.port) + "?transport=udp"
+        };
         turn_server["username"] = ts.username;
         turn_server["credential"] = ts.credential;
         final_config.push_back(turn_server);
+
+        Json stun_server;
+        stun_server["urls"] = std::vector<std::string>{
+            "stun:" + ip_str + ":" + std::to_string(ts.port)
+        };
+        final_config.push_back(stun_server);
       }
     }
 
