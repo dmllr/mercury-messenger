@@ -82,7 +82,7 @@ pub(crate) fn handle_swarm_event(
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Identify(e)) => handle_identify(e, state, swarm, callbacks),
     SwarmEvent::ExternalAddrConfirmed { address } => {
-      handle_external_addr_confirmed(address, state, callbacks, role, tx)
+      handle_external_addr_confirmed(address, state, swarm, callbacks, role, tx)
     }
     SwarmEvent::NewExternalAddrCandidate { address } => {
       handle_new_external_addr_candidate(address, state, callbacks, role, tx)
@@ -314,15 +314,11 @@ fn handle_identify(
     if !state.has_bootstrapped {
       if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
         crate::node_log!(callbacks, 5, "Kademlia bootstrap not ready: {:?}", e);
-      } else {
-        state.has_bootstrapped = true;
-        crate::node_log!(callbacks, 3, "Kademlia bootstrap initiated");
-        for key_bytes in &state.providing_keys {
-          let key = libp2p::kad::RecordKey::new(key_bytes);
-          let _ = swarm.behaviour_mut().kademlia.start_providing(key);
-        }
-      }
-    }
+              } else {
+                state.has_bootstrapped = true;
+                crate::node_log!(callbacks, 3, "Kademlia bootstrap initiated");
+              }
+            }
     if state.pending_dials.contains_key(&peer_id) {
       state.do_dial(peer_id, swarm, callbacks);
     }
@@ -370,12 +366,19 @@ fn check_and_update_public_ip(
 fn handle_external_addr_confirmed(
   address: Multiaddr,
   state: &mut EventLoopState,
+  swarm: &mut Swarm<MercuryBehaviour>,
   callbacks: &Callbacks,
   role: NodeRole,
   tx: &mpsc::UnboundedSender<Command>,
 ) {
   crate::node_log!(callbacks, 3, "External address confirmed: {}", address);
   check_and_update_public_ip(address, state, callbacks, role, tx);
+
+  crate::node_log!(callbacks, 3, "Re-publishing provider records due to external address confirmation.");
+  for key_bytes in &state.providing_keys {
+    let key = libp2p::kad::RecordKey::new(key_bytes);
+    let _ = swarm.behaviour_mut().kademlia.start_providing(key);
+  }
 }
 
 fn handle_new_external_addr_candidate(
@@ -568,6 +571,27 @@ fn handle_kademlia(
           }
         }
       }
+    }
+    kad::Event::OutboundQueryProgressed {
+      result: kad::QueryResult::Bootstrap(res),
+      step,
+      ..
+    } => {
+      crate::node_log!(callbacks, 4, "Kademlia Bootstrap progressed: step={:?} res={:?}", step, res);
+      if step.last {
+        crate::node_log!(callbacks, 3, "Kademlia bootstrap finished. Publishing provider records.");
+        for key_bytes in &state.providing_keys {
+          let key = libp2p::kad::RecordKey::new(key_bytes);
+          let _ = swarm.behaviour_mut().kademlia.start_providing(key);
+        }
+      }
+    }
+    kad::Event::OutboundQueryProgressed {
+      result: kad::QueryResult::StartProviding(res),
+      step,
+      ..
+    } => {
+      crate::node_log!(callbacks, 4, "Kademlia StartProviding progressed: step={:?} res={:?}", step, res);
     }
     kad::Event::RoutingUpdated { peer, addresses, .. } => {
       crate::node_log!(callbacks, 5, "Kademlia RoutingUpdated for {}: {:?}", peer, addresses);
