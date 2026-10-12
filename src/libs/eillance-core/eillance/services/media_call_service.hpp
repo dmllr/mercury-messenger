@@ -27,6 +27,8 @@
 namespace eillance::services {
 
 class MediaCallService {
+  using Json = nlohmann::json;
+
  public:
   struct CallSessionInfo {
     CallID call_id;
@@ -100,7 +102,7 @@ class MediaCallService {
     media_transport_->StartLocalMedia(current_call_->is_video);
     SetCallState(CallState::active);
 
-    nlohmann::json const msg = {{"type", "call_accept"}, {"call_id", current_call_->call_id.ToString()}};
+    Json const msg = {{"type", "call_accept"}, {"call_id", current_call_->call_id.ToString()}};
 
     if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = data_transport_->SendJson(peer_id, msg);
@@ -115,7 +117,7 @@ class MediaCallService {
       return;
     }
 
-    nlohmann::json const msg = {{"type", "call_reject"}, {"call_id", current_call_->call_id.ToString()}};
+    Json const msg = {{"type", "call_reject"}, {"call_id", current_call_->call_id.ToString()}};
     if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = data_transport_->SendJson(peer_id, msg);
     }
@@ -132,7 +134,7 @@ class MediaCallService {
     }
 
     if (notify_peer && current_call_) {
-      nlohmann::json const msg = {{"type", "hangup"}, {"call_id", current_call_->call_id.ToString()}};
+      Json const msg = {{"type", "hangup"}, {"call_id", current_call_->call_id.ToString()}};
       if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = data_transport_->SendJson(peer_id, msg);
       }
@@ -159,7 +161,7 @@ class MediaCallService {
         return;
       }
 
-      nlohmann::json const msg = {{"type", "call_reject"}, {"call_id", call_id}, {"reason", "busy"}};
+      Json const msg = {{"type", "call_reject"}, {"call_id", call_id}, {"reason", "busy"}};
       if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = data_transport_->SendJson(peer_id, msg);
       }
@@ -334,7 +336,7 @@ class MediaCallService {
             std::string const type = current_call_->is_outgoing ? "offer" : "answer";
             LGI << "[WebRTC] ICE Gathering complete. Sending " << type << " to " << peer_id.ToString();
             LGD << "[WebRTC] Generated Local SDP:\n" << *sdp;
-            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+            Json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             }
@@ -519,7 +521,7 @@ class MediaCallService {
             std::string const type = current_call_->is_outgoing ? "offer" : "answer";
             LGI << "[WebRTC] Forced sending " << type << " to " << peer_id.ToString() << " after ICE timeout.";
             LGD << "[WebRTC] Generated Local SDP:\n" << *sdp;
-            nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
+            Json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
             if (peer->data_channel_is_open) {
               std::ignore = data_transport_->SendJson(peer_id, msg);
             }
@@ -589,7 +591,7 @@ class MediaCallService {
   }
 
   void TriggerIncomingRing(ContactID const& peer_id) {
-    nlohmann::json const msg = {{"type", "call_ringing"}, {"call_id", current_call_->call_id.ToString()}};
+    Json const msg = {{"type", "call_ringing"}, {"call_id", current_call_->call_id.ToString()}};
     if (auto peer = data_transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = data_transport_->SendJson(peer_id, msg);
     }
@@ -609,7 +611,7 @@ class MediaCallService {
     auto const call_kind =
         current_call_->is_video ? messaging::HistoryEntryKind::videoCall : messaging::HistoryEntryKind::voiceCall;
 
-    nlohmann::json const msg = {
+    Json const msg = {
         {"type", "call_request"},
         {"call_id", current_call_->call_id.ToString()},
         {"kind", static_cast<int>(call_kind)}

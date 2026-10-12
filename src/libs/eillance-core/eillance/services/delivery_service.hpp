@@ -226,7 +226,9 @@ class DeliveryService {
 
   [[nodiscard]] auto CheckIfUnreachable(ContactID const& peer_id) const -> bool {
     auto sending_msgs = storage_->GetMessagesWithStatus(peer_id, messaging::MessageStatus::sending);
-    std::erase_if(sending_msgs, [](auto const& msg) { return msg.kind == messaging::HistoryEntryKind::systemMessage; });
+    std::erase_if(sending_msgs, [](auto const& msg) -> bool {
+      return msg.kind == messaging::HistoryEntryKind::systemMessage;
+    });
 
     if (sending_msgs.empty()) {
       return false;
@@ -239,8 +241,7 @@ class DeliveryService {
       }
     }
 
-    auto it = manual_retry_time_.find(peer_id);
-    if (it != manual_retry_time_.end() && it->second > oldest) {
+    if (auto it = manual_retry_time_.find(peer_id); it != manual_retry_time_.end() && it->second > oldest) {
       oldest = it->second;
     }
 
@@ -252,8 +253,7 @@ class DeliveryService {
     if (!contact_manager_) {
       return;
     }
-    auto const all_contacts = contact_manager_->GetContacts();
-    for (auto const& contact : all_contacts) {
+    for (auto const& contact : contact_manager_->GetContacts()) {
       if (contact.status != identity::ContactStatus::rejected) {
         AttemptDelivery(contact.peer_id);
       }

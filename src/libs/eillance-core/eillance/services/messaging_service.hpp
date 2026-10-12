@@ -80,6 +80,8 @@ auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& fi
 }  // namespace
 
 class MessagingService {
+  using Json = nlohmann::json;
+
  public:
   static constexpr std::uint16_t protocolVersion = 2;
   static constexpr std::uint16_t minSupportedVersion = 1;
@@ -88,7 +90,7 @@ class MessagingService {
 
   struct Serializer {
     static auto BuildE2EEPayload(std::string const& content) -> std::string {
-      nlohmann::json payload_json;
+      Json payload_json;
       payload_json[MessagingService::keyVersion] = MessagingService::protocolVersion;
       payload_json[MessagingService::keyContent] = content;
       return payload_json.dump();
@@ -231,14 +233,14 @@ class MessagingService {
          .reply_to_id = reply_to_id}
     );
 
-    nlohmann::json payload_json;
+    Json payload_json;
     payload_json[keyVersion] = protocolVersion;
     payload_json[keyContent] = message;
     if (reply_to_id > 0) {
       payload_json["reply_to_id"] = reply_to_id;
     }
 
-    nlohmann::json json_msg = {
+    Json json_msg = {
         {"type", "chat"},
         {"message_id", entry.id},
         {"timestamp", entry.timestamp},
@@ -247,7 +249,7 @@ class MessagingService {
     };
 
     if (!domain_attachments.empty()) {
-      std::vector<nlohmann::json> att_list;
+      std::vector<Json> att_list;
       att_list.reserve(domain_attachments.size());
       for (auto const& att : domain_attachments) {
         att_list.push_back(
@@ -278,7 +280,7 @@ class MessagingService {
   void SendDeleteMessage(ContactID const& peer_id, std::uint64_t message_id) {
     history_->MarkMessageDeleted(peer_id, message_id);
 
-    nlohmann::json const action = {{"type", "message_delete"}, {"target_id", message_id}};
+    Json const action = {{"type", "message_delete"}, {"target_id", message_id}};
 
     sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::MessageDelete, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
@@ -287,7 +289,7 @@ class MessagingService {
   void SendEditMessage(ContactID const& peer_id, std::uint64_t message_id, std::string const& new_content) {
     history_->UpdateMessageContent(peer_id, message_id, new_content);
 
-    nlohmann::json const action = {{"type", "message_edit"}, {"target_id", message_id}, {"content", new_content}};
+    Json const action = {{"type", "message_edit"}, {"target_id", message_id}, {"content", new_content}};
 
     sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::MessageEdit, action);
     EventQueue::Instance().Push(EventMessageUpdated{peer_id, message_id});
@@ -296,7 +298,7 @@ class MessagingService {
   void SendReaction(ContactID const& peer_id, std::uint64_t message_id, messaging::Reaction reaction) {
     history_->ToggleReaction(peer_id, message_id, sm_->account->GetId(), reaction);
 
-    nlohmann::json const action = {
+    Json const action = {
         {"type", "message_reaction"},
         {"target_id", message_id},
         {"reaction", static_cast<int>(reaction)}
@@ -317,7 +319,7 @@ class MessagingService {
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, entry});
 
     if (persist) {
-      nlohmann::json const action_payload = {
+      Json const action_payload = {
           {"type", "chat"},
           {"message_id", entry.id},
           {"timestamp", entry.timestamp},
@@ -382,7 +384,7 @@ class MessagingService {
     }
 
     if (should_send_cancel) {
-      nlohmann::json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
+      Json const cancel_msg = {{"type", "file_cancel"}, {"file_id", attachment_id}};
       sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, cancel_msg);
     }
   }
@@ -487,12 +489,12 @@ class MessagingService {
     if (message_ids.empty()) {
       return;
     }
-    nlohmann::json const msg = {{"type", "message_read"}, {"message_ids", message_ids}};
+    Json const msg = {{"type", "message_read"}, {"message_ids", message_ids}};
     sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, msg);
   }
 
   // --- Read Model Projections ---
-  void ProjectMessage(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectMessage(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -564,7 +566,7 @@ class MessagingService {
     uint64_t msg_timestamp = json.value("timestamp", ledger_ts);
 
     bool const is_system = json.value("is_system", false);
-    auto payload = json.value("payload", nlohmann::json::object());
+    auto payload = json.value("payload", Json::object());
     std::string const content = payload.value(keyContent, "");
     uint64_t const reply_to_id = payload.value("reply_to_id", 0ULL);
 
@@ -633,7 +635,7 @@ class MessagingService {
     }
   }
 
-  void ProjectEdit(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -646,7 +648,7 @@ class MessagingService {
     }
   }
 
-  void ProjectDelete(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -658,7 +660,7 @@ class MessagingService {
     }
   }
 
-  void ProjectReaction(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -671,7 +673,7 @@ class MessagingService {
     }
   }
 
-  void ProjectCallLog(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool is_mine) {
+  void ProjectCallLog(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
     if (is_mine) {
       return;
     }
@@ -720,7 +722,7 @@ class MessagingService {
   void AddCallEntry(messaging::CallEntryParams const& params, bool sync_to_ledger) {
     auto const entry = history_->AddCallEntry(params);
     if (sync_to_ledger) {
-      nlohmann::json const payload = {
+      Json const payload = {
           {"is_video", params.kind == messaging::HistoryEntryKind::videoCall},
           {"duration_seconds", params.duration_seconds},
           {"call_status", static_cast<int>(params.status)},
@@ -749,7 +751,7 @@ class MessagingService {
 
   void OnChatMessageReceived(
       ContactID const& peer_id,
-      nlohmann::json const& payload,
+      Json const& payload,
       uint64_t message_id,
       bool is_system,
       std::vector<messaging::Attachment> const& attachments = {}
@@ -786,7 +788,7 @@ class MessagingService {
       }
       content = payload.at(keyContent).get<std::string>();
     } catch (std::exception const&) {
-      nlohmann::json const error_json = {{"action", "unsupported_format"}};
+      Json const error_json = {{"action", "unsupported_format"}};
       auto entry = history_->AddTextEntry(
           {.peer_id = peer_id,
            .content = error_json.dump(),
@@ -888,7 +890,7 @@ class MessagingService {
     if (ids.empty()) {
       return;
     }
-    nlohmann::json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", ids}};
+    Json const receipt = {{"type", "message_receipt"}, {"status", "delivered"}, {"message_ids", ids}};
     sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::Message, receipt);
   }
 

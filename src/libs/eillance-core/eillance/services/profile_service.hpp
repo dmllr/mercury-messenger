@@ -24,6 +24,8 @@
 namespace eillance::services {
 
 class ProfileService {
+  using Json = nlohmann::json;
+
  public:
   explicit ProfileService(ServiceManager* sm)
       : sm_(sm),
@@ -47,7 +49,7 @@ class ProfileService {
   // --- Actions ---
 
   void SendMyProfile(ContactID const& peer_id) {
-    nlohmann::json msg;
+    Json msg;
     msg["type"] = "profile_info";
     msg["display_name"] = sm_->account->GetSettings()->GetMyDisplayName().value_or("");
     msg["bio"] = sm_->account->GetSettings()->GetMyBio().value_or("");
@@ -63,7 +65,7 @@ class ProfileService {
   }
 
   void RequestProfile(ContactID const& peer_id) {
-    nlohmann::json const msg = {{"type", "profile_request"}};
+    Json const msg = {{"type", "profile_request"}};
     sm_->sync_engine->AppendAction(TopicID(peer_id), messaging::LedgerActionType::ProfileUpdate, msg);
   }
 
@@ -80,7 +82,7 @@ class ProfileService {
     }
   }
 
-  void ProjectProfileUpdate(messaging::LedgerEntry const& entry, nlohmann::json const& json, bool const is_mine) {
+  void ProjectProfileUpdate(messaging::LedgerEntry const& entry, Json const& json, bool const is_mine) {
     if (is_mine) {
       return;
     }
@@ -97,7 +99,7 @@ class ProfileService {
 
   // --- Incoming Events ---
 
-  void OnProfileUpdate(ContactID const& peer_id, nlohmann::json const& profile_json) {
+  void OnProfileUpdate(ContactID const& peer_id, Json const& profile_json) {
     auto get_opt = [&](char const* key) -> std::optional<std::string> {
       if (!profile_json.contains(key)) {
         return std::nullopt;
@@ -123,7 +125,7 @@ class ProfileService {
     }
 
     if (changed) {
-      nlohmann::json diff;
+      Json diff;
       diff["action"] = "profile_update_diff";
       diff["new"] = {
           {"display_name", profile_update.display_name},
