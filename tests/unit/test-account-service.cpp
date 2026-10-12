@@ -55,9 +55,7 @@ TEST_F(AccountServiceTest, IdentityGeneration) {
 
 TEST_F(AccountServiceTest, RestoreIdentity) {
   std::string original_mnemonic;
-  {
-    auto temp_id = crypto::Identity::CreateNew(original_mnemonic);
-  }
+  { auto temp_id = crypto::Identity::CreateNew(original_mnemonic); }
 
   EXPECT_TRUE(service_->RestoreIdentity(original_mnemonic));
   EXPECT_TRUE(service_->IdentityExists());
@@ -86,12 +84,12 @@ TEST_F(AccountServiceTest, UpdateProfile) {
 
 TEST_F(AccountServiceTest, UpdateBootstrapNodeUrl) {
   std::string const new_url = "/ip4/127.0.0.1/tcp/1234";
-  service_->UpdateBootstrapNodeUrl(new_url);
+  service_->UpdateBootstrapNodeUrls(new_url);
 
-  EXPECT_EQ(service_->GetSettings()->GetBootstrapNodeUrl(), new_url);
+  EXPECT_EQ(service_->GetSettings()->GetBootstrapNodeUrls(), new_url);
 
   // Verify reconnection triggering implicitly
-  EXPECT_TRUE(client_->GetSettingsManager()->GetBootstrapNodeUrl() == new_url);
+  EXPECT_TRUE(client_->GetSettingsManager()->GetBootstrapNodeUrls() == new_url);
 }
 
 TEST_F(AccountServiceTest, Signing) {

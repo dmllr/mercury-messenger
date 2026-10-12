@@ -17,6 +17,7 @@ class ProcessDef:
   args: List[str]
   # Maps network_name -> ip_address
   networks: Dict[str, str] = field(default_factory=dict)
+  sysctls: Dict[str, int] = field(default_factory=dict)
 
 @dataclass
 class LogExpectation:
@@ -33,8 +34,8 @@ class Scenario:
     self.networks.append(NetworkDef(name, subnet, gateway))
     return self
 
-  def add_process(self, name: str, executable: str, args: List[str], networks: Dict[str, str]):
-    self.processes.append(ProcessDef(name, executable, args, networks))
+  def add_process(self, name: str, executable: str, args: List[str], networks: Dict[str, str], sysctls: Dict[str, int] = None):
+    self.processes.append(ProcessDef(name, executable, args, networks, sysctls or {}))
     return self
 
   def expect_logs(self, process_name: str, lines: List[str]):
@@ -114,6 +115,7 @@ class TestFramework:
           command=full_command,
           volumes=volumes,
           detach=True,
+          sysctls=proc_def.sysctls if proc_def.sysctls else None
         )
         self.active_containers.append(container)
         container_map[proc_def.name] = container

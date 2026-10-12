@@ -46,17 +46,13 @@ class MediaCallService {
       this->OnDataChannelOpen(e.peer_id);
     }));
 
-    event_unsubs_.push_back(
-        EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>([this](auto const& e) {
-          this->OnMediaPeerConnectionStateChange(e.peer_id, e.state);
-        })
-    );
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaPeerConnectionStateChanged>(
+        [this](auto const& e) { this->OnMediaPeerConnectionStateChange(e.peer_id, e.state); }
+    ));
 
-    event_unsubs_.push_back(
-        EventQueue::Instance().Subscribe<EventMediaGatheringStateChanged>([this](auto const& e) -> void {
-          this->OnMediaGatheringStateChange(e.peer_id, e.state_val);
-        })
-    );
+    event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventMediaGatheringStateChanged>(
+        [this](auto const& e) -> void { this->OnMediaGatheringStateChange(e.peer_id, e.state_val); }
+    ));
   }
 
   ~MediaCallService() {

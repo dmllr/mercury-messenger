@@ -114,8 +114,7 @@ class MessagingServiceTest : public ::testing::Test {
 
 TEST_F(MessagingServiceTest, SendMessage_ThumbInPayload) {
   std::vector<messaging::AttachmentRequest> atts;
-  atts.push_back(
-      {"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg", "This is a note"}
+  atts.push_back({"dummy_path", messaging::AttachmentType::image, "base64thumb_content", "image/jpeg", "This is a note"}
   );
 
   std::ofstream(temp_dir_ / "dummy_path").close();

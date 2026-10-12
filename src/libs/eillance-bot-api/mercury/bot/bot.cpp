@@ -49,19 +49,15 @@ class Bot::Impl {
 
   void SetupCallbacks() {
     if (options_.auto_accept_contacts) {
-      event_unsubs_.emplace_back(
-          eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([this](auto const& e) -> void {
-            client_->ConfirmContact(e.peer_id);
-          })
-      );
+      event_unsubs_.emplace_back(eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>(
+          [this](auto const& e) -> void { client_->ConfirmContact(e.peer_id); }
+      ));
     }
 
     if (options_.auto_reject_calls) {
-      event_unsubs_.emplace_back(
-          eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>([this](auto const& e) -> void {
-            client_->RejectCall(e.peer_id);
-          })
-      );
+      event_unsubs_.emplace_back(eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>(
+          [this](auto const& e) -> void { client_->RejectCall(e.peer_id); }
+      ));
     }
 
     event_unsubs_.emplace_back(

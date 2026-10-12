@@ -371,8 +371,8 @@ class MessagingService {
     }
   }
 
-  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id) const
-      -> std::vector<messaging::AttachmentRecord> {
+  [[nodiscard]] auto GetDownloadedAttachments(ContactID const& peer_id
+  ) const -> std::vector<messaging::AttachmentRecord> {
     return storage_->GetDownloadedAttachments(peer_id);
   }
 
@@ -443,8 +443,8 @@ class MessagingService {
     return history_->GetFullMessageContent(peer_id, message_id);
   }
 
-  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids) const
-      -> std::vector<messaging::ChatSummary> {
+  [[nodiscard]] auto GetChatSummaries(std::vector<ContactID> const& peer_ids
+  ) const -> std::vector<messaging::ChatSummary> {
     return history_->GetChatSummaries(peer_ids);
   }
 
