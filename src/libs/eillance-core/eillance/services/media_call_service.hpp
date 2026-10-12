@@ -319,7 +319,7 @@ class MediaCallService {
           if (!sdp) {
             sdp = media_transport_->GetLocalDescription(peer_id);
           }
-          
+
           if (sdp) {
             std::string const type = current_call_->is_outgoing ? "offer" : "answer";
             nlohmann::json const msg = {{"type", type}, {"context", "media"}, {"sdp", *sdp}};
@@ -341,15 +341,14 @@ class MediaCallService {
 
     if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
         state == transport::PeerConnectionState::disconnected) {
-      
       auto const current_state = media_transport_->GetConnectionState(peer_id);
-      if (current_state != transport::PeerConnectionState::failed && 
-          current_state != transport::PeerConnectionState::closed && 
+      if (current_state != transport::PeerConnectionState::failed &&
+          current_state != transport::PeerConnectionState::closed &&
           current_state != transport::PeerConnectionState::disconnected) {
         LGI << "Ignoring stale media connection state event for " << peer_id.ToString();
         return;
       }
-      
+
       if (current_call_ && current_call_->peer_id == peer_id) {
         LGE << "Media connection dropped for call " << current_call_->call_id.ToString() << ". Forcing hangup.";
         TeardownCallInternal(peer_id);

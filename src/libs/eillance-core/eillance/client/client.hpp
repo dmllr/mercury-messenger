@@ -63,15 +63,14 @@ class Client final {
           auto const state = event.state;
           if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed ||
               state == transport::PeerConnectionState::disconnected) {
-            
             auto const current_state = sm_->data_transport->GetConnectionState(event.peer_id);
-            if (current_state != transport::PeerConnectionState::failed && 
-                current_state != transport::PeerConnectionState::closed && 
+            if (current_state != transport::PeerConnectionState::failed &&
+                current_state != transport::PeerConnectionState::closed &&
                 current_state != transport::PeerConnectionState::disconnected) {
               LGI << "Ignoring stale data connection state event for " << event.peer_id.ToString();
               return;
             }
-            
+
             EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
             sm_->data_transport->Disconnect(event.peer_id);
 
@@ -121,8 +120,8 @@ class Client final {
           auto const state = event.state;
           if (state == transport::PeerConnectionState::failed || state == transport::PeerConnectionState::closed) {
             auto const current_state = sm_->media_transport->GetConnectionState(event.peer_id);
-            if (current_state != transport::PeerConnectionState::failed && 
-                current_state != transport::PeerConnectionState::closed && 
+            if (current_state != transport::PeerConnectionState::failed &&
+                current_state != transport::PeerConnectionState::closed &&
                 current_state != transport::PeerConnectionState::disconnected) {
               return;
             }
