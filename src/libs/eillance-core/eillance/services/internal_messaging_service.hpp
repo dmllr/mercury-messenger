@@ -165,11 +165,10 @@ class InternalMessagingService {
     }
 
     if (auto peer = data_transport_->GetPeer(peer_id); !peer) {
-      if (type == transport::protocol::values::offer) {
-        peer = std::make_shared<transport::Peer>(peer_id);
-        data_transport_->AddPeer(peer_id, peer);
-        media_transport_->AttachToPeer(peer_id, peer);
-      } else {
+        if (type == transport::protocol::values::offer) {
+          peer = std::make_shared<transport::Peer>(peer_id);
+          data_transport_->AddPeer(peer_id, peer);
+        } else {
         return;
       }
     } else {

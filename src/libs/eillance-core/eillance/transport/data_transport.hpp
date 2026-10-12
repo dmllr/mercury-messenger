@@ -10,7 +10,6 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/transport/peer.hpp"
 #include "eillance/transport/peer_connection_state.hpp"
-#include "eillance/transport/track.hpp"
 
 namespace eillance::transport {
 
@@ -25,7 +24,6 @@ class DataTransport {
     virtual void SetId(ContactID const& id) = 0;
     virtual void SetSecretKey(std::span<std::byte const> key) { (void)key; }
     virtual void SetSignalingUrl(std::string const& url) = 0;
-    virtual void SetIceServers(std::string const& json_config) = 0;
 
     // Lifecycle
     virtual void Start() = 0;
@@ -65,9 +63,6 @@ class DataTransport {
   }
   void SetSignalingUrl(std::string const& url) const {
     self_->SetSignalingUrl(url);
-  }
-  void SetIceServers(std::string const& json_config) const {
-    self_->SetIceServers(json_config);
   }
 
   void Start() const {
