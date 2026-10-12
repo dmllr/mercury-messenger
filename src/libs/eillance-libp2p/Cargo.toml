@@ -1,0 +1,13 @@
+[package]
+name = "eillance_libp2p"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+libp2p = { version = "0.53", features = ["tokio", "tcp", "noise", "yamux", "kad", "relay", "macros"] }
+tokio = { version = "1.32", features = ["rt-multi-thread", "macros", "time", "net"] }
+futures = "0.3"
+
