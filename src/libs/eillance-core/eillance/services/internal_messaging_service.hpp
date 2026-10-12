@@ -114,7 +114,6 @@ class InternalMessagingService {
 
     if (type.starts_with("crcp_")) {
       sm_->contact->ProcessCrcpMessage(peer_id, message);
-      CheckPeerVersion(peer_id, 0, 0);
       return;
     }
 
@@ -174,6 +173,7 @@ class InternalMessagingService {
     } else if (type == "chat" || type == "profile_info" || type == "profile_request" || type == "message_read" ||
                type == "message_receipt" || type == "file_cancel" || type == "message_delete" ||
                type == "message_edit" || type == "message_reaction") {
+      // important to enforce a version mismatch notification on old apps which don't support protocol version check
       CheckPeerVersion(peer_id, 0, 0);
     }
   }
