@@ -143,10 +143,8 @@ class MediaCallService {
     if (current_call_) {
       if (current_call_->peer_id == peer_id && current_call_->call_id.IsEmpty()) {
         current_call_->call_id = CallID(call_id);
-        if (current_call_->state == CallState::mediaConnected) {
-          TriggerIncomingRing(peer_id);
-          SetCallState(CallState::ringing);
-        }
+        TriggerIncomingRing(peer_id);
+        SetCallState(CallState::ringing);
         return;
       }
 
@@ -168,9 +166,10 @@ class MediaCallService {
         .peer_id = peer_id,
         .is_outgoing = false,
         .is_video = is_video,
-        .state = CallState::mediaConnecting
+        .state = CallState::ringing
     };
 
+    TriggerIncomingRing(peer_id);
     StartMediaConnection(peer_id, is_video, false);
   }
 
@@ -180,11 +179,9 @@ class MediaCallService {
       return;
     }
 
-    if (current_call_->state == CallState::mediaConnected || current_call_->state == CallState::negotiating) {
-      SetCallState(CallState::ringing);
-      EventQueue::Instance().Push(EventCmdPlaySound{SoundType::ringback});
-      EventQueue::Instance().Push(EventCallRinging{peer_id});
-    }
+    SetCallState(CallState::ringing);
+    EventQueue::Instance().Push(EventCmdPlaySound{SoundType::ringback});
+    EventQueue::Instance().Push(EventCallRinging{peer_id});
   }
 
   void OnCallAccepted(ContactID const& peer_id, std::string const& call_id) {
@@ -238,22 +235,32 @@ class MediaCallService {
     }
 
     if (current_call_ && current_call_->peer_id == peer_id) {
-      media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
-      media_transport_->CreateAnswer(peer_id);
+      try {
+        media_transport_->SetRemoteDescription(peer_id, sdp, "offer");
+        media_transport_->CreateAnswer(peer_id);
+      } catch (std::exception const& e) {
+        LGE << "Failed to process media offer: " << e.what();
+      }
     }
   }
 
   void OnMediaAnswer(ContactID const& peer_id, std::string const& sdp) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (current_call_ && current_call_->peer_id == peer_id) {
-      media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
+      try {
+        media_transport_->SetRemoteDescription(peer_id, sdp, "answer");
+      } catch (std::exception const& e) {
+        LGE << "Failed to set media answer: " << e.what();
+      }
     }
   }
 
   void OnDataChannelOpen(ContactID const& peer_id) {
     std::lock_guard<std::recursive_mutex> const lock(mutex_);
     if (current_call_ && current_call_->peer_id == peer_id && current_call_->state == CallState::waitingForData) {
-      LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to media.";
+      LGI << "Data channel opened for call " << current_call_->call_id.ToString() << ". Proceeding to signaling.";
+      SetCallState(CallState::negotiating);
+      SendCallRequest(peer_id);
       StartMediaConnection(peer_id, current_call_->is_video, true);
     }
   }
@@ -265,7 +272,11 @@ class MediaCallService {
         if (auto peer = data_transport_->GetPeer(peer_id)) {
           std::optional<std::string> sdp = peer->pending_offer_sdp;
           if (!sdp) {
-            sdp = media_transport_->GetLocalDescription(peer_id);
+            try {
+              sdp = media_transport_->GetLocalDescription(peer_id);
+            } catch (std::exception const& e) {
+              LGE << "Failed to get local description: " << e.what();
+            }
           }
 
           if (sdp) {
@@ -304,19 +315,7 @@ class MediaCallService {
 
     if (state == transport::PeerConnectionState::connected) {
       if (current_call_ && current_call_->peer_id == peer_id) {
-        if (current_call_->state == CallState::mediaConnecting) {
-          SetCallState(CallState::mediaConnected);
-
-          if (current_call_->is_outgoing) {
-            SendCallRequest(peer_id);
-            SetCallState(CallState::negotiating);
-          } else {
-            if (!current_call_->call_id.IsEmpty()) {
-              TriggerIncomingRing(peer_id);
-              SetCallState(CallState::ringing);
-            }
-          }
-        }
+        LGI << "Media connected for call " << current_call_->call_id.ToString();
       }
     }
   }
@@ -400,6 +399,8 @@ class MediaCallService {
       return;
     }
 
+    SetCallState(CallState::negotiating);
+    SendCallRequest(peer_id);
     StartMediaConnection(peer_id, is_video, true);
   }
 
@@ -414,7 +415,6 @@ class MediaCallService {
     media_transport_->Connect(peer_id);
 
     peer->has_media_peer_connection = true;
-    SetCallState(CallState::mediaConnecting);
 
     media_transport_->AddAudio(peer_id);
     if (is_video) {
@@ -422,7 +422,11 @@ class MediaCallService {
     }
 
     if (is_initiator) {
-      media_transport_->CreateOffer(peer_id);
+      try {
+        media_transport_->CreateOffer(peer_id);
+      } catch (std::exception const& e) {
+        LGE << "Failed to create offer: " << e.what();
+      }
     }
   }
 

@@ -67,6 +67,7 @@ class Libp2pDataTransport : public DataTransport::Interface {
         if (auto p = GetPeer(peer_id)) {
           p->data_channel_is_open = false;
           p->is_connecting = false;
+          p->data_channel_initialized = false;
         }
         EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
       });
@@ -152,11 +153,23 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   void Disconnect(ContactID const& peer_id) override {
-    if (auto p = GetPeer(peer_id)) {
-      p->data_channel_is_open = false;
-      p->is_connecting = false;
+    bool changed = false;
+    {
+      std::lock_guard<std::mutex> const lock(peersMutex_);
+      auto it = peers_.find(peer_id);
+      if (it != peers_.end()) {
+        auto& p = it->second;
+        if (p->data_channel_is_open || p->is_connecting) {
+          p->data_channel_is_open = false;
+          p->is_connecting = false;
+          p->data_channel_initialized = false;
+          changed = true;
+        }
+      }
     }
-    EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
+    if (changed) {
+      EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
+    }
   }
 
   void CreateOffer(ContactID const&) override {}
