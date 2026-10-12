@@ -517,7 +517,10 @@ class MessagingService {
 
   // --- Read Model Projections ---
   void ProjectMessage(messaging::LedgerEntry const& entry, Json const& json, bool is_mine, bool is_synced = false) {
-    TopicID const topic_id = entry.topic_id;
+    TopicID topic_id = entry.topic_id;
+    if (topic_id == TopicID(sm_->account->GetId())) {
+      topic_id = TopicID(entry.author_id);
+    }
 
     auto group = sm_->group_manager->GetGroup(GroupID(topic_id.Span()));
     auto channel = sm_->channel_manager->GetChannel(ChannelID(topic_id.Span()));
@@ -725,7 +728,10 @@ class MessagingService {
   }
 
   void ProjectEdit(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    TopicID const topic_id = entry.topic_id;
+    TopicID topic_id = entry.topic_id;
+    if (topic_id == TopicID(sm_->account->GetId())) {
+      topic_id = TopicID(entry.author_id);
+    }
     uint64_t const target_id = json.value("target_id", 0ULL);
     std::string const content = json.value("content", "");
     if (history_->GetHistoryEntry(topic_id, target_id)) {
@@ -735,7 +741,10 @@ class MessagingService {
   }
 
   void ProjectDelete(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    TopicID const topic_id = entry.topic_id;
+    TopicID topic_id = entry.topic_id;
+    if (topic_id == TopicID(sm_->account->GetId())) {
+      topic_id = TopicID(entry.author_id);
+    }
     uint64_t const target_id = json.value("target_id", 0ULL);
     if (history_->GetHistoryEntry(topic_id, target_id)) {
       history_->MarkMessageDeleted(topic_id, target_id);
@@ -744,7 +753,10 @@ class MessagingService {
   }
 
   void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
-    TopicID const topic_id = entry.topic_id;
+    TopicID topic_id = entry.topic_id;
+    if (topic_id == TopicID(sm_->account->GetId())) {
+      topic_id = TopicID(entry.author_id);
+    }
     uint64_t const target_id = json.value("target_id", 0ULL);
     auto const reaction = static_cast<messaging::Reaction>(json.value("reaction", 0));
     if (history_->GetHistoryEntry(topic_id, target_id)) {
@@ -754,7 +766,10 @@ class MessagingService {
   }
 
   void ProjectCallLog(messaging::LedgerEntry const& entry, Json const& json, bool is_mine, bool is_synced = false) {
-    TopicID const topic_id = entry.topic_id;
+    TopicID topic_id = entry.topic_id;
+    if (topic_id == TopicID(sm_->account->GetId())) {
+      topic_id = TopicID(entry.author_id);
+    }
 
     auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
     if (ledger_ts < 10000000000ULL) {

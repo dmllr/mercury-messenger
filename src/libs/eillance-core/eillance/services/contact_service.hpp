@@ -194,7 +194,7 @@ class ContactService {
       return;
     }
     std::string const type = json.value("type", "");
-    ContactID const peer = ContactID(entry.topic_id.Span());
+    ContactID const peer = entry.author_id;
 
     if (type == "contact_add_request") {
       auto existing = manager_->GetContact(peer);
