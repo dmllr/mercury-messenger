@@ -292,18 +292,17 @@ class SyncEngine {
           combined.insert(combined.end(), my_entries.begin(), my_entries.end());
           combined.insert(combined.end(), peer_entries.begin(), peer_entries.end());
 
-          // Deterministic stable sort resolving "take both"
-          std::ranges::stable_sort(combined, [](auto const& a, auto const& b) {
+          // Deterministic sort resolving "take both" and eliminating duplicate interleaving
+          std::ranges::sort(combined, [](auto const& a, auto const& b) {
             if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
-            if (a.author_id.ToString() != b.author_id.ToString()) {
-              return a.author_id.ToString() < b.author_id.ToString();
-            }
-            return false;
+            if (a.author_id != b.author_id) return a.author_id < b.author_id;
+            if (a.type != b.type) return a.type < b.type;
+            return a.payload < b.payload;
           });
 
           // Unique deduplication
           auto unique_range = std::ranges::unique(combined, [](auto const& a, auto const& b) {
-            return a.created_at.value == b.created_at.value && a.author_id.ToString() == b.author_id.ToString() &&
+            return a.created_at.value == b.created_at.value && a.author_id == b.author_id &&
                    a.type == b.type && a.payload == b.payload;
           });
           combined.erase(unique_range.begin(), unique_range.end());
