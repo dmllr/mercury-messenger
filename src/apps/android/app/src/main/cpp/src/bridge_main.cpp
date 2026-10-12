@@ -19,9 +19,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_initEngine
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_start(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (g_clientEngine) {
-    g_clientEngine->Start();
-  }
+  INVARIANT_NOT_NULL(g_clientEngine);
+  g_clientEngine->Start();
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_terminate(JNIEnv* /*env*/, jobject /*instance*/) {
@@ -34,10 +33,8 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_terminate(
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_hela_eillance_MessengerService_identityExists(JNIEnv* /*env*/, jobject /*instance*/) {
-  if (g_clientEngine) {
-    return g_clientEngine->GetClient()->IdentityExists();
-  }
-  return false;
+  INVARIANT_NOT_NULL(g_clientEngine);
+  return g_clientEngine->GetClient()->IdentityExists();
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRestart(JNIEnv* env, jobject instance) {
@@ -62,48 +59,54 @@ Java_hela_eillance_MessengerService_nativeOnAppBackground(JNIEnv* /*env*/, jobje
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeAcceptCall(JNIEnv*, jobject) {
-  if (g_clientEngine) {
-    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
-    if (!state.peer_id.IsEmpty()) g_clientEngine->GetClient()->AcceptCall(state.peer_id);
+  INVARIANT_NOT_NULL(g_clientEngine);
+  auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+  if (!state.peer_id.IsEmpty()) {
+    g_clientEngine->GetClient()->AcceptCall(state.peer_id);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeRejectCall(JNIEnv*, jobject) {
-  if (g_clientEngine) {
-    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
-    if (!state.peer_id.IsEmpty()) g_clientEngine->GetClient()->RejectCall(state.peer_id);
+  INVARIANT_NOT_NULL(g_clientEngine);
+  auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+  if (!state.peer_id.IsEmpty()) {
+    g_clientEngine->GetClient()->RejectCall(state.peer_id);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeHangupCall(JNIEnv*, jobject) {
-  if (g_clientEngine) {
-    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
-    if (!state.peer_id.IsEmpty()) g_clientEngine->GetClient()->Hangup(state.peer_id, true);
+  INVARIANT_NOT_NULL(g_clientEngine);
+  auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+  if (!state.peer_id.IsEmpty()) {
+    g_clientEngine->GetClient()->Hangup(state.peer_id, true);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_MessengerService_nativeMarkAllAsRead(JNIEnv* env, jobject, jstring peer_id) {
-  if (g_clientEngine) {
-    char const* chars = env->GetStringUTFChars(peer_id, nullptr);
-    auto pid = eillance::ContactID(chars);
-    env->ReleaseStringUTFChars(peer_id, chars);
-    auto unread = g_clientEngine->GetClient()->GetUnreadMessages(pid);
-    std::vector<uint64_t> ids;
-    ids.reserve(unread.size());
-    for (auto const& msg : unread) ids.push_back(msg.id);
-    if (!ids.empty()) g_clientEngine->GetClient()->MarkMessagesAsRead(pid, ids);
+  INVARIANT_NOT_NULL(g_clientEngine);
+  char const* chars = env->GetStringUTFChars(peer_id, nullptr);
+  auto topic = eillance::TopicID(chars);
+  env->ReleaseStringUTFChars(peer_id, chars);
+  auto unread = g_clientEngine->GetClient()->GetUnreadMessages(topic);
+  std::vector<uint64_t> ids;
+  ids.reserve(unread.size());
+  for (auto const& msg : unread) {
+    ids.push_back(msg.id);
+  }
+  if (!ids.empty()) {
+    g_clientEngine->GetClient()->MarkMessagesAsRead(topic, ids);
   }
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeTelecomCallEnded(JNIEnv*, jobject) {
-  if (g_clientEngine) {
-    auto state = g_clientEngine->GetClient()->GetCurrentCallState();
-    if (!state.peer_id.IsEmpty()) {
-      if (state.is_ringing)
-        g_clientEngine->GetClient()->RejectCall(state.peer_id);
-      else if (state.is_connecting || state.is_in_call)
-        g_clientEngine->GetClient()->Hangup(state.peer_id, true);
+  INVARIANT_NOT_NULL(g_clientEngine);
+  auto state = g_clientEngine->GetClient()->GetCurrentCallState();
+  if (!state.peer_id.IsEmpty()) {
+    if (state.is_ringing) {
+      g_clientEngine->GetClient()->RejectCall(state.peer_id);
+    } else if (state.is_connecting || state.is_in_call) {
+      g_clientEngine->GetClient()->Hangup(state.peer_id, true);
     }
   }
 }
@@ -115,26 +118,29 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeUpda
     jboolean batt,
     jboolean call
 ) {
-  if (g_clientEngine) g_clientEngine->GetClient()->UpdatePlatformPermissions(notif, batt, call);
+  INVARIANT_NOT_NULL(g_clientEngine);
+  g_clientEngine->GetClient()->UpdatePlatformPermissions(notif, batt, call);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeIgnoreBattery(JNIEnv*, jobject) {
-  if (g_clientEngine) g_clientEngine->GetClient()->IgnoreBatteryOptimization();
+  INVARIANT_NOT_NULL(g_clientEngine);
+  g_clientEngine->GetClient()->IgnoreBatteryOptimization();
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeIgnoreCalls(JNIEnv*, jobject) {
-  if (g_clientEngine) g_clientEngine->GetClient()->IgnoreCallPermissions();
+  INVARIANT_NOT_NULL(g_clientEngine);
+  g_clientEngine->GetClient()->IgnoreCallPermissions();
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeResetIgnoredPermissions(JNIEnv*, jobject) {
-  if (g_clientEngine) g_clientEngine->GetClient()->ResetIgnoredPermissions();
+  INVARIANT_NOT_NULL(g_clientEngine);
+  g_clientEngine->GetClient()->ResetIgnoredPermissions();
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_hela_eillance_MessengerService_nativeSetTurnEligibility(JNIEnv*, jobject, jboolean eligible) {
-  if (g_clientEngine) {
-    eillance::EventQueue::Instance().Push(eillance::EventTurnEligibilityChanged{eligible != 0U});
-  }
+  INVARIANT_NOT_NULL(g_clientEngine);
+  eillance::EventQueue::Instance().Push(eillance::EventTurnEligibilityChanged{eligible != 0U});
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_MessengerService_nativeUpdateNetworkState(

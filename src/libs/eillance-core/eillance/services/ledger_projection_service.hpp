@@ -74,21 +74,21 @@ class LedgerProjectionService {
           std::string const type = json.value("type", "");
           if (type == "channel_create") {
             identity::Channel c;
-            c.id = entry.topic_id.AsChannelID();
+            c.id = ChannelID(entry.topic_id.Span());
             c.name = json.value("name", "");
             c.description = json.value("description", "");
             c.owner_id = ContactID(json.value("owner_id", ""));
             sm_->channel_manager->CreateChannelLocal(c);
             EventQueue::Instance().Push(EventGroupsStateUpdated{});
           } else if (type == "channel_subscribe" || type == "channel_member_add") {
-            auto c = sm_->channel_manager->GetChannel(entry.topic_id.AsChannelID());
+            auto c = sm_->channel_manager->GetChannel(ChannelID(entry.topic_id.Span()));
             if (c) {
               sm_->channel_manager
                   ->AddMemberLocal(c->id, ContactID(json.value("contact_id", "")), json.value("role", 0));
               EventQueue::Instance().Push(EventGroupsStateUpdated{});
             }
           } else if (type == "channel_unsubscribe" || type == "channel_member_remove") {
-            auto c = sm_->channel_manager->GetChannel(entry.topic_id.AsChannelID());
+            auto c = sm_->channel_manager->GetChannel(ChannelID(entry.topic_id.Span()));
             ContactID target(json.value("contact_id", ""));
             if (c) {
               if (type == "channel_unsubscribe" && target != entry.author_id) break;  // Can only unsubscribe self

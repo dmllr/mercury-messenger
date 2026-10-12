@@ -87,7 +87,7 @@ class ProfileService {
     }
 
     std::string const type = json.value("type", "");
-    ContactID const peer = entry.topic_id.AsContactID();
+    ContactID const peer = ContactID(entry.topic_id.Span());
 
     if (type == "profile_info") {
       OnProfileUpdate(peer, json);
@@ -134,7 +134,7 @@ class ProfileService {
       if (old) {
         diff["old"] = {{"display_name", old->display_name}, {"bio", old->bio}, {"photo", old->photo_base64}};
       }
-      sm_->messaging->AddSystemEntry(peer_id, diff.dump(), messaging::MessageDirection::received);
+      sm_->messaging->AddSystemEntry(TopicID(peer_id), diff.dump(), messaging::MessageDirection::received);
     }
 
     manager_->UpdateContactProfile(peer_id, profile_update);

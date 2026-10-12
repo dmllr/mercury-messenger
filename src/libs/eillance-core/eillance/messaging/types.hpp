@@ -154,7 +154,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(
 )
 
 struct TextEntryParams {
-  ContactID peer_id;
+  TopicID topic_id;
   std::string content;
   std::vector<Attachment> attachments{};
   MessageDirection direction = MessageDirection::sent;
@@ -165,7 +165,7 @@ struct TextEntryParams {
 };
 
 struct CallEntryParams {
-  ContactID peer_id;
+  TopicID topic_id;
   HistoryEntryKind kind;
   CallDirection direction;
   CallStatus status;
@@ -198,12 +198,12 @@ struct HistoryEntryRecord {
   bool is_edited = false;
   bool is_deleted = false;
   HistoryEntryData data;
-  ContactID peer_id;
+  TopicID topic_id;
   std::vector<ReactionEntry> reactions{};
 };
 
 struct ChatSummary {
-  ContactID peer_id;
+  TopicID topic_id;
   HistoryEntryRecord last_message;
   uint32_t unread_count = 0;
 };

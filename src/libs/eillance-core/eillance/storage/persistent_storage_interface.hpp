@@ -81,16 +81,16 @@ class PersistentStorageImpl {
   virtual auto AddHistoryEntry(messaging::HistoryEntryRecord entry) -> messaging::HistoryEntryRecord = 0;
   virtual void UpdateHistoryEntry(messaging::HistoryEntryRecord const& entry) = 0;
   virtual void
-  UpdateMessageStatus(ContactID const& peer_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
+  UpdateMessageStatus(TopicID const& topic_id, uint64_t message_id, messaging::MessageStatus new_status) = 0;
   virtual void UpdateMessageStatuses(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       std::vector<uint64_t> const& message_ids,
       messaging::MessageStatus new_status
   ) = 0;
-  virtual void UpdateMessageContent(ContactID const& peer_id, uint64_t message_id, std::string const& new_content) = 0;
-  virtual void MarkMessageDeleted(ContactID const& peer_id, uint64_t message_id) = 0;
+  virtual void UpdateMessageContent(TopicID const& topic_id, uint64_t message_id, std::string const& new_content) = 0;
+  virtual void MarkMessageDeleted(TopicID const& topic_id, uint64_t message_id) = 0;
   virtual void ToggleReaction(
-      ContactID const& peer_id,
+      TopicID const& topic_id,
       uint64_t message_id,
       ContactID const& author_id,
       messaging::Reaction reaction
@@ -99,22 +99,22 @@ class PersistentStorageImpl {
   virtual void
   UpdateAttachmentStatus(std::string const& attachment_id, messaging::AttachmentStatus status, bool is_downloaded) = 0;
   virtual auto GetAttachment(std::string const& attachment_id) -> std::optional<messaging::Attachment> = 0;
-  virtual auto GetDownloadedAttachments(ContactID const& peer_id) -> std::vector<messaging::AttachmentRecord> = 0;
-  virtual auto GetAllAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
+  virtual auto GetDownloadedAttachments(TopicID const& topic_id) -> std::vector<messaging::AttachmentRecord> = 0;
+  virtual auto GetAllAttachments(TopicID const& topic_id) -> std::vector<messaging::Attachment> = 0;
 
-  virtual auto GetHistoryPage(ContactID const& peer_id, size_t page_index, size_t page_size)
+  virtual auto GetHistoryPage(TopicID const& topic_id, size_t page_index, size_t page_size)
       -> messaging::HistoryPage = 0;
-  virtual auto GetHistoryEntry(ContactID const& peer_id, uint64_t message_id)
+  virtual auto GetHistoryEntry(TopicID const& topic_id, uint64_t message_id)
       -> std::optional<messaging::HistoryEntryRecord> = 0;
-  virtual auto GetFullMessageContent(ContactID const& peer_id, std::uint64_t message_id)
+  virtual auto GetFullMessageContent(TopicID const& topic_id, std::uint64_t message_id)
       -> std::optional<std::string> = 0;
-  virtual auto GetChatSummaries(std::vector<ContactID> const& peer_ids) -> std::vector<messaging::ChatSummary> = 0;
-  virtual auto GetMessagesWithStatus(ContactID const& peer_id, messaging::MessageStatus status)
+  virtual auto GetChatSummaries(std::vector<TopicID> const& topic_ids) -> std::vector<messaging::ChatSummary> = 0;
+  virtual auto GetMessagesWithStatus(TopicID const& topic_id, messaging::MessageStatus status)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
-  virtual auto GetPendingAttachments(ContactID const& peer_id) -> std::vector<messaging::Attachment> = 0;
+  virtual auto GetPendingAttachments(TopicID const& topic_id) -> std::vector<messaging::Attachment> = 0;
 
   // --- Search ---
-  virtual auto SearchMessages(ContactID const& peer_id, std::string const& query)
+  virtual auto SearchMessages(TopicID const& topic_id, std::string const& query)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
   virtual auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> = 0;
 };

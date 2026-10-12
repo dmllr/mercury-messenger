@@ -108,8 +108,11 @@ class ContactService {
       }
 
       if (!existing || existing->status != identity::ContactStatus::pendingApproval) {
-        sm_->messaging
-            ->AddSystemEntry(peer_id, Json{{"action", "contact_request"}}.dump(), messaging::MessageDirection::sent);
+        sm_->messaging->AddSystemEntry(
+            TopicID(peer_id),
+            Json{{"action", "contact_request"}}.dump(),
+            messaging::MessageDirection::sent
+        );
       }
 
       EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::pendingApproval});
@@ -135,8 +138,11 @@ class ContactService {
         return;
       }
       newly_confirmed = true;
-      sm_->messaging
-          ->AddSystemEntry(peer_id, Json{{"action", "contact_confirm"}}.dump(), messaging::MessageDirection::sent);
+      sm_->messaging->AddSystemEntry(
+          TopicID(peer_id),
+          Json{{"action", "contact_confirm"}}.dump(),
+          messaging::MessageDirection::sent
+      );
     } else if (contact->status != identity::ContactStatus::confirmed) {
       return;
     }
@@ -188,7 +194,7 @@ class ContactService {
       return;
     }
     std::string const type = json.value("type", "");
-    ContactID const peer = entry.topic_id.AsContactID();
+    ContactID const peer = ContactID(entry.topic_id.Span());
 
     if (type == "contact_add_request") {
       auto existing = manager_->GetContact(peer);
@@ -341,8 +347,8 @@ class ContactService {
 
       if (status == identity::RequestStatus::New) {
         Json const content = {{"action", "contact_request_received"}};
-        sm_->messaging->AddSystemEntry(peer_id, content.dump(), messaging::MessageDirection::received);
-        sm_->messaging->MarkMessagesAsRead(peer_id, {});
+        sm_->messaging->AddSystemEntry(TopicID(peer_id), content.dump(), messaging::MessageDirection::received);
+        sm_->messaging->MarkMessagesAsRead(TopicID(peer_id), {});
         EventQueue::Instance().Push(EventContactRequest{peer_id});
 
         auto const name = profile.display_name ? *profile.display_name : peer_id.ToString().substr(0, 8);
@@ -379,11 +385,11 @@ class ContactService {
 
       if (!was_confirmed) {
         sm_->messaging->AddSystemEntry(
-            peer_id,
+            TopicID(peer_id),
             Json{{"action", "contact_confirm"}}.dump(),
             messaging::MessageDirection::received
         );
-        sm_->messaging->MarkMessagesAsRead(peer_id, {});
+        sm_->messaging->MarkMessagesAsRead(TopicID(peer_id), {});
         EventQueue::Instance().Push(EventContactStatusChanged{peer_id, identity::ContactStatus::confirmed});
       }
 
