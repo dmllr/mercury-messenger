@@ -47,11 +47,12 @@ class InternalMessagingService {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendMediaSignalingMessage>([this](auto const& e) {
       std::string const to_str = e.message.value("to", "");
       if (!to_str.empty()) {
-        if (auto p = data_transport_->GetPeer(ContactID(to_str))) {
+        ContactID const peer_id(to_str);
+        if (auto p = data_transport_->GetPeer(peer_id)) {
           p->pending_offer_sdp = "";  // Mark as sent to prevent forced fallback
         }
+        std::ignore = data_transport_->SendJson(peer_id, e.message);
       }
-      data_transport_->SendSignalingMessage(e.message);
     }));
   }
 

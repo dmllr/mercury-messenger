@@ -99,8 +99,6 @@ class MockDataTransport : public DataTransport::Interface {
   auto SendJson(ContactID const&, nlohmann::json const&) -> bool override {
     return false;
   }
-  void SendSignalingMessage(nlohmann::json const&) const override {
-  }
   void DiscoverTurnRelays() override {
   }
   void AuthTurnRelay(ContactID const&) override {
