@@ -314,7 +314,7 @@ class SyncEngine {
     }
 
     ContactID const master_id = transport_->GetMasterId(target_peer);
-    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.0f});
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, -1.0f});
 
     dispatchQueue_.Dispatch([this, topic_id, target_peer]() -> void { VerifySyncState(topic_id, target_peer); });
   }
@@ -666,11 +666,6 @@ class SyncEngine {
         sessions_[session_key].highest_sent_batch_index = next_batch_index;
       }
     }
-
-    if (!batches_to_send.empty()) {
-      ContactID const master_id = transport_->GetMasterId(peer_id);
-      EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.5f});
-    }
   }
 
   void
@@ -707,7 +702,7 @@ class SyncEngine {
     }
 
     ContactID const master_id = transport_->GetMasterId(peer_id);
-    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.0f});
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, -1.0f});
 
     Json const req = {{"type", "sync_checkpoints"}, {"topic", topic_id.ToString()}, {"checkpoints", checkpoints}};
     transport_->SendJson(peer_id, req);
@@ -855,7 +850,13 @@ class SyncEngine {
     };
     transport_->SendJson(peer_id, reply);
     ContactID const master_id = transport_->GetMasterId(peer_id);
-    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, 0.5f});
+
+    size_t const max_total_entries = std::max(my_total_entries, peer_total_entries);
+    size_t const total_batches = (max_total_entries + maxBatchSize - 1) / maxBatchSize;
+    size_t const limit = (total_batches == 0) ? 1 : total_batches;
+    float const progress = std::clamp(static_cast<float>(batch_index + 1) / static_cast<float>(limit), 0.0f, 1.0f);
+
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, progress});
 
     if (!actually_new.empty()) {
       ForwardNewEntries(topic_id, peer_id);
@@ -900,6 +901,10 @@ class SyncEngine {
     size_t const max_total_entries = std::max(my_total, peer_total_entries);
     size_t const total_batches = (max_total_entries + maxBatchSize - 1) / maxBatchSize;
     size_t const limit = (total_batches == 0) ? 1 : total_batches;
+
+    float const progress = std::clamp(static_cast<float>(batch_index + 1) / static_cast<float>(limit), 0.0f, 1.0f);
+    ContactID const master_id = transport_->GetMasterId(peer_id);
+    EventQueue::Instance().Push(EventSyncStateChanged{master_id, true, progress});
 
     if (batch_index + 1 >= limit) {
       LGI << "[Sync] Batch exchange complete for " << peer_id.ToString() << ". Repeating VerifySyncState.";
