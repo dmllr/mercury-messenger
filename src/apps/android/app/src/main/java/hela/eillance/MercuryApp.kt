@@ -190,6 +190,27 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
     }
   }
 
+  val isContactsLoading by contactsVM.isLoading.collectAsState()
+  LaunchedEffect(isContactsLoading) {
+    if (!isContactsLoading) {
+      viewModel.evaluateMigrationCondition(contacts.size)
+    }
+  }
+
+  val showMigrationDialog by viewModel.showMigrationDialog.collectAsState()
+  if (showMigrationDialog) {
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { viewModel.markMigrationHandled() },
+      title = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(id = hela.eillance.camera.R.string.migration_dialog_title)) },
+      text = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(id = hela.eillance.camera.R.string.migration_dialog_text)) },
+      confirmButton = {
+        androidx.compose.material3.Button(onClick = { viewModel.markMigrationHandled() }) {
+          androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(id = hela.eillance.camera.R.string.migration_action_understood))
+        }
+      }
+    )
+  }
+
   // Determine Call Status for Prioritized UI
   val isIncomingCall = callState.isRinging && callState.callDirection == CallDirection.Incoming
   val isActiveCall = callState.isConnecting || callState.isInCall ||

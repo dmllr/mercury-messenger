@@ -723,10 +723,19 @@ msgstr "이름"
 msgid "sort_size"
 msgstr "크기"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "연락처에 연결할 수 없습니다. 24시간 이상 메시지가 전송되지 않았습니다."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "사용 중인 Mercury 버전이 오래되었습니다. 이 연락처와 통신하려면 앱을 업데이트해 주세요."
 msgid "version_peer_needs_update"
 msgstr "상대방이 오래된 버전의 Mercury를 사용 중입니다. 업데이트할 때까지 메시지가 전송되지 않을 수 있습니다."
 
-msgid "contact_unreachable"
-msgstr "연락처에 연결할 수 없습니다. 24시간 이상 메시지가 전송되지 않았습니다."
+msgid "migration_dialog_title"
+msgstr "중요 업데이트"
+msgid "migration_dialog_text"
+msgstr "Project Mercury가 새롭고 더 안정적인 P2P 네트워크 프로토콜로 업그레이드되었습니다.\n\n이전 버전의 앱은 이 업데이트와 호환되지 않습니다. 메시징 및 통화를 계속하려면 연락처도 앱을 최신 버전으로 업데이트해야 합니다."
+msgid "migration_action_understood"
+msgstr "이해했습니다"

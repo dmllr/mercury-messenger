@@ -723,10 +723,19 @@ msgstr "Nom"
 msgid "sort_size"
 msgstr "Taille"
 
+# Conversation screen
+msgid "contact_unreachable"
+msgstr "Contact injoignable. Messages non distribués depuis plus de 24 heures."
+
+# Versioning
 msgid "version_we_need_update"
 msgstr "Votre version de Mercury est obsolète. Veuillez mettre à jour l'application pour communiquer avec ce contact."
 msgid "version_peer_needs_update"
 msgstr "L'autre personne utilise une version obsolète de Mercury. Les messages peuvent ne pas être livrés tant qu'elle ne l'aura pas mise à jour."
 
-msgid "contact_unreachable"
-msgstr "Contact injoignable. Messages non distribués depuis plus de 24 heures."
+msgid "migration_dialog_title"
+msgstr "Mise à jour importante"
+msgid "migration_dialog_text"
+msgstr "Project Mercury a été mis à jour vers un nouveau protocole réseau P2P plus fiable.\n\nLes anciennes versions de l'application ne sont pas compatibles avec cette mise à jour. Veuillez vous assurer que vos contacts mettent également à jour leur application vers la dernière version pour continuer à échanger des messages et à appeler."
+msgid "migration_action_understood"
+msgstr "Compris"
