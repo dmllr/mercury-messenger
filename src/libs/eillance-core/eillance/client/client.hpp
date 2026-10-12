@@ -230,8 +230,8 @@ class Client final {
       return;
     }
     ReevaluateIceConfiguration();
-    if (auto const url = sm_->account->GetSettings()->GetBootstrapNodeUrl()) {
-      sm_->data_transport->SetBootstrapNodeUrl(*url);
+    if (auto const urls = sm_->account->GetSettings()->GetBootstrapNodeUrls()) {
+      sm_->data_transport->SetBootstrapNodeUrls(SettingsManager::ParseUrls(*urls));
     }
 
     sm_->data_transport->SetId(sm_->account->GetId());
@@ -309,8 +309,8 @@ class Client final {
     return false;
   }
 
-  void UpdateBootstrapNodeUrl(std::string const& url) const {
-    sm_->account->UpdateBootstrapNodeUrl(url);
+  void UpdateBootstrapNodeUrls(std::string const& urls) const {
+    sm_->account->UpdateBootstrapNodeUrls(urls);
   }
 
   void UpdateMyProfile(identity::ProfileUpdate const& profile) {

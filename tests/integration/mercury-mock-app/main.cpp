@@ -105,9 +105,9 @@ auto main(int argc, char** argv) -> int {
 
   auto client = std::make_shared<eillance::Client>(storage, media_transport);
 
-  client->UpdateBootstrapNodeUrl(*signaling_url);
+  client->UpdateBootstrapNodeUrls(*signaling_url);
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventChatMessageReceived>([](auto const& e) -> void {
     if (e.message.direction == eillance::messaging::MessageDirection::received) {
       if (std::holds_alternative<eillance::messaging::MessageEntry>(e.message.data)) {
         auto const& message = std::get<eillance::messaging::MessageEntry>(e.message.data);
@@ -121,7 +121,7 @@ auto main(int argc, char** argv) -> int {
     }
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventMessageStatusChanged>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventMessageStatusChanged>([](auto const& e) -> void {
     if (e.status == eillance::messaging::MessageStatus::delivered) {
       LGI << "[mock] Message to " << e.peer_id.ToString() << " delivered";
     } else if (e.status == eillance::messaging::MessageStatus::read) {
@@ -129,54 +129,54 @@ auto main(int argc, char** argv) -> int {
     }
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentStatusChanged>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentStatusChanged>([](auto const& e) -> void {
     LGI << "[mock] File transfer status changed to " << static_cast<int>(e.status);
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventMyProfileUpdated>([](auto const&) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventMyProfileUpdated>([](auto const&) -> void {
     LGI << "[mock] My profile updated";
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentDownloaded>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventAttachmentDownloaded>([](auto const& e) -> void {
     LGI << "[mock] Attachment " << e.attachment_id << " downloaded from " << e.peer_id.ToString();
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventTransferProgress>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventTransferProgress>([](auto const& e) -> void {
     if (e.progress > 0.999999999F) {
       LGI << "[mock] Transfer " << e.attachment_id << " complete";
     }
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([client](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRequest>([client](auto const& e) -> void {
     LGI << "[mock] Contact request from " << e.peer_id.ToString();
     client->ConfirmContact(e.peer_id);
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventContactStatusChanged>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactStatusChanged>([](auto const& e) -> void {
     LGI << "[mock] Contact " << e.peer_id.ToString() << " status: " << static_cast<int>(e.status);
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRemoved>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactRemoved>([](auto const& e) -> void {
     LGI << "[mock] Contact removed: " << e.peer_id.ToString();
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventContactProfileUpdated>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventContactProfileUpdated>([](auto const& e) -> void {
     LGI << "[mock] Profile updated for " << e.peer_id.ToString();
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventIncomingCall>([](auto const& e) -> void {
     LGI << "[mock] Incoming call from " << e.peer_id.ToString();
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventCallRinging>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventCallRinging>([](auto const& e) -> void {
     LGI << "[mock] Call ringing " << e.peer_id.ToString();
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventCallAccepted>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventCallAccepted>([](auto const& e) -> void {
     LGI << "[mock] Call accepted " << e.peer_id.ToString();
   });
 
-  eillance::EventQueue::Instance().Subscribe<eillance::EventCallTerminated>([](auto const& e) {
+  eillance::EventQueue::Instance().Subscribe<eillance::EventCallTerminated>([](auto const& e) -> void {
     LGI << "[mock] Call terminated " << e.peer_id.ToString();
   });
 

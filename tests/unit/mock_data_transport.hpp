@@ -19,7 +19,7 @@ class MockDataTransport : public DataTransport::Interface {
   ContactID id_;
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
   std::vector<std::byte> secret_key_;
-  std::string bootstrap_url_;
+  std::vector<std::string> bootstrap_urls_;
 
   std::vector<std::pair<ContactID, nlohmann::json>> sent_jsons;
 
@@ -29,8 +29,8 @@ class MockDataTransport : public DataTransport::Interface {
   void SetSecretKey(std::span<std::byte const> key) override {
     secret_key_.assign(key.begin(), key.end());
   }
-  void SetBootstrapNodeUrl(std::string const& url) override {
-    bootstrap_url_ = url;
+  void SetBootstrapNodeUrl(std::vector<std::string> const& urls) override {
+    bootstrap_urls_ = urls;
   }
 
   void Start() override {
