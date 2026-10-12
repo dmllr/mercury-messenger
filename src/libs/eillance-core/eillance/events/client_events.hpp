@@ -21,22 +21,6 @@ struct EventFrameReceived {
   std::vector<std::byte> frame;
 };
 
-struct EventSignalingError {
-  ContactID peer_id;
-  std::string error;
-};
-
-struct EventLoginSuccess {};
-
-struct EventPeerMessage {
-  nlohmann::json message;
-};
-
-struct EventSystemMessage {
-  std::string type;
-  nlohmann::json message;
-};
-
 struct EventDataChannelOpen {
   ContactID peer_id;
 };
@@ -133,9 +117,6 @@ struct EventPeerActivity {
 };
 struct EventConnectionRequested {
   ContactID peer_id;
-};
-struct EventServerIceConfig {
-  std::string config_json;
 };
 struct EventDataChannelMessage {
   ContactID peer_id;

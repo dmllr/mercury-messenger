@@ -28,9 +28,7 @@ struct Peer {
 
   std::shared_ptr<ITrack> video;
   std::shared_ptr<ITrack> audio;
-  std::shared_ptr<void> data_peer_connection;
   std::shared_ptr<void> media_peer_connection;
-  std::shared_ptr<void> data_channel;
   std::atomic<bool> data_channel_is_open{false};
   std::atomic<Time::Unit> last_activity_time{0};
   std::atomic<bool> has_media_peer_connection{false};
