@@ -149,7 +149,7 @@ pub async fn run_event_loop(
             if state.turn_port.is_some() {
                 role_str = "turn_server";
             } else if !state.active_relay_listeners.is_empty() {
-                role_str = "relay_node";
+                role_str = "relayed_client";
             }
             let mut dht_peers = 0;
             for bucket in swarm.behaviour_mut().kademlia.kbuckets() {
