@@ -44,7 +44,11 @@ pub enum Command {
   SendFile(PeerId, Vec<u8>),
   Disconnect(PeerId),
   Stop,
-  TurnServerStarted { port: u16, public_ip: String, handle: crate::turn_server::TurnServerHandle },
+  TurnServerStarted {
+    port: u16,
+    public_ip: String,
+    handle: crate::turn_server::TurnServerHandle,
+  },
   DiscoverTurnRelays,
   AuthTurnRelay(PeerId),
   SetTurnEligibility(bool),

@@ -192,7 +192,11 @@ fn try_start_turn_server(state: &mut EventLoopState, tx: &mpsc::UnboundedSender<
       tokio::spawn(async move {
         match crate::turn_server::start_turn_server(public_ip.clone(), requested_port, turn_auth).await {
           Ok((port, handle)) => {
-            let _ = tx_clone.send(Command::TurnServerStarted { port, public_ip, handle });
+            let _ = tx_clone.send(Command::TurnServerStarted {
+              port,
+              public_ip,
+              handle,
+            });
           }
           Err(e) => {
             node_log!(&callbacks_clone, 2, "Failed to start embedded TURN server: {}", e);
@@ -266,7 +270,11 @@ fn handle_command(
       let _ = swarm.disconnect_peer_id(peer_id);
       state.pending_dials.remove(&peer_id);
     }
-    Command::TurnServerStarted { port, public_ip, handle } => {
+    Command::TurnServerStarted {
+      port,
+      public_ip,
+      handle,
+    } => {
       state.turn_port = Some(port);
       state.public_ip = Some(public_ip.clone());
       state.turn_server_handle = Some(handle);
@@ -300,7 +308,10 @@ fn handle_command(
           node_log!(callbacks, 3, "Node switches off a TURN server");
         }
         state.turn_port = None;
-        swarm.behaviour_mut().kademlia.stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
+        swarm
+          .behaviour_mut()
+          .kademlia
+          .stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
       }
     }
     _ => {}
@@ -330,7 +341,10 @@ fn handle_swarm_event(
           }
         }
       }
-      if address.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit)) {
+      if address
+        .iter()
+        .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2pCircuit))
+      {
         node_log!(callbacks, 3, "Node become relay");
       }
     }
@@ -437,11 +451,35 @@ fn handle_swarm_event(
         notify_disconnected(callbacks, swarm, &peer_id);
       }
     }
-    SwarmEvent::IncomingConnection { connection_id, local_addr, send_back_addr } => {
-      node_log!(callbacks, 4, "IncomingConnection {:?} local: {} remote: {}", connection_id, local_addr, send_back_addr);
+    SwarmEvent::IncomingConnection {
+      connection_id,
+      local_addr,
+      send_back_addr,
+    } => {
+      node_log!(
+        callbacks,
+        4,
+        "IncomingConnection {:?} local: {} remote: {}",
+        connection_id,
+        local_addr,
+        send_back_addr
+      );
     }
-    SwarmEvent::IncomingConnectionError { connection_id, local_addr, send_back_addr, error } => {
-      node_log!(callbacks, 2, "IncomingConnectionError {:?} local: {} remote: {} error: {:?}", connection_id, local_addr, send_back_addr, error);
+    SwarmEvent::IncomingConnectionError {
+      connection_id,
+      local_addr,
+      send_back_addr,
+      error,
+    } => {
+      node_log!(
+        callbacks,
+        2,
+        "IncomingConnectionError {:?} local: {} remote: {} error: {:?}",
+        connection_id,
+        local_addr,
+        send_back_addr,
+        error
+      );
     }
     SwarmEvent::Dialing { peer_id, connection_id } => {
       node_log!(callbacks, 4, "Dialing {:?} connection_id: {:?}", peer_id, connection_id);
@@ -624,7 +662,8 @@ fn handle_swarm_event(
           }
           if !providers_hex.is_empty() {
             let joined = providers_hex.join(",");
-            let cb: extern "C" fn(*mut c_void, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
+            let cb: extern "C" fn(*mut c_void, *const c_char) =
+              unsafe { std::mem::transmute(callbacks.on_turn_relays_discovered) };
             if let Ok(c_str) = CString::new(joined) {
               cb(callbacks.context as *mut c_void, c_str.as_ptr());
             }
@@ -642,7 +681,7 @@ fn handle_swarm_event(
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Kademlia(e)) => {
-        node_log!(callbacks, 4, "Kademlia event: {:?}", e);
+      node_log!(callbacks, 4, "Kademlia event: {:?}", e);
     }
     SwarmEvent::ListenerClosed {
       listener_id,
@@ -675,13 +714,13 @@ fn handle_swarm_event(
       state.active_relay_listeners.retain(|_, id| *id != listener_id);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::RelayServer(e)) => {
-        node_log!(callbacks, 4, "RelayServer event: {:?}", e);
+      node_log!(callbacks, 4, "RelayServer event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::RelayClient(e)) => {
-        node_log!(callbacks, 4, "RelayClient event: {:?}", e);
+      node_log!(callbacks, 4, "RelayClient event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Dcutr(e)) => {
-        node_log!(callbacks, 4, "DCUtR event: {:?}", e);
+      node_log!(callbacks, 4, "DCUtR event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::Message { peer, message })) => {
       if let request_response::Message::Request { request, channel, .. } = message {
@@ -700,8 +739,7 @@ fn handle_swarm_event(
           }
         }
         let _ = swarm.behaviour_mut().chat.send_response(channel, vec![]);
-      }
-      else if let request_response::Message::Response { .. } = message {
+      } else if let request_response::Message::Response { .. } = message {
         node_log!(callbacks, 4, "Received Chat Response from {}", peer);
       }
     }
@@ -722,27 +760,38 @@ fn handle_swarm_event(
           }
         }
         let _ = swarm.behaviour_mut().file.send_response(channel, vec![]);
-      }
-      else if let request_response::Message::Response { .. } = message {
+      } else if let request_response::Message::Response { .. } = message {
         node_log!(callbacks, 4, "Received File Response from {}", peer);
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::ResponseSent { peer, .. })) => {
       node_log!(callbacks, 4, "Chat response sent to {}", peer);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::OutboundFailure { peer, error, .. })) => {
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::OutboundFailure {
+      peer,
+      error,
+      ..
+    })) => {
       node_log!(callbacks, 2, "Chat outbound failure to {}: {:?}", peer, error);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::InboundFailure { peer, error, .. })) => {
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::InboundFailure {
+      peer, error, ..
+    })) => {
       node_log!(callbacks, 2, "Chat inbound failure from {}: {:?}", peer, error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::ResponseSent { peer, .. })) => {
       node_log!(callbacks, 4, "File response sent to {}", peer);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::OutboundFailure { peer, error, .. })) => {
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::OutboundFailure {
+      peer,
+      error,
+      ..
+    })) => {
       node_log!(callbacks, 2, "File outbound failure to {}: {:?}", peer, error);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::InboundFailure { peer, error, .. })) => {
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::InboundFailure {
+      peer, error, ..
+    })) => {
       node_log!(callbacks, 2, "File inbound failure from {}: {:?}", peer, error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(autonat::Event::StatusChanged { old, new })) => {
@@ -775,30 +824,43 @@ fn handle_swarm_event(
           node_log!(callbacks, 3, "Node switches off a TURN server");
         }
         state.turn_port = None;
-        swarm.behaviour_mut().kademlia.stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
+        swarm
+          .behaviour_mut()
+          .kademlia
+          .stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
       }
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Autonat(e)) => {
-        node_log!(callbacks, 4, "AutoNAT event: {:?}", e);
+      node_log!(callbacks, 4, "AutoNAT event: {:?}", e);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::Message { peer, message })) => {
-      if let request_response::Message::Request { request: _, channel, .. } = message {
+      if let request_response::Message::Request {
+        request: _, channel, ..
+      } = message
+      {
         node_log!(callbacks, 4, "Received TurnAuthRequest from {}", peer);
 
         if state.turn_port.is_none() {
-            let response = crate::types::TurnAuthResponse {
-                username: String::new(),
-                credential: String::new(),
-                port: 0,
-                public_ip: String::new(),
-            };
-            let _ = swarm.behaviour_mut().turn_auth.send_response(channel, response);
-            return;
+          let response = crate::types::TurnAuthResponse {
+            username: String::new(),
+            credential: String::new(),
+            port: 0,
+            public_ip: String::new(),
+          };
+          let _ = swarm.behaviour_mut().turn_auth.send_response(channel, response);
+          return;
         }
 
         let key: [u8; 16] = rand::random();
         let credential = crate::utils::hex_encode(&key);
-        let username = format!("{}_{}", peer, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs());
+        let username = format!(
+          "{}_{}",
+          peer,
+          std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+        );
 
         state.turn_auth.add_user(username.clone(), credential.clone());
 
@@ -809,19 +871,48 @@ fn handle_swarm_event(
           public_ip: state.public_ip.clone().unwrap_or_default(),
         };
 
-        node_log!(callbacks, 3, "Sending TurnAuthResponse: ip={}, port={}, user={}", response.public_ip, response.port, response.username);
+        node_log!(
+          callbacks,
+          3,
+          "Sending TurnAuthResponse: ip={}, port={}, user={}",
+          response.public_ip,
+          response.port,
+          response.username
+        );
 
         let _ = swarm.behaviour_mut().turn_auth.send_response(channel, response);
       } else if let request_response::Message::Response { response, .. } = message {
-        node_log!(callbacks, 4, "Received TurnAuthResponse from {}", peer);
+        node_log!(
+          callbacks,
+          3,
+          "[TURN] Received TurnAuthResponse from {}: ip={}, port={}, user={}",
+          peer,
+          response.public_ip,
+          response.port,
+          response.username
+        );
         if callbacks.on_turn_auth_result != 0 {
           if let Some(pk) = peerid_to_pubkey(&peer) {
             if let Ok(peer_c_str) = CString::new(crate::utils::hex_encode(&pk)) {
               if let Ok(ip_c_str) = CString::new(response.public_ip) {
                 if let Ok(user_c_str) = CString::new(response.username) {
                   if let Ok(cred_c_str) = CString::new(response.credential) {
-                    let cb: extern "C" fn(*mut c_void, *const c_char, *const c_char, u16, *const c_char, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_auth_result) };
-                    cb(callbacks.context as *mut c_void, peer_c_str.as_ptr(), ip_c_str.as_ptr(), response.port, user_c_str.as_ptr(), cred_c_str.as_ptr());
+                    let cb: extern "C" fn(
+                      *mut c_void,
+                      *const c_char,
+                      *const c_char,
+                      u16,
+                      *const c_char,
+                      *const c_char,
+                    ) = unsafe { std::mem::transmute(callbacks.on_turn_auth_result) };
+                    cb(
+                      callbacks.context as *mut c_void,
+                      peer_c_str.as_ptr(),
+                      ip_c_str.as_ptr(),
+                      response.port,
+                      user_c_str.as_ptr(),
+                      cred_c_str.as_ptr(),
+                    );
                   }
                 }
               }
@@ -830,29 +921,43 @@ fn handle_swarm_event(
         }
       }
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::OutboundFailure { peer, .. })) => {
-      node_log!(callbacks, 2, "TurnAuth request to {} failed", peer);
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::OutboundFailure {
+      peer,
+      error,
+      ..
+    })) => {
+      node_log!(callbacks, 2, "[TURN] TurnAuth request to {} failed: {:?}", peer, error);
       if callbacks.on_turn_auth_result != 0 {
         if let Some(pk) = peerid_to_pubkey(&peer) {
           if let Ok(peer_c_str) = CString::new(crate::utils::hex_encode(&pk)) {
-            let cb: extern "C" fn(*mut c_void, *const c_char, *const c_char, u16, *const c_char, *const c_char) = unsafe { std::mem::transmute(callbacks.on_turn_auth_result) };
-            cb(callbacks.context as *mut c_void, peer_c_str.as_ptr(), std::ptr::null(), 0, std::ptr::null(), std::ptr::null());
+            let cb: extern "C" fn(*mut c_void, *const c_char, *const c_char, u16, *const c_char, *const c_char) =
+              unsafe { std::mem::transmute(callbacks.on_turn_auth_result) };
+            cb(
+              callbacks.context as *mut c_void,
+              peer_c_str.as_ptr(),
+              std::ptr::null(),
+              0,
+              std::ptr::null(),
+              std::ptr::null(),
+            );
           }
         }
       }
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::InboundFailure { peer, error, .. })) => {
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::InboundFailure {
+      peer,
+      error,
+      ..
+    })) => {
       node_log!(callbacks, 2, "TurnAuth inbound failure from {}: {:?}", peer, error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::TurnAuth(request_response::Event::ResponseSent { peer, .. })) => {
       node_log!(callbacks, 4, "TurnAuth response sent to {}", peer);
     }
-    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(ping::Event { peer, result, .. })) => {
-        match result {
-            Ok(rtt) => node_log!(callbacks, 4, "Ping to {} successful, RTT: {:?}", peer, rtt),
-            Err(e) => node_log!(callbacks, 4, "Ping to {} failed: {:?}", peer, e),
-        }
-    }
+    SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(ping::Event { peer, result, .. })) => match result {
+      Ok(rtt) => node_log!(callbacks, 4, "Ping to {} successful, RTT: {:?}", peer, rtt),
+      Err(e) => node_log!(callbacks, 4, "Ping to {} failed: {:?}", peer, e),
+    },
     event => {
       node_log!(callbacks, 4, "Unhandled SwarmEvent: {:?}", event);
     }

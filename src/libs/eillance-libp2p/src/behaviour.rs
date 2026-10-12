@@ -50,7 +50,7 @@ pub fn build_behaviour(
     request_response::Config::default(),
   );
   let turn_auth = request_response::cbor::Behaviour::new(
-[(StreamProtocol::new("/mercury/turn_auth/1.0.0"), ProtocolSupport::Full)],
+    [(StreamProtocol::new("/mercury/turn_auth/1.0.0"), ProtocolSupport::Full)],
     request_response::Config::default(),
   );
 
