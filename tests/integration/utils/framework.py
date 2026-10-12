@@ -132,6 +132,12 @@ class TestFramework:
             raise ValueError(f"Process {proc_def.name} requests unknown network {net_name}")
           net_map[net_name].connect(container, ipv4_address=ip)
 
+        # Disconnect from default bridge to ensure isolation
+        try:
+          self.client.networks.get("bridge").disconnect(container)
+        except Exception:
+          pass
+
         # Start the container
         print(f"Starting {proc_def.name}...")
         container.start()
@@ -237,7 +243,9 @@ class TestFramework:
     c = self.get_container(container_name)
     if c:
       print(f"Adding route in {container_name}: {dest_network} via {via_gateway}")
-      c.exec_run(f"ip route add {dest_network} via {via_gateway}")
+      exit_code, output = c.exec_run(f"sh -c 'if ! command -v ip >/dev/null 2>&1; then apt-get update -qq && apt-get install -y iproute2 || apk add --no-cache iproute2; fi; ip route add {dest_network} via {via_gateway}'")
+      if exit_code != 0:
+        print(f"Failed to add route in {container_name}: {output.decode('utf-8', errors='replace')}")
 
   def teardown(self):
     print("\n--- Teardown ---")
