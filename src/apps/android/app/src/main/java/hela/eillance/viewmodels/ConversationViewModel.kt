@@ -148,7 +148,8 @@ class ConversationViewModel(
           }
 
           val name = queryFileName(cr, uri) ?: "file_${System.currentTimeMillis()}"
-          val tempFile = File(context.cacheDir, name)
+          // Prevent overwriting if the source URI is already a file in cacheDir with the same name
+          val tempFile = File(context.cacheDir, "draft_${java.util.UUID.randomUUID().toString().take(8)}_$name")
 
           cr.openInputStream(uri)?.use { input ->
             tempFile.outputStream().use { output ->
