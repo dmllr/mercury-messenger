@@ -45,7 +45,9 @@ import hela.eillance.camera.R
 import hela.eillance.navigation.Route
 import hela.eillance.navigation.Screen
 import hela.eillance.viewmodels.ProfileViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val URL_IDENTITY =
   "https://mercury.eillance.com/articles/cryptographic-identity/embed/"
@@ -68,12 +70,15 @@ fun IdentityScreen(navController: NavController, profileVM: ProfileViewModel) {
   }
 
   if (showRestoreDialog != null) {
+    val uri = showRestoreDialog!!
     RestoreBackupDialog(
       onDismiss = { showRestoreDialog = null },
       onConfirm = { password ->
         scope.launch {
           isRestoring = true
-          val success = profileVM.restoreBackup(showRestoreDialog!!, password)
+          val success = withContext(Dispatchers.IO) {
+            profileVM.restoreBackup(uri, password)
+          }
           isRestoring = false
           if (success) {
             // Identity restored, MercuryApp will react to profileVM state change
