@@ -222,9 +222,11 @@ class CallViewModel {
     }
 
     void StopCallMedia() {
-      std::lock_guard<std::mutex> const lock(mutex);
-      state.is_muted = false;
-      state.is_speaker_on = false;
+      {
+        std::lock_guard<std::mutex> const lock(mutex);
+        state.is_muted = false;
+        state.is_speaker_on = false;
+      }
       EventQueue::Instance().Push(EventCmdSetSpeakerphone{false});
       Notify();
     }

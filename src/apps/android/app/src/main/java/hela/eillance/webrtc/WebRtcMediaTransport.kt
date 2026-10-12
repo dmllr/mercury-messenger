@@ -12,6 +12,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioSource
@@ -42,6 +44,7 @@ import kotlin.coroutines.resume
 class WebRtcMediaTransport(private val context: Context, private val nativePointer: Long) {
 
   private class MediaSession(val pc: PeerConnection) {
+    val mutex = Mutex()
     var iceGatheringComplete: CompletableDeferred<Unit>? = null
 
     @Volatile
@@ -307,7 +310,11 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
   fun disconnectPeer(peerId: String) {
     val session = sessions.remove(peerId)
     if (session != null) {
-      scope.launch { session.dispose() }
+      scope.launch {
+        session.mutex.withLock {
+          session.dispose()
+        }
+      }
     }
     remoteVideoTracks.remove(peerId)
     remoteSinks.remove(peerId)
@@ -384,10 +391,12 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
 
       activeSessions.forEach { session ->
         try {
-          if (!session.isDisposed) {
-            val senders = session.pc.senders
-            for (sender in senders) {
-              if (sender.track() != null) session.pc.removeTrack(sender)
+          session.mutex.withLock {
+            if (!session.isDisposed) {
+              val senders = session.pc.senders
+              for (sender in senders) {
+                if (sender.track() != null) session.pc.removeTrack(sender)
+              }
             }
           }
         } catch (e: Exception) {
@@ -396,11 +405,14 @@ class WebRtcMediaTransport(private val context: Context, private val nativePoint
       }
 
       try {
-        videoTrackToDispose?.dispose()
         capturerToDispose?.stopCapture()
+      } catch (e: Exception) {}
+
+      try {
+        videoTrackToDispose?.dispose()
+        videoSourceToDispose?.dispose()
         capturerToDispose?.dispose()
         textureHelperToDispose?.dispose()
-        videoSourceToDispose?.dispose()
         audioTrackToDispose?.dispose()
         audioSourceToDispose?.dispose()
       } catch (e: Exception) {
