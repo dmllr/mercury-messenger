@@ -82,7 +82,11 @@ impl EventLoopState {
       if let Some(addrs) = self.known_addresses.get(&peer_val) {
         for mut addr in addrs.clone() {
           let has_target_p2p = addr.iter().any(|p| {
-            if let libp2p::multiaddr::Protocol::P2p(id) = p { id == peer_val } else { false }
+            if let libp2p::multiaddr::Protocol::P2p(id) = p {
+              id == peer_val
+            } else {
+              false
+            }
           });
           if !has_target_p2p {
             addr.push(libp2p::multiaddr::Protocol::P2p(peer_val));
@@ -339,13 +343,19 @@ fn handle_command(
     }
     Command::AddBootstrapResolved(addr) => {
       let mut is_already_known = false;
-      let addr_without_p2p: Vec<_> = addr.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
+      let addr_without_p2p: Vec<_> = addr
+        .iter()
+        .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+        .collect();
       for b in &state.bootstrap_addrs {
-         let b_without_p2p: Vec<_> = b.iter().filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_))).collect();
-         if b_without_p2p == addr_without_p2p {
-            is_already_known = true;
-            break;
-         }
+        let b_without_p2p: Vec<_> = b
+          .iter()
+          .filter(|p| !matches!(p, libp2p::multiaddr::Protocol::P2p(_)))
+          .collect();
+        if b_without_p2p == addr_without_p2p {
+          is_already_known = true;
+          break;
+        }
       }
 
       if !is_already_known {

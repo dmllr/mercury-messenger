@@ -60,18 +60,19 @@ pub(crate) fn handle_swarm_event(
       ..
     } => {
       crate::node_log!(callbacks, 5, "Outgoing connection error to {}: {:?}", peer_id, error);
-      
-      if !swarm.is_connected(&peer_id) {
-          if state.explicit_bootstrap_peers.contains(&peer_id) {
-              state.bootstrap_addrs.retain(|a| {
-                  !a.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(id) if id == peer_id))
-              });
-              state.explicit_bootstrap_peers.remove(&peer_id);
-          }
 
-          if !state.pending_dials.contains_key(&peer_id) {
-            notify_disconnected(callbacks, swarm, &peer_id);
-          }
+      if !swarm.is_connected(&peer_id) {
+        if state.explicit_bootstrap_peers.contains(&peer_id) {
+          state.bootstrap_addrs.retain(|a| {
+            !a.iter()
+              .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(id) if id == peer_id))
+          });
+          state.explicit_bootstrap_peers.remove(&peer_id);
+        }
+
+        if !state.pending_dials.contains_key(&peer_id) {
+          notify_disconnected(callbacks, swarm, &peer_id);
+        }
       }
     }
     SwarmEvent::OutgoingConnectionError {
@@ -263,17 +264,18 @@ fn handle_connection_closed(
   callbacks: &Callbacks,
 ) {
   crate::node_log!(callbacks, 3, "Connection closed with {}", peer_id);
-  
-  if !swarm.is_connected(&peer_id) {
-      if state.explicit_bootstrap_peers.contains(&peer_id) {
-          state.bootstrap_addrs.retain(|a| {
-              !a.iter().any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(id) if id == peer_id))
-          });
-          state.explicit_bootstrap_peers.remove(&peer_id);
-      }
 
-      state.active_relay_peers.remove(&peer_id);
-      notify_disconnected(callbacks, swarm, &peer_id);
+  if !swarm.is_connected(&peer_id) {
+    if state.explicit_bootstrap_peers.contains(&peer_id) {
+      state.bootstrap_addrs.retain(|a| {
+        !a.iter()
+          .any(|p| matches!(p, libp2p::multiaddr::Protocol::P2p(id) if id == peer_id))
+      });
+      state.explicit_bootstrap_peers.remove(&peer_id);
+    }
+
+    state.active_relay_peers.remove(&peer_id);
+    notify_disconnected(callbacks, swarm, &peer_id);
   }
 }
 
@@ -463,7 +465,11 @@ fn handle_kademlia(
               if let Some(addrs) = state.known_addresses.get(&peer) {
                 for mut addr in addrs.clone() {
                   let has_target_p2p = addr.iter().any(|p| {
-                    if let libp2p::multiaddr::Protocol::P2p(id) = p { id == peer } else { false }
+                    if let libp2p::multiaddr::Protocol::P2p(id) = p {
+                      id == peer
+                    } else {
+                      false
+                    }
                   });
                   if !has_target_p2p {
                     addr.push(libp2p::multiaddr::Protocol::P2p(peer));
@@ -495,15 +501,15 @@ fn handle_kademlia(
                 .build();
 
               match swarm.dial(opts) {
-                  Err(libp2p::swarm::DialError::NoAddresses) => {
-                    crate::node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
-                    notify_disconnected(callbacks, swarm, &peer);
-                  }
-                  Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
-                    // Already connected
-                  }
-                  Err(e) => {
-                    crate::node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
+                Err(libp2p::swarm::DialError::NoAddresses) => {
+                  crate::node_log!(callbacks, 3, "Failed to discover addresses for {}", peer);
+                  notify_disconnected(callbacks, swarm, &peer);
+                }
+                Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
+                  // Already connected
+                }
+                Err(e) => {
+                  crate::node_log!(callbacks, 2, "Fallback dial error for {}: {:?}", peer, e);
                   notify_disconnected(callbacks, swarm, &peer);
                 }
                 Ok(_) => {
