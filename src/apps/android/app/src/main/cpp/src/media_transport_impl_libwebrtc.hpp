@@ -161,6 +161,35 @@ class AndroidMediaTransport final : public MediaTransport::Interface {
     env->DeleteLocalRef(j_type);
   }
 
+  void StartLocalMedia(bool is_video) override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) return;
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
+    auto* mid = transport_holder.GetMethod("startLocalMedia");
+    env->CallVoidMethod(transportJavaRef_, mid, static_cast<jboolean>(is_video));
+  }
+
+  void StopLocalMedia() override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) return;
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
+    auto* mid = transport_holder.GetMethod("stopLocalMedia");
+    env->CallVoidMethod(transportJavaRef_, mid);
+  }
+
+  void SetLocalMediaEnabled(bool audio, bool video) override {
+    auto env_scope = GetEnv();
+    auto* env = env_scope.Get();
+    if ((env == nullptr) || (transportJavaRef_ == nullptr)) return;
+    auto& transport_holder = ClassRefs::Instance().Class("hela/eillance/webrtc/WebRtcMediaTransport");
+    auto* midAudio = transport_holder.GetMethod("setAudioEnabled");
+    auto* midVideo = transport_holder.GetMethod("setVideoEnabled");
+    env->CallVoidMethod(transportJavaRef_, midAudio, static_cast<jboolean>(audio));
+    env->CallVoidMethod(transportJavaRef_, midVideo, static_cast<jboolean>(video));
+  }
+
   auto AddVideo(ContactID const& peer_id) -> std::shared_ptr<ITrack> override {
     auto env_scope = GetEnv();
     auto* env = env_scope.Get();

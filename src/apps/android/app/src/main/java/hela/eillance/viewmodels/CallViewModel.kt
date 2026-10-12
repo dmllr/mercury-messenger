@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import hela.eillance.MessengerService
 import hela.eillance.events.NativeEventBus
 import hela.eillance.ndkio.CallState
-import hela.eillance.ndkio.HistoryEntryKind
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -25,7 +24,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   private val _isSpeakerOn = MutableStateFlow(false)
   val isSpeakerOn = _isSpeakerOn.asStateFlow()
 
-  // We need direct access to CallService for WebRTC sinks and Transport interactions
   private val messengerService: MessengerService?
     get() = MessengerService.instance
 
@@ -50,8 +48,6 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   fun startVoiceCall(peerId: String? = null) {
     val target = peerId ?: _callState.value.peerId
     if (target.isNotEmpty() && nativePtr != 0L) {
-      messengerService?.startVoiceCallViaTelecom(target)
-      messengerService?.startLocalMedia(false)
       nativeStartVoice(nativePtr, target)
     }
   }
@@ -59,33 +55,26 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   fun startVideoCall(peerId: String? = null) {
     val target = peerId ?: _callState.value.peerId
     if (target.isNotEmpty() && nativePtr != 0L) {
-      messengerService?.startVideoCallViaTelecom(target)
-      messengerService?.startLocalMedia(true)
       nativeStartVideo(nativePtr, target)
     }
   }
 
   fun hangup() {
-    // Delegate to Service for proper cleanup (Telecom, Sound, Notification)
+    // If user presses hangup, we delegate to Service. Service will call into our native bridge.
     messengerService?.hangup() ?: run {
-      // Fallback if service not bound (unlikely in active call)
       if (nativePtr != 0L) nativeHangup(nativePtr)
     }
   }
 
   fun acceptCall() {
-    // Delegate to Service
     messengerService?.acceptCall() ?: run {
       if (nativePtr != 0L) {
-        val isVideo = _callState.value.callType == HistoryEntryKind.VideoCall
-        // Fallback
         nativeAccept(nativePtr)
       }
     }
   }
 
   fun rejectCall() {
-    // Delegate to Service to stop ringing and kill notification
     messengerService?.rejectCall() ?: run {
       if (nativePtr != 0L) nativeReject(nativePtr)
     }
@@ -94,8 +83,9 @@ class CallViewModel(application: Application) : AndroidViewModel(application) {
   fun stopCallMedia() {
     _isMuted.value = false
     _isSpeakerOn.value = false
-    messengerService?.stopLocalMedia()
     messengerService?.setSpeakerphoneOn(false)
+    // Note: Core automatically stops OS-level captures via events,
+    // but CallScreen clears manual speakerphone/mute toggles when destroyed.
   }
 
   fun setLocalVideoSink(sink: VideoSink?) {

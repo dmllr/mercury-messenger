@@ -17,6 +17,21 @@ object NativeEventBus {
   val historyUpdates = MutableSharedFlow<Pair<String, HistoryPage>>(extraBufferCapacity = 10)
   val transferProgress = MutableSharedFlow<Triple<String, String, Float>>(extraBufferCapacity = 100)
 
+  // Notification Triggers
+  val notifyNewMessage = MutableSharedFlow<Pair<String, Long>>(extraBufferCapacity = 10)
+  val notifyMissedCall = MutableSharedFlow<String>(extraBufferCapacity = 10)
+  val notifyContactRequest = MutableSharedFlow<String>(extraBufferCapacity = 10)
+
+  // Hardware / OS Orchestration Commands
+  val cmdProcessIncomingTelecom = MutableSharedFlow<String>(extraBufferCapacity = 10)
+  val cmdProcessOutgoingTelecom = MutableSharedFlow<Pair<String, Boolean>>(extraBufferCapacity = 10)
+  val cmdDisconnectTelecom = MutableSharedFlow<String>(extraBufferCapacity = 10)
+  val cmdSetTelecomActive = MutableSharedFlow<String>(extraBufferCapacity = 10)
+  val cmdSetAudioMode = MutableSharedFlow<Int>(extraBufferCapacity = 10)
+  val cmdClearCommunicationDevice = MutableSharedFlow<Unit>(extraBufferCapacity = 10)
+  val cmdPlaySound = MutableSharedFlow<Int>(extraBufferCapacity = 10)
+  val cmdStopSound = MutableSharedFlow<Unit>(extraBufferCapacity = 10)
+
   class SettingsWrapper(
     val signalingUrl: String?, val timeout: Int, val customStun: String?,
     val customTurn: String?, val customTurnUser: String?, val customTurnPass: String?,
@@ -61,5 +76,60 @@ object NativeEventBus {
     tUser: String?, tPass: String?, sndS: Boolean, sndR: Boolean
   ) {
     settings.value = SettingsWrapper(url, t, stun, turn, tUser, tPass, sndS, sndR)
+  }
+
+  @JvmStatic
+  fun onNotifyNewMessage(peerId: String, messageId: Long) {
+    notifyNewMessage.tryEmit(peerId to messageId)
+  }
+
+  @JvmStatic
+  fun onNotifyMissedCall(peerId: String) {
+    notifyMissedCall.tryEmit(peerId)
+  }
+
+  @JvmStatic
+  fun onNotifyContactRequest(peerId: String) {
+    notifyContactRequest.tryEmit(peerId)
+  }
+
+  @JvmStatic
+  fun onCmdProcessIncomingTelecom(peerId: String) {
+    cmdProcessIncomingTelecom.tryEmit(peerId)
+  }
+
+  @JvmStatic
+  fun onCmdProcessOutgoingTelecom(peerId: String, isVideo: Boolean) {
+    cmdProcessOutgoingTelecom.tryEmit(peerId to isVideo)
+  }
+
+  @JvmStatic
+  fun onCmdDisconnectTelecom(peerId: String) {
+    cmdDisconnectTelecom.tryEmit(peerId)
+  }
+
+  @JvmStatic
+  fun onCmdSetTelecomActive(peerId: String) {
+    cmdSetTelecomActive.tryEmit(peerId)
+  }
+
+  @JvmStatic
+  fun onCmdSetAudioMode(mode: Int) {
+    cmdSetAudioMode.tryEmit(mode)
+  }
+
+  @JvmStatic
+  fun onCmdClearCommunicationDevice() {
+    cmdClearCommunicationDevice.tryEmit(Unit)
+  }
+
+  @JvmStatic
+  fun onCmdPlaySound(type: Int) {
+    cmdPlaySound.tryEmit(type)
+  }
+
+  @JvmStatic
+  fun onCmdStopSound() {
+    cmdStopSound.tryEmit(Unit)
   }
 }

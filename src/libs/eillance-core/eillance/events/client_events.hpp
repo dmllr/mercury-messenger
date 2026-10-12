@@ -154,4 +154,33 @@ struct EventSendQueuedMessages {
   ContactID peer_id;
 };
 
+// Application Lifecycle
+struct EventAppForegrounded {};
+struct EventAppBackgrounded {};
+
+// Explicit Notification Triggers
+struct EventNotifyNewMessage {
+  ContactID peer_id;
+  uint64_t message_id;
+};
+struct EventNotifyMissedCall {
+  ContactID peer_id;
+};
+struct EventNotifyContactRequest {
+  ContactID peer_id;
+};
+
+// Explicit Hardware / OS Orchestration Commands
+enum class AudioRoutingMode : uint8_t { normal = 0, inCall = 1 };
+enum class SoundType : uint8_t { ringing = 0, ringback = 1, connecting = 2 };
+
+struct EventCmdProcessIncomingTelecomCall { ContactID peer_id; };
+struct EventCmdProcessOutgoingTelecomCall { ContactID peer_id; bool is_video; };
+struct EventCmdDisconnectTelecomCall { ContactID peer_id; };
+struct EventCmdSetTelecomCallActive { ContactID peer_id; };
+struct EventCmdSetAudioMode { AudioRoutingMode mode; };
+struct EventCmdClearCommunicationDevice {};
+struct EventCmdPlaySound { SoundType type; };
+struct EventCmdStopSound {};
+
 }  // namespace eillance

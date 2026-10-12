@@ -24,7 +24,6 @@ import hela.eillance.webrtc.WebRtcMediaTransport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -34,7 +33,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import org.webrtc.VideoSink
 
@@ -93,7 +91,6 @@ class MessengerService : Service() {
             observers.setup(application)
           }
           _isEngineReady.value = true
-          startWatchdog()
         } catch (e: Exception) {
           Log.e(TAG, "Failed to initialize engine", e)
         }
@@ -101,22 +98,6 @@ class MessengerService : Service() {
     }
 
     startForegroundService()
-  }
-
-  private fun startWatchdog() {
-    serviceScope.launch(Dispatchers.IO) {
-      while (true) {
-        delay(10000)
-        if (_isEngineReady.value) {
-          val isAlive = try {
-            withTimeout(2000) { nativePing() }
-          } catch (e: Exception) {
-            false
-          }
-          _isCoreUnresponsive.value = !isAlive
-        }
-      }
-    }
   }
 
   fun resolveContactInfo(peerId: String): Contact? {
@@ -136,7 +117,8 @@ class MessengerService : Service() {
 
   @Keep
   fun onNativeCoreCrash() {
-    restartCore()
+    Log.e(TAG, "Native core crash/hang detected by C++ Watchdog!")
+    _isCoreUnresponsive.value = true
   }
 
   // --- Delegation Methods ---
@@ -148,20 +130,12 @@ class MessengerService : Service() {
   fun onTelecomDisconnect(connection: MercuryConnection) =
     callHandler.onTelecomDisconnect(connection)
 
-  fun startLocalMedia(isVideo: Boolean) = callHandler.startLocalMedia(isVideo)
-  fun stopLocalMedia() = callHandler.stopLocalMedia()
   fun setLocalVideoSink(sink: VideoSink?) = callHandler.setLocalVideoSink(sink)
   fun setRemoteVideoSink(peerId: String, sink: VideoSink?) =
     callHandler.setRemoteVideoSink(peerId, sink)
 
   fun setMicrophoneMute(muted: Boolean) = callHandler.setMicrophoneMute(muted)
   fun setSpeakerphoneOn(on: Boolean) = callHandler.setSpeakerphoneOn(on)
-
-  fun startVoiceCallViaTelecom(targetId: String) =
-    telecomIntegration.placeTelecomCall(targetId, false)
-
-  fun startVideoCallViaTelecom(targetId: String) =
-    telecomIntegration.placeTelecomCall(targetId, true)
 
   fun showIncomingCallNotification(peerId: String) =
     notifications.showIncomingCallNotification(peerId)
@@ -173,6 +147,12 @@ class MessengerService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
+      ACTION_APP_FOREGROUND -> {
+        if (_isEngineReady.value) nativeOnAppForeground()
+      }
+      ACTION_APP_BACKGROUND -> {
+        if (_isEngineReady.value) nativeOnAppBackground()
+      }
       ACTION_REJECT_CALL -> rejectCall()
       ACTION_ACCEPT_CALL -> acceptCall()
       ACTION_HANGUP -> hangup()
@@ -291,8 +271,9 @@ class MessengerService : Service() {
   external fun start()
   private external fun terminate()
   external fun identityExists(): Boolean
-  private external fun nativePing(): Boolean
   private external fun nativeRestart()
+  private external fun nativeOnAppForeground()
+  private external fun nativeOnAppBackground()
 
   companion object {
     var instance: MessengerService? = null
@@ -310,6 +291,8 @@ class MessengerService : Service() {
     const val ACTION_REJECT_CALL = "hela.eillance.ACTION_REJECT_CALL"
     const val ACTION_SHOW_INCOMING_CALL = "hela.eillance.ACTION_SHOW_INCOMING_CALL"
     const val ACTION_MARK_READ = "hela.eillance.ACTION_MARK_READ"
+    const val ACTION_APP_FOREGROUND = "hela.eillance.ACTION_APP_FOREGROUND"
+    const val ACTION_APP_BACKGROUND = "hela.eillance.ACTION_APP_BACKGROUND"
     const val EXTRA_PEER_ID = "hela.eillance.EXTRA_PEER_ID"
   }
 }

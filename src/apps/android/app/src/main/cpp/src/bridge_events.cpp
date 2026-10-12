@@ -299,4 +299,119 @@ void InitEventBridge(JavaVM* jvm) {
       );
     }
   }));
+
+  // Setup explicitly requested notification triggers
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventNotifyNewMessage>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onNotifyNewMessage"), j_peer, static_cast<jlong>(e.message_id));
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventNotifyMissedCall>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onNotifyMissedCall"), j_peer);
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventNotifyContactRequest>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onNotifyContactRequest"), j_peer);
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  // Hardware / OS Orchestration Commands
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdProcessIncomingTelecomCall>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdProcessIncomingTelecom"), j_peer);
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdProcessOutgoingTelecomCall>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdProcessOutgoingTelecom"), j_peer, static_cast<jboolean>(e.is_video));
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdDisconnectTelecomCall>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdDisconnectTelecom"), j_peer);
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdSetTelecomCallActive>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      jstring j_peer = env->NewStringUTF(e.peer_id.ToString().c_str());
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetTelecomActive"), j_peer);
+      env->DeleteLocalRef(j_peer);
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdSetAudioMode>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdSetAudioMode"), static_cast<jint>(e.mode));
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdClearCommunicationDevice>([jvm](auto const&) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdClearCommunicationDevice"));
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdPlaySound>([jvm](auto const& e) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdPlaySound"), static_cast<jint>(e.type));
+    }
+  }));
+
+  g_eventBridgeUnsubs.emplace_back(q.Subscribe<EventCmdStopSound>([jvm](auto const&) -> void {
+    jni::ScopedJniEnv env_scope(jvm);
+    if (auto* env = env_scope.Get()) {
+      auto& class_refs = ClassRefs::Instance();
+      auto& bus_holder = class_refs.Class("hela/eillance/events/NativeEventBus");
+      env->CallStaticVoidMethod(bus_holder.Class(), bus_holder.GetMethod("onCmdStopSound"));
+    }
+  }));
 }
