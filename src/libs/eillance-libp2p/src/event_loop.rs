@@ -576,14 +576,14 @@ fn handle_swarm_event(
       error,
       ..
     } => {
-      node_log!(callbacks, 4, "Outgoing connection error to {}: {:?}", peer_id, error);
+      node_log!(callbacks, 5, "Outgoing connection error to {}: {:?}", peer_id, error);
       state.pending_dials.remove(&peer_id);
       notify_disconnected(callbacks, swarm, &peer_id);
     }
     SwarmEvent::OutgoingConnectionError {
       peer_id: None, error, ..
     } => {
-      node_log!(callbacks, 4, "Outgoing connection error to unknown peer: {:?}", error);
+      node_log!(callbacks, 5, "Outgoing connection error to unknown peer: {:?}", error);
     }
     SwarmEvent::Behaviour(MercuryBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
       node_log!(
