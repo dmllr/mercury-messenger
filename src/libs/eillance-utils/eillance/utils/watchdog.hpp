@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -18,7 +19,8 @@ class Watchdog {
   Watchdog(DispatchQueue& target_queue, std::chrono::duration<Rep, Period> timeout, std::function<void()> on_stall)
       : target_queue_(target_queue),
         timeout_us_(std::chrono::duration_cast<std::chrono::microseconds>(timeout).count()),
-        on_stall_(std::move(on_stall)) {
+        on_stall_(std::move(on_stall)),
+        last_heartbeat_(std::make_shared<std::atomic<uint64_t>>(0)) {
   }
 
   ~Watchdog() {
@@ -29,7 +31,7 @@ class Watchdog {
     if (running_.exchange(true)) {
       return;
     }
-    last_heartbeat_ = Time::Now();
+    *last_heartbeat_ = Time::SteadyNow();
     thread_ = std::thread([this]() -> void { MonitorLoop(); });
   }
 
@@ -45,6 +47,8 @@ class Watchdog {
 
  private:
   void MonitorLoop() {
+    auto last_wake = Time::SteadyNow();
+
     while (running_) {
       {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -54,10 +58,20 @@ class Watchdog {
         }
       }
 
-      auto const now = Time::Now();
-      target_queue_.Dispatch([this] { last_heartbeat_ = Time::Now(); });
+      auto const now = Time::SteadyNow();
+      auto const time_since_last_wake = now - last_wake;
+      last_wake = now;
 
-      if (now > last_heartbeat_.load() + timeout_us_) {
+      auto heartbeat_ptr = last_heartbeat_;
+      target_queue_.Dispatch([heartbeat_ptr] { *heartbeat_ptr = Time::SteadyNow(); });
+
+      // If the watchdog thread itself was delayed significantly (e.g., system suspend,
+      // debugger breakpoint, or extreme CPU starvation), ignore this cycle to avoid false positives.
+      if (time_since_last_wake > 10 * Time::uS) {
+        continue;
+      }
+
+      if (now > heartbeat_ptr->load() + timeout_us_) {
         if (on_stall_) {
           on_stall_();
         }
@@ -67,6 +81,7 @@ class Watchdog {
         if (cv_.wait_for(lock, std::chrono::seconds(10), [this]() -> bool { return !running_; })) {
           break;
         }
+        last_wake = Time::SteadyNow();
       }
     }
   }
@@ -79,7 +94,7 @@ class Watchdog {
   std::atomic<bool> running_{false};
   std::condition_variable cv_;
   std::mutex mutex_;
-  std::atomic<uint64_t> last_heartbeat_{0};
+  std::shared_ptr<std::atomic<uint64_t>> last_heartbeat_;
 };
 
 }  // namespace eillance::utils
