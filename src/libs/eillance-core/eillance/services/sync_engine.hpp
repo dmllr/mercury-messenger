@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -27,6 +28,11 @@
 namespace eillance::sync {
 
 class SyncEngine {
+  using Json = nlohmann::json;
+
+  static constexpr auto hashSize = 64U;
+  static constexpr auto maxBatchSize = 500U;
+
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   ContactID my_id_;
@@ -52,6 +58,54 @@ class SyncEngine {
         reinterpret_cast<std::byte*>(hash) + length_of_hash
     );
     return crypto::ToHex(bytes);
+  }
+
+  auto ValidateAndRepairChain(TopicID const& topic_id) const -> std::pair<std::string, size_t> {
+    auto entries = storage_->GetLedgerEntries(topic_id);
+    if (entries.empty()) {
+      return {std::string(hashSize, '0'), 0};
+    }
+
+    std::ranges::sort(entries, [](auto const& a, auto const& b) -> bool {
+      if (a.created_at.value != b.created_at.value) {
+        return a.created_at.value < b.created_at.value;
+      }
+      if (a.author_id != b.author_id) {
+        return a.author_id < b.author_id;
+      }
+      if (a.type != b.type) {
+        return a.type < b.type;
+      }
+      return a.payload < b.payload;
+    });
+
+    auto unique_range = std::ranges::unique(entries, [](auto const& a, auto const& b) -> bool {
+      return a.created_at.value == b.created_at.value && a.author_id == b.author_id && a.type == b.type &&
+             a.payload == b.payload;
+    });
+    entries.erase(unique_range.begin(), unique_range.end());
+
+    auto current_hash = std::string(hashSize, '0');
+    bool chain_broken = false;
+    for (auto& entry : entries) {
+      if (entry.prev_hash != current_hash) {
+        chain_broken = true;
+        entry.prev_hash = current_hash;
+      }
+      auto const data_to_hash = entry.prev_hash + entry.author_id.ToString() + std::to_string(entry.created_at.value) +
+                                std::to_string(static_cast<int>(entry.type)) + entry.payload;
+      if (auto const computed_hash = ComputeSHA256(data_to_hash); entry.hash != computed_hash) {
+        chain_broken = true;
+        entry.hash = computed_hash;
+      }
+      current_hash = entry.hash;
+    }
+
+    if (chain_broken) {
+      storage_->ReplaceLedgerEntries(topic_id, std::string(hashSize, '0'), entries);
+    }
+
+    return {current_hash, entries.size()};
   }
 
  public:
@@ -80,7 +134,7 @@ class SyncEngine {
   }
 
   ~SyncEngine() {
-    for (auto id : event_unsubs_) {
+    for (auto const id : event_unsubs_) {
       EventQueue::Instance().Unsubscribe(id);
     }
     Stop();
@@ -104,7 +158,7 @@ class SyncEngine {
     pending_proposals_.clear();
   }
 
-  void AppendAction(TopicID const& topic_id, storage::LedgerActionType type, nlohmann::json const& payload) {
+  void AppendAction(TopicID const& topic_id, storage::LedgerActionType type, Json const& payload) {
     storage::LedgerEntry entry;
     entry.topic_id = topic_id;
     entry.author_id = my_id_;
@@ -120,7 +174,7 @@ class SyncEngine {
       entry.created_at.value = latest->created_at.value + 1;
     }
 
-    entry.prev_hash = latest ? latest->hash : std::string(64, '0');
+    entry.prev_hash = latest ? latest->hash : std::string(hashSize, '0');
 
     std::string const data_to_hash = entry.prev_hash + entry.author_id.ToString() +
                                      std::to_string(entry.created_at.value) +
@@ -154,6 +208,10 @@ class SyncEngine {
   void ProposeSync(TopicID const& topic_id, ContactID const& target_peer) {
     std::string const key = topic_id.ToString() + ":" + target_peer.ToString();
     {
+      std::unique_lock<std::mutex> const lock(ledger_mutex_);
+      std::ignore = ValidateAndRepairChain(topic_id);
+    }
+    {
       std::lock_guard<std::mutex> const lock(proposals_mutex_);
       if (pending_proposals_.contains(key)) {
         return;
@@ -161,21 +219,27 @@ class SyncEngine {
       pending_proposals_.insert(key);
     }
 
-    dispatchQueue_.DispatchAfter(std::chrono::milliseconds(250), [this, topic_id, target_peer, key]() {
+    dispatchQueue_.DispatchAfter(std::chrono::milliseconds(250), [this, topic_id, target_peer, key]() -> void {
       {
         std::lock_guard<std::mutex> const lock(proposals_mutex_);
         pending_proposals_.erase(key);
       }
-      auto const latest = storage_->GetLatestLedgerEntry(topic_id);
-      std::string const head = latest ? latest->hash : std::string(64, '0');
+      std::string head;
+      size_t size = 0;
+      {
+        std::unique_lock<std::mutex> const lock(ledger_mutex_);
+        auto const [fst, snd] = ValidateAndRepairChain(topic_id);
+        head = fst;
+        size = snd;
+      }
       LGI << "[Sync] Proposing sync to " << target_peer.ToString() << " for topic " << topic_id.ToString()
-          << " with head " << head;
-      nlohmann::json const msg = {{"type", "sync_propose"}, {"topic", topic_id.ToString()}, {"head", head}};
+          << " with head " << head << " and size " << size;
+      Json const msg = {{"type", "sync_propose"}, {"topic", topic_id.ToString()}, {"head", head}, {"size", size}};
       transport_->SendJson(target_peer, msg);
     });
   }
 
-  void ProcessSyncMessage(ContactID const& peer_id, nlohmann::json const& msg) {
+  void ProcessSyncMessage(ContactID const& peer_id, Json const& msg) {
     try {
       std::string const type = msg.value("type", "");
 
@@ -185,17 +249,23 @@ class SyncEngine {
 
       if (type == "sync_propose") {
         std::string const peer_head = msg.value("head", "");
+        size_t const peer_size = msg.value("size", static_cast<size_t>(0));
         std::unique_lock<std::mutex> lock(ledger_mutex_);
-        auto latest = storage_->GetLatestLedgerEntry(topic_id);
-        std::string const my_head = latest ? latest->hash : std::string(64, '0');
+
+        auto const [my_head, my_size] = ValidateAndRepairChain(topic_id);
 
         if (peer_head == my_head) {
-          storage_->RemoveSyncRequest(topic_id, peer_id);
-          lock.unlock();
-          nlohmann::json const confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
-          transport_->SendJson(peer_id, confirm);
-          EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
-          return;
+          if (peer_size != 0 && peer_size != my_size) {
+            LGE << "[Sync] CRITICAL: Same head but different size! peer_size=" << peer_size << " my_size=" << my_size;
+          } else {
+            storage_->RemoveSyncRequest(topic_id, peer_id);
+            lock.unlock();
+            Json const confirm =
+                {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}, {"size", my_size}};
+            transport_->SendJson(peer_id, confirm);
+            EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
+            return;
+          }
         }
 
         if (storage_->HasLedgerEntry(topic_id, peer_head)) {
@@ -209,24 +279,28 @@ class SyncEngine {
         int skip = 1;
         int next_checkpoint = 0;
         int index = 0;
-        while (current_hash != std::string(64, '0')) {
+        while (current_hash != std::string(hashSize, '0')) {
           if (index == next_checkpoint) {
             checkpoints.push_back(current_hash);
-            if (checkpoints.size() >= 32) break;
+            if (checkpoints.size() >= 32) {
+              break;
+            }
             skip *= 2;
             next_checkpoint += skip;
           }
           auto entry = storage_->GetLedgerEntryByHash(topic_id, current_hash);
-          if (!entry) break;
+          if (!entry) {
+            break;
+          }
           current_hash = entry->prev_hash;
           index++;
         }
-        if (checkpoints.empty() || checkpoints.back() != std::string(64, '0')) {
-          checkpoints.push_back(std::string(64, '0'));
+        if (checkpoints.empty() || checkpoints.back() != std::string(hashSize, '0')) {
+          checkpoints.emplace_back(hashSize, '0');
         }
 
         lock.unlock();
-        nlohmann::json const req = {
+        Json const req = {
             {"type", "sync_request_forward"},
             {"topic", topic_id.ToString()},
             {"checkpoints", checkpoints}
@@ -236,9 +310,9 @@ class SyncEngine {
       } else if (type == "sync_request_forward") {
         auto checkpoints = msg.value("checkpoints", std::vector<std::string>{});
         std::unique_lock<std::mutex> lock(ledger_mutex_);
-        std::string lca = std::string(64, '0');
+        std::string lca = std::string(hashSize, '0');
         for (auto const& cp : checkpoints) {
-          if (cp == std::string(64, '0') || storage_->HasLedgerEntry(topic_id, cp)) {
+          if (cp == std::string(hashSize, '0') || storage_->HasLedgerEntry(topic_id, cp)) {
             lca = cp;
             break;
           }
@@ -246,22 +320,66 @@ class SyncEngine {
 
         if (!checkpoints.empty() && lca != checkpoints.front()) {
           // Fork detected
-          nlohmann::json reply = {{"type", "sync_fork_detected"}, {"topic", topic_id.ToString()}, {"lca", lca}};
+          Json const reply = {{"type", "sync_fork_detected"}, {"topic", topic_id.ToString()}, {"lca", lca}};
           transport_->SendJson(peer_id, reply);
+
+          auto entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
+          lock.unlock();
+
+          if (!entries.empty()) {
+            size_t batch_size = maxBatchSize;
+            while (batch_size > 0) {
+              size_t const actual_size = std::min(batch_size, entries.size());
+              Json entries_json = Json::array();
+              auto peer_transport = transport_->GetPeer(peer_id);
+              if (!peer_transport || !peer_transport->session_cipher->IsReady()) {
+                break;
+              }
+
+              for (size_t i = 0; i < actual_size; ++i) {
+                auto const& entry = entries[i];
+                auto encrypted = peer_transport->session_cipher->Encrypt(entry.payload);
+                entries_json.push_back(
+                    {{"author", entry.author_id.ToString()},
+                     {"created", entry.created_at.value},
+                     {"type", static_cast<int>(entry.type)},
+                     {"payload", crypto::ToHex(encrypted)},
+                     {"prev_hash", entry.prev_hash},
+                     {"hash", entry.hash}}
+                );
+              }
+
+              Json const fork_reply = {
+                  {"type", "sync_provide_fork"},
+                  {"topic", topic_id.ToString()},
+                  {"entries", entries_json}
+              };
+
+              if (transport_->SendJson(peer_id, fork_reply)) {
+                LGI << "[Sync] Sent fork of " << actual_size << " entries.";
+                break;
+              }
+              batch_size /= 2;
+            }
+          }
           return;
         }
 
         auto entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
         lock.unlock();
 
-        if (entries.empty()) return;
+        if (entries.empty()) {
+          return;
+        }
 
-        size_t batch_size = 50;
+        size_t batch_size = maxBatchSize;
         while (batch_size > 0) {
-          size_t actual_size = std::min(batch_size, entries.size());
-          nlohmann::json entries_json = nlohmann::json::array();
+          size_t const actual_size = std::min(batch_size, entries.size());
+          Json entries_json = Json::array();
           auto peer_transport = transport_->GetPeer(peer_id);
-          if (!peer_transport || !peer_transport->session_cipher->IsReady()) return;
+          if (!peer_transport || !peer_transport->session_cipher->IsReady()) {
+            return;
+          }
 
           for (size_t i = 0; i < actual_size; ++i) {
             auto const& e = entries[i];
@@ -276,7 +394,7 @@ class SyncEngine {
             );
           }
 
-          nlohmann::json reply = {
+          Json const reply = {
               {"type", "sync_provide_forward_batch"},
               {"topic", topic_id.ToString()},
               {"entries", entries_json},
@@ -290,19 +408,23 @@ class SyncEngine {
           batch_size /= 2;
         }
       } else if (type == "sync_fork_detected") {
-        std::string lca = msg.value("lca", std::string(64, '0'));
+        auto const lca = msg.value("lca", std::string(hashSize, '0'));
         std::unique_lock<std::mutex> lock(ledger_mutex_);
         auto entries = storage_->GetLedgerEntriesAfter(topic_id, lca);
         lock.unlock();
 
-        if (entries.empty()) return;
+        if (entries.empty()) {
+          return;
+        }
 
-        size_t batch_size = 50;
+        size_t batch_size = maxBatchSize;
         while (batch_size > 0) {
-          size_t actual_size = std::min(batch_size, entries.size());
-          nlohmann::json entries_json = nlohmann::json::array();
+          auto const actual_size = std::min(batch_size, entries.size());
+          Json entries_json = Json::array();
           auto peer_transport = transport_->GetPeer(peer_id);
-          if (!peer_transport || !peer_transport->session_cipher->IsReady()) return;
+          if (!peer_transport || !peer_transport->session_cipher->IsReady()) {
+            return;
+          }
 
           for (size_t i = 0; i < actual_size; ++i) {
             auto const& e = entries[i];
@@ -317,11 +439,7 @@ class SyncEngine {
             );
           }
 
-          nlohmann::json reply = {
-              {"type", "sync_provide_fork"},
-              {"topic", topic_id.ToString()},
-              {"entries", entries_json}
-          };
+          Json const reply = {{"type", "sync_provide_fork"}, {"topic", topic_id.ToString()}, {"entries", entries_json}};
 
           if (transport_->SendJson(peer_id, reply)) {
             LGI << "[Sync] Sent fork of " << actual_size << " entries.";
@@ -330,10 +448,12 @@ class SyncEngine {
           batch_size /= 2;
         }
       } else if (type == "sync_provide_fork" || type == "sync_provide_forward_batch") {
-        auto parse_entries = [&](nlohmann::json const& msg_entries) -> std::vector<storage::LedgerEntry> {
+        auto parse_entries = [&](Json const& msg_entries) -> std::vector<storage::LedgerEntry> {
           std::vector<storage::LedgerEntry> parsed;
-          auto peer = transport_->GetPeer(peer_id);
-          if (!peer || !peer->session_cipher->IsReady()) return parsed;
+          auto const peer = transport_->GetPeer(peer_id);
+          if (!peer || !peer->session_cipher->IsReady()) {
+            return parsed;
+          }
 
           for (auto const& e_json : msg_entries) {
             storage::LedgerEntry e;
@@ -344,9 +464,9 @@ class SyncEngine {
             e.prev_hash = e_json.value("prev_hash", "");
             e.hash = e_json.value("hash", "");
 
-            auto encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
+            auto const encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
             if (!encrypted_bytes.empty()) {
-              auto decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
+              auto const decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
               if (!decrypted.empty()) {
                 e.payload = decrypted;
                 parsed.push_back(e);
@@ -358,10 +478,14 @@ class SyncEngine {
           return parsed;
         };
 
-        auto merge_entries = [&](std::vector<storage::LedgerEntry> peer_entries) {
-          if (peer_entries.empty()) return;
+        auto merge_entries = [&](std::vector<storage::LedgerEntry> peer_entries) -> void {
+          if (peer_entries.empty()) {
+            return;
+          }
           std::string actual_lca = peer_entries.front().prev_hash;
-          if (!storage_->HasLedgerEntry(topic_id, actual_lca)) actual_lca = std::string(64, '0');
+          if (!storage_->HasLedgerEntry(topic_id, actual_lca)) {
+            actual_lca = std::string(hashSize, '0');
+          }
 
           auto my_entries = storage_->GetLedgerEntriesAfter(topic_id, actual_lca);
 
@@ -371,9 +495,15 @@ class SyncEngine {
           combined.insert(combined.end(), peer_entries.begin(), peer_entries.end());
 
           std::ranges::sort(combined, [](auto const& a, auto const& b) {
-            if (a.created_at.value != b.created_at.value) return a.created_at.value < b.created_at.value;
-            if (a.author_id != b.author_id) return a.author_id < b.author_id;
-            if (a.type != b.type) return a.type < b.type;
+            if (a.created_at.value != b.created_at.value) {
+              return a.created_at.value < b.created_at.value;
+            }
+            if (a.author_id != b.author_id) {
+              return a.author_id < b.author_id;
+            }
+            if (a.type != b.type) {
+              return a.type < b.type;
+            }
             return a.payload < b.payload;
           });
 
@@ -393,7 +523,9 @@ class SyncEngine {
                 break;
               }
             }
-            if (!found) new_entries.push_back(ce);
+            if (!found) {
+              new_entries.push_back(ce);
+            }
           }
 
           auto current_hash = actual_lca;
@@ -415,7 +547,9 @@ class SyncEngine {
 
         if (type == "sync_provide_fork") {
           auto peer_entries = parse_entries(msg["entries"]);
-          if (peer_entries.empty()) return;
+          if (peer_entries.empty()) {
+            return;
+          }
 
           std::unique_lock<std::mutex> lock(ledger_mutex_);
           merge_entries(peer_entries);
@@ -432,34 +566,38 @@ class SyncEngine {
           std::unique_lock<std::mutex> lock(ledger_mutex_);
           merge_entries(peer_entries);
 
-          bool has_more = msg.value("has_more", false);
+          bool const has_more = msg.value("has_more", false);
           if (has_more) {
-            auto latest = storage_->GetLatestLedgerEntry(topic_id);
-            std::string const my_head = latest ? latest->hash : std::string(64, '0');
+            auto const result = ValidateAndRepairChain(topic_id);
+            std::string const my_head = result.first;
 
             std::vector<std::string> checkpoints;
             std::string current_hash = my_head;
             int skip = 1;
             int next_checkpoint = 0;
             int index = 0;
-            while (current_hash != std::string(64, '0')) {
+            while (current_hash != std::string(hashSize, '0')) {
               if (index == next_checkpoint) {
                 checkpoints.push_back(current_hash);
-                if (checkpoints.size() >= 32) break;
+                if (checkpoints.size() >= 32) {
+                  break;
+                }
                 skip *= 2;
                 next_checkpoint += skip;
               }
               auto entry = storage_->GetLedgerEntryByHash(topic_id, current_hash);
-              if (!entry) break;
+              if (!entry) {
+                break;
+              }
               current_hash = entry->prev_hash;
               index++;
             }
-            if (checkpoints.empty() || checkpoints.back() != std::string(64, '0')) {
-              checkpoints.push_back(std::string(64, '0'));
+            if (checkpoints.empty() || checkpoints.back() != std::string(hashSize, '0')) {
+              checkpoints.emplace_back(hashSize, '0');
             }
             lock.unlock();
 
-            nlohmann::json req = {
+            Json const req = {
                 {"type", "sync_request_forward"},
                 {"topic", topic_id.ToString()},
                 {"checkpoints", checkpoints}
@@ -467,11 +605,13 @@ class SyncEngine {
             transport_->SendJson(peer_id, req);
             EventQueue::Instance().Push(EventSyncStateChanged{peer_id, true, -1.0f});
           } else {
-            auto latest = storage_->GetLatestLedgerEntry(topic_id);
-            std::string const my_head = latest ? latest->hash : std::string(64, '0');
+            auto const result = ValidateAndRepairChain(topic_id);
+            std::string const my_head = result.first;
+            size_t const my_size = result.second;
             lock.unlock();
 
-            nlohmann::json confirm = {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}};
+            Json const confirm =
+                {{"type", "sync_confirm"}, {"topic", topic_id.ToString()}, {"head", my_head}, {"size", my_size}};
             transport_->SendJson(peer_id, confirm);
             storage_->RemoveSyncRequest(topic_id, peer_id);
             EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
@@ -479,10 +619,16 @@ class SyncEngine {
         }
       } else if (type == "sync_confirm") {
         std::string const peer_head = msg.value("head", "");
+        size_t const peer_size = msg.value("size", static_cast<size_t>(0));
         std::unique_lock<std::mutex> lock(ledger_mutex_);
-        auto const latest = storage_->GetLatestLedgerEntry(topic_id);
-        std::string const my_head = latest ? latest->hash : std::string(64, '0');
+        auto const result = ValidateAndRepairChain(topic_id);
+        std::string const my_head = result.first;
+        size_t const my_size = result.second;
+
         if (my_head == peer_head) {
+          if (peer_size != 0 && peer_size != my_size) {
+            LGE << "[Sync] CRITICAL: Same head but different size! peer_size=" << peer_size << " my_size=" << my_size;
+          }
           storage_->RemoveSyncRequest(topic_id, peer_id);
           EventQueue::Instance().Push(EventSyncStateChanged{peer_id, false, 1.0f});
         } else {
@@ -503,7 +649,9 @@ class SyncEngine {
     auto const reqs = storage_->GetSyncRequests();
     std::unordered_set<ContactID> processed;
     for (auto const& req : reqs) {
-      if (processed.contains(req.target_peer_id)) continue;
+      if (processed.contains(req.target_peer_id)) {
+        continue;
+      }
       processed.insert(req.target_peer_id);
 
       auto contact = storage_->GetContact(req.target_peer_id);
