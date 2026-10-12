@@ -93,6 +93,7 @@ class Client final {
               return;
             }
 
+            auto const master_id = sm_->data_transport->GetMasterId(event.peer_id);
             sm_->data_transport->Disconnect(event.peer_id);
 
             bool media_active = false;
@@ -105,18 +106,18 @@ class Client final {
                 last_network_state_ != ServiceConnectionState::disconnected) {
               LGI << "Data connection lost for " << event.peer_id.ToString()
                   << " but media is active. Reconnecting data.";
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
-              Connect(event.peer_id);
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+              Connect(master_id);
             } else {
-              auto const media_state = sm_->media_transport->GetConnectionState(event.peer_id);
+              auto const media_state = sm_->media_transport->GetConnectionState(master_id);
               if (media_state != transport::PeerConnectionState::disconnected &&
                   media_state != transport::PeerConnectionState::closed &&
                   media_state != transport::PeerConnectionState::failed) {
-                EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{event.peer_id, state});
-                sm_->media_transport->Disconnect(event.peer_id);
+                EventQueue::Instance().Push(EventMediaPeerConnectionStateChanged{master_id, state});
+                sm_->media_transport->Disconnect(master_id);
               }
               sm_->data_transport->RemovePeer(event.peer_id);
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{event.peer_id});
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
             }
           }
         })
@@ -148,14 +149,12 @@ class Client final {
             std::unordered_set<ContactID> processed_masters;
             for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
               auto const master_id = sm_->data_transport->GetMasterId(id);
-              if (processed_masters.contains(master_id)) {
-                continue;
+              if (!processed_masters.contains(master_id)) {
+                sm_->media_transport->Disconnect(master_id);
+                EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+                processed_masters.insert(master_id);
               }
-              processed_masters.insert(master_id);
-
-              sm_->data_transport->Disconnect(master_id);
-              sm_->media_transport->Disconnect(master_id);
-              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+              sm_->data_transport->Disconnect(id);
             }
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
@@ -302,12 +301,13 @@ class Client final {
     auto peers = sm_->data_transport->GetPeers();
     for (auto const& id : peers | std::views::keys) {
       auto const master_id = sm_->data_transport->GetMasterId(id);
-      if (processed_masters.contains(master_id)) continue;
-      processed_masters.insert(master_id);
+      if (!processed_masters.contains(master_id)) {
+        sm_->media_transport->Disconnect(master_id);
+        processed_masters.insert(master_id);
+      }
 
-      sm_->media_transport->Disconnect(master_id);
-      sm_->data_transport->Disconnect(master_id);
-      sm_->data_transport->RemovePeer(master_id);
+      sm_->data_transport->Disconnect(id);
+      sm_->data_transport->RemovePeer(id);
     }
     sm_->data_transport->Terminate();
   }
@@ -707,8 +707,12 @@ class Client final {
   }
 
   void Disconnect(ContactID const& peer_id) const {
-    sm_->data_transport->Disconnect(peer_id);
-    sm_->data_transport->RemovePeer(peer_id);
+    for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
+      if (sm_->data_transport->GetMasterId(id) == peer_id) {
+        sm_->data_transport->Disconnect(id);
+        sm_->data_transport->RemovePeer(id);
+      }
+    }
   }
 
   void StartVoiceCall(ContactID const& id) const {
@@ -777,9 +781,6 @@ class Client final {
 
     for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
       auto const master_id = sm_->data_transport->GetMasterId(id);
-      if (disconnected_masters.contains(master_id)) {
-        continue;
-      }
 
       auto const state = sm_->data_transport->GetConnectionState(id);
       bool const is_data_connected = state == transport::PeerConnectionState::connected;
@@ -799,21 +800,25 @@ class Client final {
           auto const lat = peer->last_activity_time.load();
           if (now > lat && (now - lat) > static_cast<uint64_t>(timeout)) {
             LGI << "Peer " << master_id.ToString() << " inactive. Closing.";
-            sm_->sync_engine->AbortSync(master_id);
-            sm_->data_transport->Disconnect(master_id);
-            sm_->data_transport->RemovePeer(master_id);
-            EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
-            disconnected_masters.insert(master_id);
+            if (!disconnected_masters.contains(master_id)) {
+              sm_->sync_engine->AbortSync(master_id);
+              EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+              disconnected_masters.insert(master_id);
+            }
+            sm_->data_transport->Disconnect(id);
+            sm_->data_transport->RemovePeer(id);
           }
         }
       } else if (is_connecting) {
         if (auto const lca = peer->last_connect_attempt.load(); now > lca && (now - lca) > 120ULL * Time::uS) {
           LGI << "Peer " << master_id.ToString() << " stuck in connecting. Closing.";
-          sm_->sync_engine->AbortSync(master_id);
-          sm_->data_transport->Disconnect(master_id);
-          sm_->data_transport->RemovePeer(master_id);
-          EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
-          disconnected_masters.insert(master_id);
+          if (!disconnected_masters.contains(master_id)) {
+            sm_->sync_engine->AbortSync(master_id);
+            EventQueue::Instance().Push(EventConnectionAttemptFinished{master_id});
+            disconnected_masters.insert(master_id);
+          }
+          sm_->data_transport->Disconnect(id);
+          sm_->data_transport->RemovePeer(id);
         }
       }
     }
