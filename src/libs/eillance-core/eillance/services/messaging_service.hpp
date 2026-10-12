@@ -494,7 +494,7 @@ class MessagingService {
   }
 
   // --- Read Model Projections ---
-  void ProjectMessage(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+  void ProjectMessage(messaging::LedgerEntry const& entry, Json const& json, bool is_mine, bool is_synced = false) {
     ContactID const peer_id(entry.topic_id.value.Span());
 
     if (!contact_manager_->GetContact(peer_id)) {
@@ -506,8 +506,15 @@ class MessagingService {
     std::string const type = json.value("type", "");
 
     if (type == "message_read") {
-      auto ids = json.value("message_ids", std::vector<uint64_t>{});
-      for (auto target_id : ids) {
+      std::vector<uint64_t> target_ids;
+      if (json.contains("message_ids")) {
+        for (auto const& id_val : json["message_ids"]) {
+          target_ids.push_back(id_val.get<uint64_t>());
+        }
+      } else {
+        target_ids.push_back(json.value("message_id", 0ULL));
+      }
+      for (auto target_id : target_ids) {
         history_->UpdateMessageStatus(peer_id, target_id, messaging::MessageStatus::read);
       }
       return;
@@ -537,7 +544,10 @@ class MessagingService {
       }
 
       for (auto const target_id : target_ids) {
-        if (history_->GetHistoryEntry(peer_id, target_id)) {
+        if (auto current_entry = history_->GetHistoryEntry(peer_id, target_id)) {
+          if (current_entry->status == messaging::MessageStatus::read && msg_status == messaging::MessageStatus::delivered) {
+            continue;
+          }
           history_->UpdateMessageStatus(peer_id, target_id, msg_status);
         }
       }
@@ -627,7 +637,7 @@ class MessagingService {
 
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
-    if (!is_mine) {
+    if (!is_mine && !is_synced) {
       QueueDeliveryReceipt(peer_id, message_id);
 
       if (!is_system && !sm_->is_foreground) {
@@ -670,7 +680,7 @@ class MessagingService {
     }
   }
 
-  void ProjectCallLog(messaging::LedgerEntry const& entry, Json const& json, bool is_mine) {
+  void ProjectCallLog(messaging::LedgerEntry const& entry, Json const& json, bool is_mine, bool is_synced = false) {
     ContactID const peer_id(entry.topic_id.value.Span());
 
     auto ledger_ts = static_cast<uint64_t>(entry.created_at.value);
@@ -705,7 +715,7 @@ class MessagingService {
     auto const db_entry = history_->AddCallEntry(params);
     EventQueue::Instance().Push(EventChatMessageReceived{peer_id, db_entry});
 
-    if (params.status == messaging::CallStatus::missed && !sm_->is_foreground) {
+    if (!is_synced && params.status == messaging::CallStatus::missed && !sm_->is_foreground) {
       auto const contact = contact_manager_->GetContact(peer_id);
       std::string const name =
           contact && contact->display_name ? *contact->display_name : peer_id.ToString().substr(0, 8);
