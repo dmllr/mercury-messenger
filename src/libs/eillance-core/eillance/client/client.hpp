@@ -221,6 +221,7 @@ class Client final {
 
   auto GenerateNewIdentity() -> std::string {
     auto mnemonic = sm_->account->GenerateNewIdentity();
+    Start();
     BroadcastProfileUpdate();
     return mnemonic;
   }
@@ -366,6 +367,12 @@ class Client final {
   }
 
   void Connect(ContactID const& peer_id) const {
+    auto const contact = sm_->contact->GetContact(peer_id);
+    if (!contact || contact->status != identity::ContactStatus::confirmed) {
+      EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
+      return;
+    }
+
     auto const peer = sm_->data_transport->GetPeer(peer_id);
     if (peer && peer->data_channel_is_open) {
       EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
