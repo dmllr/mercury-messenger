@@ -49,9 +49,7 @@ class ContactService {
           nlohmann::json content = {
               {"type", contact->status == identity::ContactStatus::pendingApproval ? "crcp_request" : "crcp_confirm"},
               {"signature", crypto::ToHex(signature)},
-              {"profile",
-               {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
-                {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
+              {"profile", BuildMyProfileJson()}
           };
 
           if (contact->status == identity::ContactStatus::pendingApproval) {
@@ -96,9 +94,7 @@ class ContactService {
       nlohmann::json content = {
           {"type", "crcp_request"},
           {"signature", crypto::ToHex(signature)},
-          {"profile",
-           {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
-            {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
+          {"profile", BuildMyProfileJson()}
       };
       if (token) {
         content["token"] = crypto::ToHex(*token);
@@ -152,9 +148,7 @@ class ContactService {
     nlohmann::json const content = {
         {"type", "crcp_confirm"},
         {"signature", crypto::ToHex(signature)},
-        {"profile",
-         {{"display_name", sm_->account->GetSettings()->GetMyDisplayName().value_or("")},
-          {"bio", sm_->account->GetSettings()->GetMyBio().value_or("")}}},
+        {"profile", BuildMyProfileJson()}
     };
     if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = transport_->SendJson(peer_id, content);
@@ -251,11 +245,7 @@ class ContactService {
       auto existing = manager_->GetContact(peer_id);
       if (existing && existing->status == identity::ContactStatus::confirmed) {
         manager_->StoreSignatureFrom(peer_id, sig);
-        identity::ProfileUpdate p_update;
-        if (profile.contains("display_name") && !profile["display_name"].is_null())
-          p_update.display_name = profile["display_name"];
-        if (profile.contains("bio") && !profile["bio"].is_null()) p_update.bio = profile["bio"];
-        if (profile.contains("photo") && !profile["photo"].is_null()) p_update.photo_base64 = profile["photo"];
+        identity::ProfileUpdate p_update = ParseProfileJson(profile);
         manager_->UpdateContactProfile(peer_id, p_update);
         ConfirmContact(peer_id);
         return;
@@ -279,6 +269,11 @@ class ContactService {
       OnContactConfirm(peer_id, sig, profile);
     } else if (type == "crcp_reject") {
       OnContactRemoved(peer_id);
+    } else if (type == "crcp_ack") {
+      nlohmann::json profile = json.value("profile", nlohmann::json::object());
+      identity::ProfileUpdate p_update = ParseProfileJson(profile);
+      manager_->UpdateContactProfile(peer_id, p_update);
+      EventQueue::Instance().Push(EventContactProfileUpdated{peer_id});
     }
   }
 
@@ -300,16 +295,7 @@ class ContactService {
       nlohmann::json const& profile_json,
       std::vector<std::byte> const& signature
   ) {
-    identity::ProfileUpdate profile;
-    if (profile_json.contains("display_name") && !profile_json["display_name"].is_null()) {
-      profile.display_name = profile_json["display_name"];
-    }
-    if (profile_json.contains("bio") && !profile_json["bio"].is_null()) {
-      profile.bio = profile_json["bio"];
-    }
-    if (profile_json.contains("photo") && !profile_json["photo"].is_null()) {
-      profile.photo_base64 = profile_json["photo"];
-    }
+    identity::ProfileUpdate profile = ParseProfileJson(profile_json);
 
     auto status = manager_->ReceiveContactRequest(peer_id, profile);
 
@@ -343,6 +329,14 @@ class ContactService {
         std::string name = profile.display_name ? *profile.display_name : peer_id.ToString().substr(0, 8);
         EventQueue::Instance().Push(EventNotifyContactRequest{peer_id, name});
       }
+      
+      nlohmann::json const ack_msg = {
+          {"type", "crcp_ack"},
+          {"profile", BuildMyProfileJson()}
+      };
+      if (auto peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
+        std::ignore = transport_->SendJson(peer_id, ack_msg);
+      }
     } else {
       if (manager_->IsConfirmedContact(peer_id)) {
         ConfirmContact(peer_id);
@@ -365,16 +359,7 @@ class ContactService {
 
     bool was_confirmed = manager_->IsConfirmedContact(peer_id);
     if (manager_->MarkAsConfirmed(peer_id)) {
-      identity::ProfileUpdate profile;
-      if (profile_json.contains("display_name") && !profile_json["display_name"].is_null()) {
-        profile.display_name = profile_json["display_name"];
-      }
-      if (profile_json.contains("bio") && !profile_json["bio"].is_null()) {
-        profile.bio = profile_json["bio"];
-      }
-      if (profile_json.contains("photo") && !profile_json["photo"].is_null()) {
-        profile.photo_base64 = profile_json["photo"];
-      }
+      identity::ProfileUpdate profile = ParseProfileJson(profile_json);
       manager_->UpdateContactProfile(peer_id, profile);
 
       if (!was_confirmed) {
@@ -413,6 +398,37 @@ class ContactService {
   }
 
  private:
+  nlohmann::json BuildMyProfileJson() const {
+    nlohmann::json profile = nlohmann::json::object();
+    if (auto name = sm_->account->GetSettings()->GetMyDisplayName(); name && !name->empty()) {
+      profile["display_name"] = *name;
+    }
+    if (auto bio = sm_->account->GetSettings()->GetMyBio(); bio && !bio->empty()) {
+      profile["bio"] = *bio;
+    }
+    if (auto photo = sm_->account->GetSettings()->GetMyPhotoBase64(); photo && !photo->empty()) {
+      profile["photo"] = *photo;
+    }
+    return profile;
+  }
+
+  identity::ProfileUpdate ParseProfileJson(nlohmann::json const& profile_json) const {
+    identity::ProfileUpdate profile;
+    if (profile_json.contains("display_name") && !profile_json["display_name"].is_null()) {
+      auto val = profile_json["display_name"].get<std::string>();
+      if (!val.empty()) profile.display_name = val;
+    }
+    if (profile_json.contains("bio") && !profile_json["bio"].is_null()) {
+      auto val = profile_json["bio"].get<std::string>();
+      if (!val.empty()) profile.bio = val;
+    }
+    if (profile_json.contains("photo") && !profile_json["photo"].is_null()) {
+      auto val = profile_json["photo"].get<std::string>();
+      if (!val.empty()) profile.photo_base64 = val;
+    }
+    return profile;
+  }
+
   ServiceManager* sm_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
