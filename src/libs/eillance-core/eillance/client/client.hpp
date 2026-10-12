@@ -472,6 +472,11 @@ class Client final {
   }
 
   void Connect(ContactID const& peer_id) const {
+    if (!is_running_.load()) {
+      EventQueue::Instance().Push(EventConnectionAttemptFinished{peer_id});
+      return;
+    }
+
     auto const contact = sm_->contact->GetContact(peer_id);
     if (contact && contact->status == identity::ContactStatus::rejected) {
       return;

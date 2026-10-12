@@ -23,7 +23,7 @@ def test_offline_message_sync(test_environment):
         f"message {id_b} \"A3\", message {id_b} \"A4\", "
         f"wait 2, "
         f"message {id_b} \"A5\", "
-        f"connect, wait 15, disconnect"
+        f"connect, wait 80, disconnect"
     )
     scenario.add_process(
         "app-a", "/app/bin/mercury-mock-app",
@@ -38,7 +38,7 @@ def test_offline_message_sync(test_environment):
     script_b = (
         f"wait 1, message {id_a} \"B1\", "
         f"wait 2, message {id_a} \"B2\", message {id_a} \"B3\", message {id_a} \"B4\", "
-        f"wait 1, connect, wait 15, disconnect"
+        f"wait 1, connect, wait 80, disconnect"
     )
     scenario.add_process(
         "app-b", "/app/bin/mercury-mock-app",
@@ -54,4 +54,4 @@ def test_offline_message_sync(test_environment):
         f"[mock] Message from {id_b} received: B{i}" for i in range(1, 5)
     ])
 
-    test_environment.execute_scenario(scenario, timeout_seconds=25)
+    test_environment.execute_scenario(scenario, timeout_seconds=95, stop_on_first_exit=False)

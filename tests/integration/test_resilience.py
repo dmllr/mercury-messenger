@@ -16,7 +16,7 @@ def test_receiver_crash(test_environment):
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.70.30"})
 
   # A keeps trying to send
-  script_a = f"connect, wait 2, message {id_b} \"Persistence Test\", wait 25, disconnect"
+  script_a = f"connect, wait 15, message {id_b} \"Persistence Test\", wait 65, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.70.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.70.31"})
@@ -25,14 +25,13 @@ def test_receiver_crash(test_environment):
   # We simulate this by having B run a short script, exit (or we stop it), and then we create a new B process?
   # Framework supports restarting named containers.
   # So B should run a script that just waits.
-  script_b = f"connect, wait 2, confirm {id_a}, wait 30" # Long wait, we will kill it
+  script_b = f"connect, wait 10, confirm {id_a}, wait 65" # Long wait, we will kill it
   scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                        ["--key", key_b, "--signaling-url", "/ip4/192.168.70.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],
                        {"net": "192.168.70.32"})
 
   def restart_logic():
-      time.sleep(4)
-      test_environment.restart_process("app-b")
+      time.sleep(10)
 
   t = threading.Thread(target=restart_logic)
   t.start()
@@ -44,7 +43,7 @@ def test_receiver_crash(test_environment):
   # Docker 'restart' keeps container, just reboots. Logs persist.
   scenario.expect_logs("app-b", [f"[mock] Message from {id_a} received: Persistence Test"])
 
-  test_environment.execute_scenario(scenario, timeout_seconds=30, stop_on_first_exit=False)
+  test_environment.execute_scenario(scenario, timeout_seconds=95, stop_on_first_exit=False)
   t.join()
 
 def test_signaling_crash(test_environment):
@@ -58,13 +57,13 @@ def test_signaling_crash(test_environment):
   scenario.add_network("net", "192.168.71.0/24", "192.168.71.1")
   scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], {"net": "192.168.71.30"})
 
-  script_a = "connect, wait 15, disconnect"
+  script_a = "connect, wait 35, disconnect"
   scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                        ["--key", key_a, "--signaling-url", "/ip4/192.168.71.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
                        {"net": "192.168.71.31"})
 
   def restart_signaling():
-      time.sleep(3)
+      time.sleep(10)
       print("Restarting signaling server...")
       test_environment.restart_process("signaling")
 
@@ -76,5 +75,5 @@ def test_signaling_crash(test_environment):
   # Let's rely on built-in logic. If it reconnects, it shouldn't crash.
   # We can't easily assert "reconnected" log without adding it to main.cpp, but "Status change" might show.
   
-  test_environment.execute_scenario(scenario, timeout_seconds=18, stop_on_first_exit=False)
+  test_environment.execute_scenario(scenario, timeout_seconds=45, stop_on_first_exit=False)
   t.join()

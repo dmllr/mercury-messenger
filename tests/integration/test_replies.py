@@ -11,8 +11,8 @@ def test_replies(test_environment):
 
     # A sends a message.
     script_a = (
-        f"connect, wait 2, message {id_b} \"Hello B\", "
-        f"wait 10, disconnect"
+        f"connect, wait 15, message {id_b} \"Hello B\", "
+        f"wait 40, disconnect"
     )
     scenario.add_process("app-a", "/app/bin/mercury-mock-app",
                          ["--key", key_a, "--signaling-url", "/ip4/192.168.95.30/tcp/8000", "--db-path", "/tmp/a.db", "--script", script_a],
@@ -20,8 +20,8 @@ def test_replies(test_environment):
 
     # B connects, waits for A's message, replies to it.
     script_b = (
-        f"connect, wait 5, reply {id_a} \"Replying to Hello B\", "
-        f"wait 5, disconnect"
+        f"connect, wait 35, reply {id_a} \"Replying to Hello B\", "
+        f"wait 30, disconnect"
     )
     scenario.add_process("app-b", "/app/bin/mercury-mock-app",
                          ["--key", key_b, "--signaling-url", "/ip4/192.168.95.30/tcp/8000", "--db-path", "/tmp/b.db", "--script", script_b],

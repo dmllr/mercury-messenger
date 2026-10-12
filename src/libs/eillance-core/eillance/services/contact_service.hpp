@@ -277,7 +277,12 @@ class ContactService {
         return;
       }
       if (auto peer = transport_->GetPeer(peer_id)) peer->crcp_verified = true;
-      OnContactConfirm(peer_id, sig, profile);
+      if (auto existing = manager_->GetContact(peer_id); existing) {
+        OnContactConfirm(peer_id, sig, profile);
+      } else {
+        LGI << "Received crcp_confirm from unknown peer (possibly restored from mnemonic). Treating as request.";
+        OnContactAddRequest(peer_id, std::nullopt, profile, sig);
+      }
     } else if (type == "crcp_reject") {
       OnContactRemoved(peer_id);
     } else if (type == "crcp_ack") {
