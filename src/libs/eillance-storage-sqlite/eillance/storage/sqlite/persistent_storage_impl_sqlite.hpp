@@ -360,10 +360,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM group_members WHERE group_id = ?;");
       BindText(s_mem.Get(), 1, group_id.ToString());
       while (sqlite3_step(s_mem.Get()) == SQLITE_ROW) {
-        group.members.push_back({
-          ContactID(ColumnString(s_mem.Get(), 0)),
-          sqlite3_column_int(s_mem.Get(), 1)
-        });
+        group.members.push_back({ContactID(ColumnString(s_mem.Get(), 0)), sqlite3_column_int(s_mem.Get(), 1)});
       }
       return group;
     }
@@ -384,10 +381,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
       SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM group_members WHERE group_id = ?;");
       BindText(s_mem.Get(), 1, group.id.ToString());
       while (sqlite3_step(s_mem.Get()) == SQLITE_ROW) {
-        group.members.push_back({
-          ContactID(ColumnString(s_mem.Get(), 0)),
-          sqlite3_column_int(s_mem.Get(), 1)
-        });
+        group.members.push_back({ContactID(ColumnString(s_mem.Get(), 0)), sqlite3_column_int(s_mem.Get(), 1)});
       }
       groups.push_back(std::move(group));
     }
@@ -414,6 +408,97 @@ class SQLiteStorage final : public PersistentStorageImpl {
     BindText(s_grp.Get(), 1, group_id.ToString());
     sqlite3_step(s_grp.Get());
 
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+  }
+
+  // --- Channels ---
+  void AddChannel(identity::Channel const& channel) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    SQLiteStatement const s_grp(db_, "REPLACE INTO channels (id, name, description, owner_id) VALUES (?, ?, ?, ?);");
+    BindText(s_grp.Get(), 1, channel.id.ToString());
+    BindText(s_grp.Get(), 2, channel.name);
+    BindText(s_grp.Get(), 3, channel.description);
+    BindText(s_grp.Get(), 4, channel.owner_id.ToString());
+    sqlite3_step(s_grp.Get());
+
+    SQLiteStatement const s_del(db_, "DELETE FROM channel_members WHERE channel_id = ?;");
+    BindText(s_del.Get(), 1, channel.id.ToString());
+    sqlite3_step(s_del.Get());
+
+    SQLiteStatement const s_mem(db_, "INSERT INTO channel_members (channel_id, contact_id, role) VALUES (?, ?, ?);");
+    for (auto const& member : channel.members) {
+      sqlite3_reset(s_mem.Get());
+      sqlite3_clear_bindings(s_mem.Get());
+      BindText(s_mem.Get(), 1, channel.id.ToString());
+      BindText(s_mem.Get(), 2, member.contact_id.ToString());
+      sqlite3_bind_int(s_mem.Get(), 3, member.role);
+      sqlite3_step(s_mem.Get());
+    }
+    sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
+  }
+
+  auto GetChannel(ChannelID const& channel_id) -> std::optional<identity::Channel> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    SQLiteStatement const s_grp(db_, "SELECT name, description, owner_id FROM channels WHERE id = ?;");
+    BindText(s_grp.Get(), 1, channel_id.ToString());
+    if (sqlite3_step(s_grp.Get()) == SQLITE_ROW) {
+      identity::Channel channel;
+      channel.id = channel_id;
+      channel.name = ColumnString(s_grp.Get(), 0);
+      channel.description = ColumnString(s_grp.Get(), 1);
+      channel.owner_id = ContactID(ColumnString(s_grp.Get(), 2));
+
+      SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM channel_members WHERE channel_id = ?;");
+      BindText(s_mem.Get(), 1, channel_id.ToString());
+      while (sqlite3_step(s_mem.Get()) == SQLITE_ROW) {
+        channel.members.push_back({ContactID(ColumnString(s_mem.Get(), 0)), sqlite3_column_int(s_mem.Get(), 1)});
+      }
+      return channel;
+    }
+    return std::nullopt;
+  }
+
+  auto GetChannels() -> std::vector<identity::Channel> override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    std::vector<identity::Channel> channels;
+    SQLiteStatement const s_grp(db_, "SELECT id, name, description, owner_id FROM channels;");
+    while (sqlite3_step(s_grp.Get()) == SQLITE_ROW) {
+      identity::Channel channel;
+      channel.id = ChannelID(ColumnString(s_grp.Get(), 0));
+      channel.name = ColumnString(s_grp.Get(), 1);
+      channel.description = ColumnString(s_grp.Get(), 2);
+      channel.owner_id = ContactID(ColumnString(s_grp.Get(), 3));
+
+      SQLiteStatement const s_mem(db_, "SELECT contact_id, role FROM channel_members WHERE channel_id = ?;");
+      BindText(s_mem.Get(), 1, channel.id.ToString());
+      while (sqlite3_step(s_mem.Get()) == SQLITE_ROW) {
+        channel.members.push_back({ContactID(ColumnString(s_mem.Get(), 0)), sqlite3_column_int(s_mem.Get(), 1)});
+      }
+      channels.push_back(std::move(channel));
+    }
+    return channels;
+  }
+
+  void RemoveChannel(ChannelID const& channel_id) override {
+    std::lock_guard const lock(mutex_);
+    INVARIANT(db_);
+    sqlite3_exec(db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr);
+    SQLiteStatement const s_msg(db_, "DELETE FROM messages WHERE peer_id = ?;");
+    BindText(s_msg.Get(), 1, channel_id.ToString());
+    sqlite3_step(s_msg.Get());
+    SQLiteStatement const s_led(db_, "DELETE FROM ledger_entries WHERE topic_id = ?;");
+    BindText(s_led.Get(), 1, channel_id.ToString());
+    sqlite3_step(s_led.Get());
+    SQLiteStatement const s_sync(db_, "DELETE FROM sync_requests WHERE topic_id = ?;");
+    BindText(s_sync.Get(), 1, channel_id.ToString());
+    sqlite3_step(s_sync.Get());
+    SQLiteStatement const s_grp(db_, "DELETE FROM channels WHERE id = ?;");
+    BindText(s_grp.Get(), 1, channel_id.ToString());
+    sqlite3_step(s_grp.Get());
     sqlite3_exec(db_, "COMMIT;", nullptr, nullptr, nullptr);
   }
 
@@ -1454,6 +1539,7 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 11) migrations::MigrateToV0011(db_);
     if (user_version < 12) migrations::MigrateToV0012(db_);
     if (user_version < 13) migrations::MigrateToV0013(db_);
+    if (user_version < 14) migrations::MigrateToV0014(db_);
     // NOLINTEND(*-braces-around-statements)
   }
 

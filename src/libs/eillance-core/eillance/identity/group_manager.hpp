@@ -1,18 +1,18 @@
 #pragma once
 
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
-#include <string>
 
-#include <openssl/rand.h>
 #include <nlohmann/json.hpp>
+#include <openssl/rand.h>
 
+#include "eillance/events/client_events.hpp"
 #include "eillance/identity/group.hpp"
+#include "eillance/messaging/types.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/utils/event_queue.hpp"
-#include "eillance/events/client_events.hpp"
-#include "eillance/messaging/types.hpp"
 
 namespace eillance::identity {
 
@@ -102,10 +102,7 @@ class GroupManager {
       g.owner_id = ContactID(json.value("owner_id", ""));
       if (json.contains("members")) {
         for (auto const& m_json : json["members"]) {
-          g.members.push_back({
-              ContactID(m_json.value("contact_id", "")),
-              m_json.value("role", 0)
-          });
+          g.members.push_back({ContactID(m_json.value("contact_id", "")), m_json.value("role", 0)});
         }
       }
       CreateGroupLocal(g);

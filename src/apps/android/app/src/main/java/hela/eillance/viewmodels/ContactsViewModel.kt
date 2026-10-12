@@ -153,6 +153,25 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
     if (nativePtr != 0L) nativeLeaveGroup(nativePtr, groupId)
   }
 
+  fun createChannel(name: String, description: String): String? {
+    return if (nativePtr != 0L) nativeCreateChannel(nativePtr, name, description) else null
+  }
+  fun subscribeToChannel(channelId: String, ownerId: String) {
+    if (nativePtr != 0L) nativeSubscribeToChannel(nativePtr, channelId, ownerId)
+  }
+  fun unsubscribeChannel(channelId: String) {
+    if (nativePtr != 0L) nativeUnsubscribeChannel(nativePtr, channelId)
+  }
+  fun getChannelMembers(channelId: String): List<hela.eillance.ndkio.GroupMember> {
+    return if (nativePtr != 0L) nativeGetChannelMembers(nativePtr, channelId).toList() else emptyList()
+  }
+  fun addChannelMember(channelId: String, contactId: String): Boolean {
+    return if (nativePtr != 0L) nativeAddChannelMember(nativePtr, channelId, contactId) else false
+  }
+  fun removeChannelMember(channelId: String, contactId: String): Boolean {
+    return if (nativePtr != 0L) nativeRemoveChannelMember(nativePtr, channelId, contactId) else false
+  }
+
   fun generateContactToken(): String? {
     return if (nativePtr != 0L) nativeGenerateToken(nativePtr) else null
   }
@@ -213,4 +232,11 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeAddGroupMember(ptr: Long, groupId: String, contactId: String): Boolean
   private external fun nativeRemoveGroupMember(ptr: Long, groupId: String, contactId: String): Boolean
   private external fun nativeLeaveGroup(ptr: Long, groupId: String)
+
+  private external fun nativeCreateChannel(ptr: Long, name: String, desc: String): String
+  private external fun nativeSubscribeToChannel(ptr: Long, channelId: String, ownerId: String)
+  private external fun nativeUnsubscribeChannel(ptr: Long, channelId: String)
+  private external fun nativeGetChannelMembers(ptr: Long, channelId: String): Array<hela.eillance.ndkio.GroupMember>
+  private external fun nativeAddChannelMember(ptr: Long, channelId: String, contactId: String): Boolean
+  private external fun nativeRemoveChannelMember(ptr: Long, channelId: String, contactId: String): Boolean
 }
