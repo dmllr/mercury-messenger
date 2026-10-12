@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 RUN apt-get update
 RUN apt-get install -y \
-    curl wget ninja-build git pkg-config rsync \
+    ca-certificates curl wget ninja-build git pkg-config rsync \
     software-properties-common gnupg lsb-release
 
 # Install CMake 4.0+ from Kitware repository
@@ -14,7 +14,10 @@ RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/nul
 
 # Install Clang and related tools
 ARG LLVM_VERSION=20
-RUN wget -qO- https://apt.llvm.org/llvm.sh | bash -s -- ${LLVM_VERSION} && \
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL --retry 5 --retry-connrefused -o /etc/apt/keyrings/llvm.asc https://apt.llvm.org/llvm-snapshot.gpg.key && \
+    echo "deb [signed-by=/etc/apt/keyrings/llvm.asc] http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" > /etc/apt/sources.list.d/llvm.list && \
+    apt-get update && \
     apt-get install -y \
     clang-format-${LLVM_VERSION} clang-tidy-${LLVM_VERSION} clang-tools-${LLVM_VERSION} \
     clang-${LLVM_VERSION} clangd-${LLVM_VERSION} libc++-${LLVM_VERSION}-dev \
@@ -33,7 +36,9 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path && \
-    rustup target add x86_64-unknown-linux-gnu && \
+    rustup target add \
+      x86_64-unknown-linux-gnu \
+      aarch64-unknown-linux-gnu && \
     chmod -R a+rwX /usr/local/cargo /usr/local/rustup
 
 # Install additional dependencies
