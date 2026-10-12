@@ -44,6 +44,14 @@ class MockMediaTransport : public MediaTransport::Interface {
   void SetRemoteDescription(ContactID const&, std::string const&, std::string const&) override {
   }
 
+  auto GetLocalDescription(ContactID const& /*peer_id*/) const -> std::optional<std::string> override {
+    return "mock_local_description";
+  }
+
+  auto GetConnectionState(ContactID const& /*peer_id*/) const -> PeerConnectionState override {
+    return PeerConnectionState::connected;
+  }
+
   void StartLocalMedia(bool /*is_video*/) override {
   }
   void StopLocalMedia() override {

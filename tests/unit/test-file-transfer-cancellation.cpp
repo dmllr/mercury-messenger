@@ -209,7 +209,10 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
   msg_data.attachments.push_back(att);
   std::ignore = storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
 
-  mock_transport_->CallLog()->sent_binary_messages.clear();
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_binary_messages.clear();
+  }
 
   client_->ResumeTransfer(peer1, "resume_id", false);
   EventQueue::Instance().WaitFor(

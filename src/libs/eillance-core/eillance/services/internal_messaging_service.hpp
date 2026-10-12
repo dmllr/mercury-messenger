@@ -18,6 +18,7 @@
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/media_transport.hpp"
 #include "eillance/transport/protocol.hpp"
@@ -87,38 +88,8 @@ class InternalMessagingService {
     if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       HandleSdp(peer_id, type, message);
       return;
-    }
-
-    if (type == "contact_add_request") {
-      std::optional<std::string> token;
-      if (message.contains("token")) {
-        token = message["token"];
-      }
-      Json const profile = message.value("profile", Json::object());
-      sm_->contact->OnContactAddRequest(peer_id, token, profile);
-
-      Json const ack = {{"type", "contact_add_ack"}, {"to", peer_id.ToString()}};
-      data_transport_->SendSignalingMessage(ack);
-
-    } else if (type == "contact_add_ack") {
-      sm_->contact->OnContactAddAck(peer_id);
-    } else if (type == "contact_confirm") {
-      std::string signature_hex = message.value("signature", "");
-      Json const profile = message.value("profile", Json::object());
-      sm_->contact->OnContactConfirm(peer_id, signature_hex, profile);
-
-      Json const ack = {{"type", "contact_confirm_ack"}, {"to", peer_id.ToString()}};
-      data_transport_->SendSignalingMessage(ack);
-
-    } else if (type == "contact_confirm_ack") {
-      sm_->contact->OnContactConfirmAck(peer_id);
-    } else if (type == "contact_removed") {
-      sm_->contact->OnContactRemoved(peer_id);
-      Json const ack = {{"type", "contact_removed_ack"}, {"to", peer_id.ToString()}};
-      data_transport_->SendSignalingMessage(ack);
-
-    } else if (type == "contact_removed_ack") {
-      sm_->contact->OnContactRemovedAck(peer_id);
+    } else if (type == "sync_propose" || type == "sync_provide" || type == "sync_confirm") {
+      sm_->sync_engine->ProcessSyncMessage(peer_id, message);
     }
   }
 
@@ -163,12 +134,6 @@ class InternalMessagingService {
 
     if (type == "key_exchange") {
       HandleKeyExchange(peer_id, message);
-    } else if (type == "chat") {
-      HandleChatMessage(peer_id, message);
-    } else if (type == "message_receipt") {
-      sm_->messaging->OnMessageReceipt(peer_id, message["message_id"], message["status"]);
-    } else if (type == "message_read") {
-      sm_->messaging->OnMessagesRead(peer_id, message["message_ids"].get<std::vector<uint64_t>>());
     } else if (type == "hangup") {
       sm_->media_call->OnHangupSignal(peer_id, message.value("call_id", ""));
     } else if (type == "call_request") {
@@ -182,28 +147,10 @@ class InternalMessagingService {
       sm_->media_call->OnCallRinging(peer_id, message.value("call_id", ""));
     } else if (type == transport::protocol::values::offer || type == transport::protocol::values::answer) {
       ProcessSignalingMessage(peer_id, type, message);
-    } else if (type == "profile_info") {
-      sm_->profile->OnProfileUpdate(peer_id, message);
-    } else if (type == "profile_request") {
-      sm_->profile->RequestProfile(peer_id);
     } else if (type == "termination") {
       data_transport_->RemovePeer(peer_id);
-    } else if (type == "file_cancel") {
-      std::string const file_id = message.value("file_id", "");
-      if (!file_id.empty()) {
-        sm_->file_transfer->HandleCancel(peer_id, file_id);
-      }
-    } else if (type == "message_delete") {
-      sm_->messaging->OnMessageDelete(peer_id, message["target_id"].get<uint64_t>());
-    } else if (type == "message_edit") {
-      sm_->messaging
-          ->OnMessageEdit(peer_id, message["target_id"].get<uint64_t>(), message["content"].get<std::string>());
-    } else if (type == "message_reaction") {
-      sm_->messaging->OnMessageReaction(
-          peer_id,
-          message["target_id"].get<uint64_t>(),
-          static_cast<messaging::Reaction>(message["reaction"].get<int>())
-      );
+    } else if (type == "sync_propose" || type == "sync_provide" || type == "sync_confirm") {
+      sm_->sync_engine->ProcessSyncMessage(peer_id, message);
     }
   }
 
@@ -317,32 +264,6 @@ class InternalMessagingService {
     } else {
       LGE << "Failed key exchange with " << peer_id.ToString();
     }
-  }
-
-  void HandleChatMessage(ContactID const& peer_id, Json const& message) {
-    auto const msg_id = message["message_id"].get<uint64_t>();
-    bool const is_sys = message.value("is_system", false);
-    auto const payload = message["payload"].get<std::vector<std::byte>>();
-
-    std::vector<messaging::Attachment> attachments;
-    if (message.contains("attachments")) {
-      for (auto const& j_att : message["attachments"]) {
-        messaging::Attachment att;
-        att.id = j_att.at("id").get<std::string>();
-        att.type = j_att.at("type").get<messaging::AttachmentType>();
-        att.mime_type = j_att.value("mime", "");
-        att.size_bytes = j_att.value("size", 0ULL);
-        att.thumbnail_base64 = j_att.value("thumb", "");
-        att.hash = j_att.value("hash", "");
-        att.note = j_att.value("note", "");
-        att.file_name = j_att.value("name", "");
-        att.is_downloaded = false;
-        att.status = messaging::AttachmentStatus::pending;
-        attachments.push_back(att);
-      }
-    }
-
-    sm_->messaging->OnChatMessageReceived(peer_id, payload, msg_id, is_sys, attachments);
   }
 
   ServiceManager* sm_;

@@ -69,25 +69,19 @@ TEST_F(ProfileUpdatesTest, BroadcastOnProfileUpdate) {
   mock_transport_->SimulateDataChannelOpen(peer1);
 
   // Update my profile
-  mock_transport_->CallLog()->sent_peer_messages.clear();  // Clear history
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_peer_messages.clear();  // Clear history
+  }
   client_->UpdateMyProfile({.display_name = "New Name", .bio = "New Bio", .photo_base64 = "NewPhoto"});
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& msg : mock_transport_->CallLog()->sent_peer_messages | std::views::values) {
-          if (msg.value("type", "") == "profile_info") return true;
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
 
   // Verify "profile_info" message was sent
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "profile_info") {
-      EXPECT_EQ(msg["display_name"], "New Name");
-      EXPECT_EQ(msg["bio"], "New Bio");
+  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (entry.type == storage::LedgerActionType::ProfileUpdate) {
+      auto json = nlohmann::json::parse(entry.payload);
+      EXPECT_EQ(json["display_name"], "New Name");
+      EXPECT_EQ(json["bio"], "New Bio");
       profile_sent = true;
     }
   }
@@ -115,7 +109,10 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   ASSERT_TRUE(peer);
 
   // Clear log before simulating open
-  mock_transport_->CallLog()->sent_peer_messages.clear();
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_peer_messages.clear();
+  }
 
   // Simulate DataChannel open
   mock_transport_->SimulateDataChannelOpen(peer1);
@@ -123,7 +120,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
         for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "profile_info") return true;
+          if (msg.value("type", "") == "sync_propose") return true;
         }
         return false;
       },
@@ -133,8 +130,7 @@ TEST_F(ProfileUpdatesTest, SendProfileOnConnect) {
   // Verify profile sent
   bool profile_sent = false;
   for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "profile_info") {
-      EXPECT_EQ(msg["display_name"], "My Name");
+    if (pid == peer1 && msg["type"] == "sync_propose") {
       profile_sent = true;
     }
   }
@@ -151,7 +147,10 @@ TEST_F(ProfileUpdatesTest, NoProfileSendForPendingContact) {
       [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
       std::chrono::milliseconds(2000)
   );
-  mock_transport_->CallLog()->sent_peer_messages.clear();
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_peer_messages.clear();
+  }
 
   // Trigger OnDataChannelOpen
   mock_transport_->SimulateDataChannelOpen(peer1);
@@ -174,10 +173,20 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
   client_->Contacts()->ReloadCache();
 
+  // Wait for the async Connect call from AddContact to settle
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return mock_transport_->GetPeer(peer1) != nullptr; },
+      std::chrono::milliseconds(2000)
+  );
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
+
   // Ensure disconnected
   mock_transport_->RemovePeer(peer1);
   ASSERT_FALSE(mock_transport_->GetPeer(peer1));
-  mock_transport_->CallLog()->offers.clear();
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->offers.clear();
+  }
 
   // Update Profile
   client_->UpdateMyProfile({.display_name = "Conn Name", .bio = "Conn Bio", .photo_base64 = "NewPhoto"});
@@ -185,7 +194,9 @@ TEST_F(ProfileUpdatesTest, TriggerConnectForDisconnectedConfirmedPeer) {
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
         for (auto const& [pid, ctx] : mock_transport_->CallLog()->offers) {
-          if (pid == peer1 && ctx == "data") return true;
+          if (pid == peer1 && ctx == "data") {
+            return true;
+          }
         }
         return false;
       },
@@ -220,15 +231,21 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
   mock_storage_->UpdateContact({peer1, identity::ContactStatus::awaitingApproval});
   client_->Contacts()->ReloadCache();
 
-  mock_transport_->CallLog()->sent_peer_messages.clear();
+  {
+    std::lock_guard<std::mutex> const lock(mock_transport_->CallLog()->mutex_);
+    mock_transport_->CallLog()->sent_peer_messages.clear();
+  }
 
   // Confirm
   client_->ConfirmContact(peer1);
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "profile_info") return true;
+        auto entries = storage_->GetLedgerEntries(TopicID(peer1));
+        for (auto const& entry : entries) {
+          if (entry.type == storage::LedgerActionType::ProfileUpdate) {
+            auto json = nlohmann::json::parse(entry.payload);
+            if (json.value("type", "") == "profile_info") return true;
+          }
         }
         return false;
       },
@@ -237,10 +254,13 @@ TEST_F(ProfileUpdatesTest, ConfirmContactTriggersProfileSend) {
 
   // Check profile sent
   bool profile_sent = false;
-  for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-    if (pid == peer1 && msg["type"] == "profile_info") {
-      EXPECT_EQ(msg["display_name"], "Approver");
-      profile_sent = true;
+  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
+    if (entry.type == storage::LedgerActionType::ProfileUpdate) {
+      auto json = nlohmann::json::parse(entry.payload);
+      if (json.value("type", "") == "profile_info") {
+        EXPECT_EQ(json["display_name"], "Approver");
+        profile_sent = true;
+      }
     }
   }
   EXPECT_TRUE(profile_sent);

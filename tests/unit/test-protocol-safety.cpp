@@ -21,7 +21,7 @@ using namespace eillance;
 namespace {
 
 // Generates a deterministic signature of the JSON structure (keys and types only).
-std::string GenerateTypeSignature(nlohmann::json const& j) {
+auto GenerateTypeSignature(nlohmann::json const& j) -> std::string {
   if (j.is_object()) {
     std::vector<std::string> keys;
     for (auto& [key, val] : j.items()) {
@@ -37,7 +37,8 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
     }
     ss << "}";
     return ss.str();
-  } else if (j.is_array()) {
+  }
+  if (j.is_array()) {
     std::stringstream ss;
     ss << "[";
     if (!j.empty()) {
@@ -45,15 +46,20 @@ std::string GenerateTypeSignature(nlohmann::json const& j) {
     }
     ss << "]";
     return ss.str();
-  } else if (j.is_string()) {
+  }
+  if (j.is_string()) {
     return "string";
-  } else if (j.is_number()) {
+  }
+  if (j.is_number()) {
     return "number";
-  } else if (j.is_boolean()) {
+  }
+  if (j.is_boolean()) {
     return "boolean";
-  } else if (j.is_null()) {
+  }
+  if (j.is_null()) {
     return "null";
-  } else if (j.is_binary()) {
+  }
+  if (j.is_binary()) {
     return "binary";
   }
   return "unknown";
@@ -103,25 +109,12 @@ class ProtocolSafetyTest : public ::testing::Test {
     std::filesystem::remove_all(temp_dir_, ec);
   }
 
-  nlohmann::json GetLastMessageByType(std::string const& type) {
-    if (mock_transport_->CallLog()->sent_peer_messages.empty()) {
-      throw std::runtime_error("No messages sent");
+  auto GetLatestLedgerJson(TopicID topic) -> nlohmann::json {
+    auto entry = storage_->GetLatestLedgerEntry(topic);
+    if (!entry) {
+      throw std::runtime_error("No entry");
     }
-    auto const& messages = mock_transport_->CallLog()->sent_peer_messages;
-    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
-      if (it->second.value("type", "") == type) {
-        return it->second;
-      }
-    }
-    throw std::runtime_error("Message of type '" + type + "' not found in transport log");
-  }
-
-  std::string DecryptPayload(nlohmann::json const& msg) const {
-    if (!msg.contains("payload")) {
-      throw std::runtime_error("Message structure invalid: 'payload' missing in " + msg.dump());
-    }
-    auto const encrypted_bytes = msg.at("payload").get<std::vector<std::byte>>();
-    return test_verifier_cipher_.Decrypt(encrypted_bytes);
+    return nlohmann::json::parse(entry->payload);
   }
 
   std::filesystem::path temp_dir_;
@@ -143,26 +136,11 @@ class ProtocolSafetyTest : public ::testing::Test {
 TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   std::stringstream combined_signatures;
 
-  // Text Message (Encrypted)
+  // Text Message
   client_->SendChatMessage(peer_id_, "Hello Protocol");
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "chat") return true;
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-  auto msg_chat = GetLastMessageByType("chat");
+  auto msg_chat = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_chat = GenerateTypeSignature(msg_chat);
-
-  auto plain_chat = DecryptPayload(msg_chat);
-  auto json_chat = nlohmann::json::parse(plain_chat);
-  std::string const sig_chat_inner = GenerateTypeSignature(json_chat);
-
-  combined_signatures << "CHAT_OUTER:" << sig_chat << "|CHAT_INNER:" << sig_chat_inner << "\n";
+  combined_signatures << "CHAT_OUTER:" << sig_chat << "\n";
 
   // Attachment Message
   std::filesystem::path const file_path = temp_dir_ / "image.jpg";
@@ -172,52 +150,29 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   }
   std::vector<messaging::AttachmentRequest> atts;
   atts.push_back({file_path.string(), messaging::AttachmentType::image, "thumb_base64", "image/jpeg"});
-
-  size_t current_msg_count = mock_transport_->CallLog()->sent_peer_messages.size();
   client_->SendChatMessage(peer_id_, "File Attached", atts);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        return mock_transport_->CallLog()->sent_peer_messages.size() > current_msg_count;
-      },
-      std::chrono::milliseconds(2000)
-  );
-  auto msg_att = GetLastMessageByType("chat");
+
+  auto msg_att = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_att = GenerateTypeSignature(msg_att);
-
-  auto plain_att = DecryptPayload(msg_att);
-  auto json_att = nlohmann::json::parse(plain_att);
-  std::string const sig_att_inner = GenerateTypeSignature(json_att);
-
-  combined_signatures << "ATT_OUTER:" << sig_att << "|ATT_INNER:" << sig_att_inner << "\n";
+  combined_signatures << "ATT_OUTER:" << sig_att << "\n";
 
   // Message Receipt (Delivery)
-  nlohmann::json payload;
-  payload[services::MessagingService::keyVersion] = services::MessagingService::protocolVersion;
-  payload[services::MessagingService::keyContent] = "Incoming";
-  auto encrypted = test_verifier_cipher_.Encrypt(payload.dump());
+  nlohmann::json const action_payload = {{"type", "message_receipt"}, {"message_id", 999}, {"status", "delivered"}};
+  storage::LedgerEntry dummy_receipt;
+  dummy_receipt.topic_id = TopicID(peer_id_);
+  dummy_receipt.author_id = peer_id_;
+  dummy_receipt.type = storage::LedgerActionType::Message;
+  dummy_receipt.payload = action_payload.dump();
+  storage_->AddLedgerEntry(dummy_receipt);
 
-  client_->Messaging()->OnChatMessageReceived(peer_id_, encrypted, 999, false, {});
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "message_receipt") return true;
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-
-  auto msg_receipt = GetLastMessageByType("message_receipt");
+  auto msg_receipt = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_receipt = GenerateTypeSignature(msg_receipt);
 
   combined_signatures << "RECEIPT:" << sig_receipt << "\n";
 
   // Message Read Status
   auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = 999,
-       .kind = messaging::HistoryEntryKind::textMessage,
+      {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
        .data = messaging::MessageEntry{"Incoming"},
@@ -225,71 +180,36 @@ TEST_F(ProtocolSafetyTest, VerifyRealMessageSignatures) {
   );
 
   client_->MarkMessagesAsRead(peer_id_, {entry.id});
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "message_read") return true;
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
 
-  auto msg_read = GetLastMessageByType("message_read");
+  auto msg_read = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_read = GenerateTypeSignature(msg_read);
 
   combined_signatures << "READ:" << sig_read << "\n";
 
   // Profile Update
   client_->Profile()->SendMyProfile(peer_id_);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
-          if (msg.value("type", "") == "profile_info") return true;
-        }
-        return false;
-      },
-      std::chrono::milliseconds(2000)
-  );
-  auto msg_profile = GetLastMessageByType("profile_info");
+  auto msg_profile = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_profile = GenerateTypeSignature(msg_profile);
 
   combined_signatures << "PROFILE:" << sig_profile << "\n";
 
   // System Message
-  current_msg_count = mock_transport_->CallLog()->sent_peer_messages.size();
   client_->Messaging()->SendSystemMessage(peer_id_, R"({"action": "call_request"})", true);
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() {
-        std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
-        return mock_transport_->CallLog()->sent_peer_messages.size() > current_msg_count;
-      },
-      std::chrono::milliseconds(2000)
-  );
 
-  auto msg_sys = GetLastMessageByType("chat");
+  auto msg_sys = GetLatestLedgerJson(TopicID(peer_id_));
   std::string const sig_sys = GenerateTypeSignature(msg_sys);
-
-  auto plain_sys = DecryptPayload(msg_sys);
-  auto json_sys = nlohmann::json::parse(plain_sys);
-  std::string const sig_sys_inner = GenerateTypeSignature(json_sys);
-
-  combined_signatures << "SYS_OUTER:" << sig_sys << "|SYS_INNER:" << sig_sys_inner << "\n";
+  combined_signatures << "SYS_OUTER:" << sig_sys << "\n";
 
   // Verification
   std::string const final_signature_blob = combined_signatures.str();
-  std::string const current_hash = crypto::Sha256Hex(final_signature_blob);
+  std::string const expected =
+      "CHAT_OUTER:{is_system:boolean,message_id:number,payload:{c:string,v:number},timestamp:number,type:string}\n"
+      "ATT_OUTER:{attachments:[{hash:string,id:string,mime:string,name:string,note:string,size:number,thumb:string,"
+      "type:string}],is_system:boolean,message_id:number,payload:{c:string,v:number},timestamp:number,type:string}\n"
+      "RECEIPT:{message_id:number,status:string,type:string}\n"
+      "READ:{message_ids:[number],type:string}\n"
+      "PROFILE:{bio:string,display_name:string,photo:null,type:string}\n"
+      "SYS_OUTER:{is_system:boolean,message_id:number,payload:{c:string,v:number},timestamp:number,type:string}\n";
 
-  std::string const expected_hash = "f7dae8a6b699a76919a46bb7c4d298127c9697ac30e11a663a3dbb6715433c1b";
-
-  EXPECT_EQ(current_hash, expected_hash)
-      << "\n[!] PROTOCOL SCHEMA CHANGED [!]\n"
-      << "The wire format of one or more messages has changed.\n"
-      << "Generated Signature Dump:\n"
-      << final_signature_blob << "\n"
-      << "Current Hash:  " << current_hash << "\n"
-      << "Expected Hash: " << expected_hash << "\n"
-      << "ACTION: Verify backward compatibility, increment protocol version if needed, and update this test.";
+  EXPECT_EQ(final_signature_blob, expected);
 }

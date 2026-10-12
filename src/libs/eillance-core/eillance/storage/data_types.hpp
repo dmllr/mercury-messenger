@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "eillance/identity/contact_id.hpp"
+#include "eillance/identity/topic_id.hpp"
+#include "eillance/utils/timestamp.hpp"
 
 namespace eillance::identity {
 
@@ -37,21 +39,32 @@ struct ProfileUpdate {
 
 namespace eillance::storage {
 
-struct PendingAction {
-  int64_t id;
-  ContactID peer_id;
-  std::string payload;            // JSON content
-  uint64_t created_at;            // Timestamp (microseconds)
-  std::optional<int64_t> ref_id;  // Reference ID (e.g. message_id), optional
-  bool is_suspended = false;
-  uint64_t window_start_at = 0;
+enum class LedgerActionType : uint8_t {
+  Message = 1,
+  MessageEdit = 2,
+  MessageDelete = 3,
+  Reaction = 4,
+  CallLog = 5,
+  ProfileUpdate = 6,
+  ContactState = 7
 };
 
-struct PendingActionParams {
-  ContactID peer_id;
+struct LedgerEntry {
+  uint64_t seq_id = 0;
+  TopicID topic_id;
+  ContactID author_id;
+  Timestamp created_at;
+  LedgerActionType type;
   std::string payload;
-  uint64_t timestamp = 0;
-  std::optional<int64_t> ref_id = std::nullopt;
+  std::string prev_hash;
+  std::string hash;
+};
+
+struct SyncRequest {
+  TopicID topic_id;
+  ContactID target_peer_id;
+  Timestamp created_at;
+  Timestamp last_attempt;
 };
 
 }  // namespace eillance::storage

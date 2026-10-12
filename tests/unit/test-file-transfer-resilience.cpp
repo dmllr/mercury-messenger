@@ -44,11 +44,6 @@ class FileTransferResilienceTest : public ::testing::Test {
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
     client_->Contacts()->ReloadCache();
 
-    auto pending = mock_storage_->GetPendingActions(peer1);
-    for (auto const& action : pending) {
-      mock_storage_->RemovePendingAction(action.id);
-    }
-
     client_->Start();
   }
 
@@ -69,9 +64,13 @@ class FileTransferResilienceTest : public ::testing::Test {
     packet.push_back(std::byte{0xFE});
     packet.push_back(std::byte{0x01});  // Chunk Type
     packet.push_back(static_cast<std::byte>(id.size()));
-    for (char c : id) packet.push_back(static_cast<std::byte>(c));
+    for (char c : id) {
+      packet.push_back(static_cast<std::byte>(c));
+    }
 
-    for (int i = 0; i < 4; ++i) packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    for (int i = 0; i < 4; ++i) {
+      packet.push_back(static_cast<std::byte>((seq >> (i * 8)) & 0xFF));
+    }
 
     packet.insert(packet.end(), payload.begin(), payload.end());
     return packet;
@@ -143,7 +142,24 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   att.hash = file_hash;
   att.is_downloaded = false;
 
-  client_->Messaging()->OnChatMessageReceived(peer1, encrypted, 9001, false, {att});
+  nlohmann::json payload_msg;
+  payload_msg["type"] = "chat";
+  payload_msg["message_id"] = 9001;
+  payload_msg["payload"] = {{"c", content}, {"v", 2}};
+  payload_msg["attachments"] = nlohmann::json::array(
+      {{{"id", att_id},
+        {"type", static_cast<int>(att.type)},
+        {"mime", att.mime_type},
+        {"size", att.size_bytes},
+        {"hash", att.hash},
+        {"is_downloaded", false}}}
+  );
+
+  storage::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  client_->Messaging()->ProjectMessage(entry, payload_msg, false);
+
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::filesystem::path const temp_file = attachments_dir_ / (att_id + ".tmp");

@@ -14,10 +14,12 @@
 #include "eillance/services/contact_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/internal_messaging_service.hpp"
+#include "eillance/services/ledger_projection_service.hpp"
 #include "eillance/services/media_call_service.hpp"
 #include "eillance/services/messaging_service.hpp"
 #include "eillance/services/profile_service.hpp"
 #include "eillance/services/service_manager.hpp"
+#include "eillance/services/sync_engine.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
@@ -49,6 +51,8 @@ class Client final {
     sm_->profile = std::make_shared<services::ProfileService>(sm_.get());
     sm_->contact = std::make_shared<services::ContactService>(sm_.get());
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
+    sm_->sync_engine = std::make_shared<sync::SyncEngine>(sm_->storage, sm_->data_transport, sm_->account->GetId());
+    sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
 
     event_unsubs_.emplace_back(EventQueue::Instance().Subscribe<EventAppForegrounded>([this](auto const&) -> void {
       sm_->is_foreground = true;
@@ -97,7 +101,6 @@ class Client final {
           auto const state = event.state;
           if (state == ServiceConnectionState::failure || state == ServiceConnectionState::noNetwork ||
               state == ServiceConnectionState::disconnected) {
-            EventQueue::Instance().Push(EventStopDeliveryService{});
             for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
               auto const pc_state = sm_->data_transport->GetConnectionState(id);
               if (pc_state == transport::PeerConnectionState::newConnection ||
@@ -109,7 +112,7 @@ class Client final {
             }
           } else if (state == ServiceConnectionState::online) {
             if (this->is_running_.load()) {
-              sm_->messaging->StartDeliveryService();
+              sm_->sync_engine->Start();
             }
           }
         })
@@ -197,6 +200,7 @@ class Client final {
       LGE << "Client started without an identity.";
       return;
     }
+    sm_->sync_engine->SetMyId(sm_->account->GetId());
     if (is_running_.exchange(true)) {
       return;
     }
@@ -206,7 +210,7 @@ class Client final {
     }
     sm_->data_transport->SetId(sm_->account->GetId());
     sm_->data_transport->Start();
-    sm_->messaging->StartDeliveryService();
+    sm_->sync_engine->Start();
     StartWatchdog();
     background_queue_.Dispatch([this]() -> void { CheckForInactivePeers(); });
   }
@@ -215,7 +219,7 @@ class Client final {
     is_running_ = false;
     StopWatchdog();
     background_queue_.RemovePending();
-    EventQueue::Instance().Push(EventStopDeliveryService{});
+    sm_->sync_engine->Stop();
 
     auto peers = sm_->data_transport->GetPeers();
     for (auto const& id : peers | std::views::keys) {
@@ -407,7 +411,7 @@ class Client final {
     EventQueue::Instance().Push(EventSendQueuedMessages{peer_id});
 
     auto const contact = sm_->contact->GetContact(peer_id);
-    if (!contact || contact->status != identity::ContactStatus::confirmed) {
+    if (contact && contact->status == identity::ContactStatus::rejected) {
       return;
     }
 
@@ -483,15 +487,8 @@ class Client final {
   }
 
   [[nodiscard]] auto GetAllPendingActions() const -> std::vector<view_model::DebugPendingAction> {
-    std::vector<view_model::DebugPendingAction> result;
-    auto contacts = sm_->contact->GetContacts();
-    for (auto const& contact : contacts) {
-      auto actions = sm_->storage->GetPendingActions(contact.peer_id);
-      for (auto const& action : actions) {
-        result.push_back({action.peer_id, action.id, action.payload});
-      }
-    }
-    return result;
+    // Disabled since pending actions are removed. Used purely for debug view.
+    return {};
   }
 
   [[nodiscard]] auto GetConnectionDebugInfo() const -> std::vector<view_model::DebugConnectionInfo> {
@@ -544,7 +541,8 @@ class Client final {
     for (auto const& [id, peer] : sm_->data_transport->GetPeers()) {
       auto const state = sm_->data_transport->GetConnectionState(id);
       bool const is_data_connected = state == transport::PeerConnectionState::connected;
-      bool const is_connecting = state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection;
+      bool const is_connecting =
+          state == transport::PeerConnectionState::connecting || state == transport::PeerConnectionState::newConnection;
 
       if (peer->has_media_peer_connection) {
         peer->last_activity_time = now;

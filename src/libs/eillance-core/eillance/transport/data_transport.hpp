@@ -46,8 +46,8 @@ class DataTransport {
     virtual void CreateAnswer(ContactID const& peer_id) = 0;
     virtual void SetRemoteDescription(ContactID const& peer_id, std::string const& sdp, std::string const& type) = 0;
 
-    virtual auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool = 0;
-    virtual auto SendJson(ContactID const& peer_id, Json const& message) const -> bool = 0;
+    virtual auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool = 0;
+    virtual auto SendJson(ContactID const& peer_id, Json const& message) -> bool = 0;
     virtual void SendSignalingMessage(Json const& message) const = 0;
   };
 
@@ -112,7 +112,7 @@ class DataTransport {
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) const -> bool {
     return self_->SendData(peer_id, message);
   }
-  auto SendJson(ContactID const& peer_id, Json const& message) const -> bool {
+  auto SendJson(ContactID const& peer_id, Json const& message) -> bool {
     return self_->SendJson(peer_id, message);
   }
   void SendSignalingMessage(Json const& message) const {

@@ -58,10 +58,8 @@ class RepliesTest : public ::testing::Test {
 };
 
 TEST_F(RepliesTest, SendReplyMapsToWireId) {
-  uint64_t remote_id = 999;
   auto entry = mock_storage_->AddHistoryEntry(
-      {.remote_id = remote_id,
-       .kind = messaging::HistoryEntryKind::textMessage,
+      {.kind = messaging::HistoryEntryKind::textMessage,
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
        .data = messaging::MessageEntry{"Incoming Message"},
@@ -70,14 +68,8 @@ TEST_F(RepliesTest, SendReplyMapsToWireId) {
 
   client_->Messaging()->SendChatMessage(peer_id_, "Reply", {}, entry.id);
 
-  eillance::EventQueue::Instance().WaitFor(
-      [&]() { return mock_transport_->CallLog()->sent_peer_messages.size() > 0; },
-      std::chrono::milliseconds(2000)
-  );
-
-  auto msg = mock_transport_->CallLog()->sent_peer_messages.back().second;
-  auto enc_bytes = msg.at("payload").get<std::vector<std::byte>>();
-  auto plain = test_verifier_cipher_.Decrypt(enc_bytes);
-  auto json_payload = nlohmann::json::parse(plain);
-  EXPECT_EQ(json_payload.value("reply_to_id", 0ULL), remote_id);
+  auto ledger_entries = storage_->GetLedgerEntries(TopicID(peer_id_));
+  ASSERT_GE(ledger_entries.size(), 1);
+  auto json_payload = nlohmann::json::parse(ledger_entries.back().payload);
+  EXPECT_EQ(json_payload["payload"].value("reply_to_id", 0ULL), entry.id);
 }

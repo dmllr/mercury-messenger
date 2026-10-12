@@ -59,10 +59,11 @@ TEST_F(ClientCoreTest, ConnectSequence) {
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         std::lock_guard<std::mutex> const lock(mock_log_->mutex_);
+        for (auto const& [pid, msg] : mock_transport_->CallLog()->sent_peer_messages) {
+          if (pid == peer1 && msg.value("type", "") == "sync_propose") return true;
+        }
         for (auto const& [id, ctx] : mock_log_->offers) {
-          if (id == peer1 && ctx == "data") {
-            return true;
-          }
+          if (id == peer1 && ctx == "data") return true;
         }
         return false;
       },
@@ -186,13 +187,16 @@ TEST_F(ClientCoreTest, SignalingMessageProcessing_MediaOffer) {
 }
 
 TEST_F(ClientCoreTest, ContactRequestProcessing) {
-  nlohmann::json const req_msg = {
-      {"from", peer1.ToString()},
-      {"type", "contact_add_request"},
-      {"profile", {{"display_name", "Peer One"}}}
-  };
+  nlohmann::json const req_msg = {{"type", "contact_add_request"}, {"profile", {{"display_name", "Peer One"}}}};
 
-  mock_transport_->SimulatePeerMessage(peer1, req_msg);
+  storage::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  entry.type = storage::LedgerActionType::ContactState;
+  entry.payload = req_msg.dump();
+
+  eillance::EventQueue::Instance().Push(EventLedgerAppended{entry});
+
   eillance::EventQueue::Instance().WaitFor(
       [&]() {
         auto const contacts = client_->GetContacts();

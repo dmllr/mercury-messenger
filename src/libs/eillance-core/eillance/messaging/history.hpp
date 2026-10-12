@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,14 @@
 #include "eillance/utils/time.hpp"
 
 namespace eillance::messaging {
+
+inline auto GenerateMessageId() -> uint64_t {
+  uint64_t const now_ms = Time::Now() / 1000ULL;
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  std::uniform_int_distribution<uint64_t> dis(0, 524287);  // 19 bits
+  return (now_ms << 19) | dis(gen);
+}
 
 class MessageHistory {
   std::shared_ptr<storage::PersistentStorage> storage_;
@@ -29,14 +38,18 @@ class MessageHistory {
     MessageStatus const initial_status =
         (params.direction == MessageDirection::sent) ? MessageStatus::sending : MessageStatus::delivered;
 
+    Time::Unit ts = params.timestamp.value_or(static_cast<Time::Unit>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count()
+    ));
+
+    uint64_t entry_id = params.id;
+    if (entry_id == 0) entry_id = GenerateMessageId();
+
     return storage_->AddHistoryEntry({
-        .id = 0,  // DB will assign ID
-        .remote_id = params.remote_id,
+        .id = entry_id,
         .kind = params.kind,
-        .timestamp = static_cast<Time::Unit>(
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-                .count()
-        ),
+        .timestamp = ts,
         .direction = params.direction,
         .status = initial_status,
         .is_truncated = false,
@@ -46,13 +59,18 @@ class MessageHistory {
   }
 
   auto AddCallEntry(CallEntryParams const& params) -> HistoryEntryRecord {
+    Time::Unit ts = params.timestamp.value_or(static_cast<Time::Unit>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count()
+    ));
+
+    uint64_t entry_id = params.id;
+    if (entry_id == 0) entry_id = GenerateMessageId();
+
     return storage_->AddHistoryEntry({
-        .id = 0,
+        .id = entry_id,
         .kind = params.kind,
-        .timestamp = static_cast<Time::Unit>(
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-                .count()
-        ),
+        .timestamp = ts,
         .direction =
             (params.direction == CallDirection::incoming) ? MessageDirection::received : MessageDirection::sent,
         .status = (params.direction == CallDirection::incoming && params.status == CallStatus::missed)
@@ -93,12 +111,7 @@ class MessageHistory {
 
   [[nodiscard]] auto FindMessageIdByRemoteOrLocal(ContactID const& peer_id, uint64_t target_id) const
       -> std::optional<uint64_t> {
-    return storage_->GetMessageIdByRemoteId(peer_id, target_id);
-  }
-
-  [[nodiscard]] auto GetRemoteId(ContactID const& peer_id, uint64_t local_id) const -> std::optional<uint64_t> {
-    auto const entry = storage_->GetHistoryEntry(peer_id, local_id);
-    return entry ? entry->remote_id : std::nullopt;
+    return storage_->GetHistoryEntry(peer_id, target_id) ? std::make_optional(target_id) : std::nullopt;
   }
 
   void MarkMessagesAsRead(ContactID const& peer_id, std::vector<uint64_t> const& message_ids) {
@@ -106,6 +119,11 @@ class MessageHistory {
     for (auto const message_id : message_ids) {
       EventQueue::Instance().Push(EventMessageStatusChanged{peer_id, message_id, MessageStatus::read});
     }
+  }
+
+  [[nodiscard]] auto GetHistoryEntry(ContactID const& peer_id, uint64_t const message_id) const
+      -> std::optional<messaging::HistoryEntryRecord> {
+    return storage_->GetHistoryEntry(peer_id, message_id);
   }
 
   [[nodiscard]] auto GetHistoryPage(ContactID const& peer_id, size_t const page_index, size_t const page_size) const
