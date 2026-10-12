@@ -13,6 +13,7 @@
 #include "eillance/logging/logging.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/transport/libp2p_node.hpp"
+#include "eillance/utils/dispatch_queue.hpp"
 #include "eillance/utils/event_queue.hpp"
 
 namespace eillance::transport {
@@ -20,6 +21,7 @@ namespace eillance::transport {
 class Libp2pDataTransport : public DataTransport::Interface {
   using Json = nlohmann::json;
 
+  DispatchQueue rx_queue_{"Libp2pRx", 1};
   std::shared_ptr<Libp2pNode> node_;
   ContactID id_;
   std::unordered_map<ContactID, std::shared_ptr<Peer>> peers_;
@@ -51,31 +53,37 @@ class Libp2pDataTransport : public DataTransport::Interface {
     if (!node_) {
       node_ = std::make_shared<Libp2pNode>(secret_key_);
 
-      node_->SetOnConnected([this](ContactID const& peer_id) {
-        auto p = GetPeer(peer_id);
-        if (!p) {
-          p = std::make_shared<Peer>(peer_id);
-          AddPeer(peer_id, p);
-        }
-        p->data_channel_is_open = true;
-        p->is_connecting = false;
-        LGI << "Peer connected: " << peer_id.ToString();
-        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
-        EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
-      });
-
-      node_->SetOnDisconnected([this](ContactID const& peer_id) {
-        if (auto p = GetPeer(peer_id)) {
-          p->data_channel_is_open = false;
+      node_->SetOnConnected([this](ContactID const& peer_id) -> void {
+        rx_queue_.Dispatch([this, peer_id]() -> void {
+          auto p = GetPeer(peer_id);
+          if (!p) {
+            p = std::make_shared<Peer>(peer_id);
+            AddPeer(peer_id, p);
+          }
+          p->data_channel_is_open = true;
           p->is_connecting = false;
-          p->data_channel_initialized = false;
-        }
-        EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
+          LGI << "Peer connected: " << peer_id.ToString();
+          EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::connected});
+          EventQueue::Instance().Push(EventDataChannelOpen{peer_id});
+        });
       });
 
-      node_->SetOnMessage([this](ContactID const& peer_id, std::span<std::byte const> data) {
+      node_->SetOnDisconnected([this](ContactID const& peer_id) -> void {
+        rx_queue_.Dispatch([this, peer_id]() -> void {
+          if (auto p = GetPeer(peer_id)) {
+            p->data_channel_is_open = false;
+            p->is_connecting = false;
+            p->data_channel_initialized = false;
+          }
+          EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer_id, PeerConnectionState::disconnected});
+        });
+      });
+
+      node_->SetOnMessage([this](ContactID const& peer_id, std::span<std::byte const> data) -> void {
         std::vector<std::byte> payload(data.begin(), data.end());
-        EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
+        rx_queue_.Dispatch([peer_id, payload = std::move(payload)]() mutable -> void {
+          EventQueue::Instance().Push(EventDataChannelMessage{peer_id, std::move(payload)});
+        });
       });
     }
 
@@ -207,13 +215,14 @@ class Libp2pDataTransport : public DataTransport::Interface {
   }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> message) -> bool override {
-    if (node_) return node_->SendMessage(peer_id, message);
+    if (node_) return node_->SendFile(peer_id, message);
     return false;
   }
 
   auto SendJson(ContactID const& peer_id, Json const& message) -> bool override {
     auto str = message.dump();
-    return SendData(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
+    if (node_) return node_->SendChat(peer_id, {reinterpret_cast<std::byte const*>(str.data()), str.size()});
+    return false;
   }
 
   void SendSignalingMessage(Json const&) const override {

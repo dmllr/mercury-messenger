@@ -102,10 +102,21 @@ class Libp2pNode final {
     eillance_libp2p_node_disconnect(node_, hex.c_str());
   }
 
-  bool SendMessage(ContactID const& peer_id, std::span<std::byte const> data) const {
+  bool SendChat(ContactID const& peer_id, std::span<std::byte const> data) const {
     INVARIANT_NOT_NULL(node_);
     std::string const hex = peer_id.ToString();
-    return eillance_libp2p_node_send_message(
+    return eillance_libp2p_node_send_chat(
+        node_,
+        hex.c_str(),
+        reinterpret_cast<uint8_t const*>(data.data()),
+        data.size()
+    );
+  }
+
+  bool SendFile(ContactID const& peer_id, std::span<std::byte const> data) const {
+    INVARIANT_NOT_NULL(node_);
+    std::string const hex = peer_id.ToString();
+    return eillance_libp2p_node_send_file(
         node_,
         hex.c_str(),
         reinterpret_cast<uint8_t const*>(data.data()),

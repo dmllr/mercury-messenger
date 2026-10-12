@@ -22,7 +22,8 @@ struct MercuryBehaviour {
   relay_client: relay::client::Behaviour,
   relay_server: relay::Behaviour,
   kademlia: Kademlia<MemoryStore>,
-  req_resp: request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
+  chat: request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
+  file: request_response::cbor::Behaviour<Vec<u8>, Vec<u8>>,
   mdns: mdns::tokio::Behaviour,
   identify: identify::Behaviour,
   ping: ping::Behaviour,
@@ -44,7 +45,8 @@ enum Command {
   AddBootstrap(Multiaddr),
   AddBootstrapResolved(Multiaddr),
   Listen(Multiaddr),
-  SendMessage(PeerId, Vec<u8>),
+  SendChat(PeerId, Vec<u8>),
+  SendFile(PeerId, Vec<u8>),
   Disconnect(PeerId),
   Stop,
 }
@@ -331,8 +333,13 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         }
 
                         let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id).expect("mDNS valid");
-                        let req_resp = request_response::cbor::Behaviour::new([(StreamProtocol::new("/mercury/1.0.0"), ProtocolSupport::Full)],
-                                                                              request_response::Config::default(),
+                        let chat = request_response::cbor::Behaviour::new(
+                            [(StreamProtocol::new("/mercury/chat/1.0.0"), ProtocolSupport::Full)],
+                            request_response::Config::default(),
+                        );
+                        let file = request_response::cbor::Behaviour::new(
+                            [(StreamProtocol::new("/mercury/file/1.0.0"), ProtocolSupport::Full)],
+                            request_response::Config::default(),
                         );
                         let identify = identify::Behaviour::new(identify::Config::new(
                             "/mercury/id/1.0.0".into(),
@@ -355,7 +362,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         let relay_server = relay::Behaviour::new(peer_id, relay_config);
                         let ping = ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(15)));
 
-                        MercuryBehaviour { relay_client, relay_server, kademlia, req_resp, mdns, identify, ping }
+                        MercuryBehaviour { relay_client, relay_server, kademlia, chat, file, mdns, identify, ping }
                     }) {
                         Ok(b) => b.with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(3600))).build(),
                         Err(e) => {
@@ -516,8 +523,11 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                 }
                             }
                         }
-                        Some(Command::SendMessage(peer_id, data)) => {
-                            swarm.behaviour_mut().req_resp.send_request(&peer_id, data);
+                        Some(Command::SendChat(peer_id, data)) => {
+                            swarm.behaviour_mut().chat.send_request(&peer_id, data);
+                        }
+                        Some(Command::SendFile(peer_id, data)) => {
+                            swarm.behaviour_mut().file.send_request(&peer_id, data);
                         }
                         Some(Command::Disconnect(peer_id)) => {
                             node_log!(callbacks, 4, "Disconnect command received for {}", peer_id);
@@ -684,7 +694,7 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                         SwarmEvent::Behaviour(MercuryBehaviourEvent::Ping(event)) => {
                             node_log!(callbacks, 4, "Ping event: {:?}", event);
                         }
-                        SwarmEvent::Behaviour(MercuryBehaviourEvent::ReqResp(request_response::Event::Message { peer, message })) => {
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::Chat(request_response::Event::Message { peer, message })) => {
                             if let request_response::Message::Request { request, channel, .. } = message {
                                 if callbacks.on_message != 0 {
                                     let cb: extern "C" fn(*mut c_void, *const c_char, *const u8, usize) = unsafe { std::mem::transmute(callbacks.on_message) };
@@ -696,8 +706,23 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
                                         }
                                     }
                                 }
-                                if let Err(e) = swarm.behaviour_mut().req_resp.send_response(channel, vec![]) {
-                                    node_log!(callbacks, 1, "Failed to send req_resp response: {:?}", e);
+                                if let Err(e) = swarm.behaviour_mut().chat.send_response(channel, vec![]) {
+                                    node_log!(callbacks, 1, "Failed to send chat response: {:?}", e);
+                                }
+                            }
+                        }
+                        SwarmEvent::Behaviour(MercuryBehaviourEvent::File(request_response::Event::Message { peer, message })) => {
+                            if let request_response::Message::Request { request, channel, .. } = message {
+                                if callbacks.on_message != 0 {
+                                    let cb: extern "C" fn(*mut c_void, *const c_char, *const u8, usize) = unsafe { std::mem::transmute(callbacks.on_message) };
+                                    if let Some(pk) = peerid_to_pubkey(&peer) {
+                                        if let Ok(c_str) = CString::new(hex_encode(&pk)) {
+                                            cb(callbacks.context as *mut c_void, c_str.as_ptr(), request.as_ptr(), request.len());
+                                        }
+                                    }
+                                }
+                                if let Err(e) = swarm.behaviour_mut().file.send_response(channel, vec![]) {
+                                    node_log!(callbacks, 1, "Failed to send file response: {:?}", e);
                                 }
                             }
                         }
@@ -746,36 +771,35 @@ pub extern "C" fn eillance_libp2p_node_free(ptr: *mut c_void) {
   );
 }
 
-#[no_mangle]
-pub extern "C" fn eillance_libp2p_node_send_message(
+fn send_internal(
   ptr: *mut c_void,
   peer_id_hex: *const c_char,
   data: *const u8,
   len: usize,
+  is_file: bool,
 ) -> bool {
   run_ffi(
     AssertUnwindSafe(|| {
       if ptr.is_null() || peer_id_hex.is_null() || data.is_null() {
-        eprintln!("Null pointers passed to send_message");
+        eprintln!("Null pointers passed to send");
         return false;
       }
       let node = unsafe { &mut *(ptr as *mut Node) };
       let hex_str = match unsafe { CStr::from_ptr(peer_id_hex) }.to_str() {
         Ok(s) => s,
         Err(e) => {
-          eprintln!("Invalid UTF-8 in peer_id_hex: {:?}", e);
+          eprintln!("Invalid UTF-8 in peer_id_hex");
           return false;
         }
       };
       let peer_bytes = match hex_decode(hex_str) {
         Ok(b) => b,
         Err(_) => {
-          eprintln!("Invalid hex string for peer_id_hex");
+          eprintln!("Invalid hex string");
           return false;
         }
       };
       if peer_bytes.len() != 32 {
-        eprintln!("peer_id_hex must be exactly 32 bytes");
         return false;
       }
 
@@ -783,26 +807,44 @@ pub extern "C" fn eillance_libp2p_node_send_message(
       arr.copy_from_slice(&peer_bytes);
       let peer_id = match pubkey_to_peerid(&arr) {
         Some(id) => id,
-        None => {
-          eprintln!("Failed to parse peer ID from public key bytes");
-          return false;
-        }
+        None => return false,
       };
       let payload = unsafe { std::slice::from_raw_parts(data, len) }.to_vec();
 
       if let Some(tx) = &node.command_tx {
-        if tx.send(Command::SendMessage(peer_id, payload)).is_ok() {
-          return true;
+        let cmd = if is_file {
+            Command::SendFile(peer_id, payload)
         } else {
-          eprintln!("Failed to send SendMessage command to node task");
+            Command::SendChat(peer_id, payload)
+        };
+        if tx.send(cmd).is_ok() {
+          return true;
         }
-      } else {
-        eprintln!("Node is not started");
       }
       false
     }),
     false,
   )
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_send_chat(
+  ptr: *mut c_void,
+  peer_id_hex: *const c_char,
+  data: *const u8,
+  len: usize,
+) -> bool {
+  send_internal(ptr, peer_id_hex, data, len, false)
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_send_file(
+  ptr: *mut c_void,
+  peer_id_hex: *const c_char,
+  data: *const u8,
+  len: usize,
+) -> bool {
+  send_internal(ptr, peer_id_hex, data, len, true)
 }
 
 #[no_mangle]
