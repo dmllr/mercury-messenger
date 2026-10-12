@@ -74,22 +74,11 @@ impl EventLoopState {
       self.pending_dials.insert(peer_val);
     }
 
-    let mut addrs = Vec::new();
-    if let Some(known) = self.known_addresses.get(&peer_val) {
-      for addr in known {
-        if !addrs.contains(addr) {
-          addrs.push(addr.clone());
-        }
-      }
-    }
-
     for (_, relay_addr) in &self.active_relay_peers {
       let mut relayed = relay_addr.clone();
       relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
       relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
-      if !addrs.contains(&relayed) {
-        addrs.push(relayed);
-      }
+      swarm.behaviour_mut().kademlia.add_address(&peer_val, relayed);
     }
 
     for b_addr in &self.bootstrap_addrs {
@@ -97,42 +86,19 @@ impl EventLoopState {
         let mut relayed = b_addr.clone();
         relayed.push(libp2p::multiaddr::Protocol::P2pCircuit);
         relayed.push(libp2p::multiaddr::Protocol::P2p(peer_val));
-        if !addrs.contains(&relayed) {
-          addrs.push(relayed);
-        }
+        swarm.behaviour_mut().kademlia.add_address(&peer_val, relayed);
       }
     }
 
-    crate::node_log!(
-      callbacks,
-      4,
-      "do_dial: {} with {} active relays, {} bootstrap addrs, {} total addrs",
-      peer_val,
-      self.active_relay_peers.len(),
-      self.bootstrap_addrs.len(),
-      addrs.len()
-    );
-
-    let opts = if !addrs.is_empty() {
-      libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
-        .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-        .addresses(addrs.clone())
-        .build()
-    } else {
-      libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
-        .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
-        .build()
-    };
+    let opts = libp2p::swarm::dial_opts::DialOpts::peer_id(peer_val)
+      .condition(libp2p::swarm::dial_opts::PeerCondition::Disconnected)
+      .build();
 
     match swarm.dial(opts) {
       Ok(_) => crate::node_log!(callbacks, 5, "Dial request submitted for {}", peer_val),
-      Err(libp2p::swarm::DialError::NoAddresses) => crate::node_log!(
-        callbacks,
-        3,
-        "DialError::NoAddresses for {} (addrs.len = {})",
-        peer_val,
-        addrs.len()
-      ),
+      Err(libp2p::swarm::DialError::NoAddresses) => {
+        crate::node_log!(callbacks, 3, "DialError::NoAddresses for {}", peer_val);
+      }
       Err(libp2p::swarm::DialError::DialPeerConditionFalse(_)) => {
         crate::node_log!(callbacks, 5, "DialError::DialPeerConditionFalse for {}", peer_val);
         if swarm.is_connected(&peer_val) {
@@ -141,8 +107,6 @@ impl EventLoopState {
       }
       Err(e) => {
         crate::node_log!(callbacks, 2, "Failed to dial peer {}: {:?}", peer_val, e);
-        self.pending_dials.remove(&peer_val);
-        notify_disconnected(callbacks, swarm, &peer_val);
       }
     }
   }
@@ -183,6 +147,12 @@ pub async fn run_event_loop(
                 dht_peers += bucket.num_entries();
             }
             state.tick_counter = state.tick_counter.wrapping_add(1);
+            if state.tick_counter % 240 == 0 && state.has_bootstrapped {
+                for key_bytes in &state.providing_keys {
+                    let key = libp2p::kad::RecordKey::new(key_bytes);
+                    let _ = swarm.behaviour_mut().kademlia.start_providing(key);
+                }
+            }
             crate::utils::notify_network_stats(&callbacks, connected_peers as i32, bootstrap_connected as i32, dht_peers as i32, role_str);
         }
         cmd = rx.recv() => {
