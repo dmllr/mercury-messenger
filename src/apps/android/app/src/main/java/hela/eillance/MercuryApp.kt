@@ -47,14 +47,9 @@ import hela.eillance.screens.RejectedContactsScreen
 import hela.eillance.screens.SettingsScreen
 import hela.eillance.screens.WebViewScreen
 import hela.eillance.screens.conversation.ConversationMediaScreen
-import hela.eillance.screens.debug.ConnectionDebugScreen
-import hela.eillance.screens.debug.DebugMenuScreen
-import hela.eillance.screens.debug.PendingActionsScreen
-import hela.eillance.screens.debug.UnreadMessagesScreen
 import hela.eillance.viewmodels.CallViewModel
 import hela.eillance.viewmodels.ContactsViewModel
 import hela.eillance.viewmodels.ConversationViewModel
-import hela.eillance.viewmodels.DebugViewModel
 import hela.eillance.viewmodels.ProfileViewModel
 import hela.eillance.viewmodels.SettingsViewModel
 
@@ -131,7 +126,6 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
   val callVM: CallViewModel = viewModel()
   val contactsVM: ContactsViewModel = viewModel()
   val settingsVM: SettingsViewModel = viewModel()
-  val debugVM: DebugViewModel = viewModel()
 
   val callState by callVM.callState.collectAsState()
   val myProfile by profileVM.myProfile.collectAsState()
@@ -284,7 +278,6 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           profileVM = profileVM,
           contactsVM = contactsVM,
           settingsVM = settingsVM,
-          debugVM = debugVM,
           mainViewModel = viewModel,
           myProfile = myProfile,
           onBack = { navController.safePopBackStack() },
@@ -292,37 +285,8 @@ fun MainAppContent(viewModel: MainViewModel, profileVM: ProfileViewModel) {
           onNavigateToBetaNotice = { navController.navigate(Route.WebView.createRoute("https://mercury.eillance.com/beta/embed/")) },
           onNavigateToBackupAndRestore = { navController.navigate(Screen.BackupRestore.route) },
           onNavigateToHelp = { navController.navigate(Screen.Help.route) },
-          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) },
-          onNavigateToDebugMenu = { navController.navigate(Screen.DebugMenu.route) }
+          onNavigateToPermissionIssues = { navController.navigate(Screen.PermissionIssues.route) }
         )
-      }
-
-      composable(Screen.DebugMenu.route) {
-        DebugMenuScreen(
-          onNavigateBack = { navController.safePopBackStack() },
-          onNavigateToPendingActions = { navController.navigate(Screen.DebugPendingActions.route) },
-          onNavigateToConnections = { navController.navigate(Screen.DebugConnections.route) },
-          onNavigateToUnread = { navController.navigate(Screen.DebugUnread.route) },
-          onDebugAction = { action ->
-            when (action) {
-              hela.eillance.screens.debug.DebugAction.ERASE_HISTORY -> debugVM.eraseAllHistory()
-              hela.eillance.screens.debug.DebugAction.ERASE_CONTACTS -> debugVM.eraseAllContacts()
-              hela.eillance.screens.debug.DebugAction.REVOKE_APPROVALS -> debugVM.revokeAllApprovals()
-            }
-          }
-        )
-      }
-
-      composable(Screen.DebugPendingActions.route) {
-        PendingActionsScreen(debugVM = debugVM, onBack = { navController.safePopBackStack() })
-      }
-
-      composable(Screen.DebugConnections.route) {
-        ConnectionDebugScreen(debugVM = debugVM, onBack = { navController.safePopBackStack() })
-      }
-
-      composable(Screen.DebugUnread.route) {
-        UnreadMessagesScreen(debugVM = debugVM, onBack = { navController.safePopBackStack() })
       }
 
       composable(Screen.PermissionIssues.route) {

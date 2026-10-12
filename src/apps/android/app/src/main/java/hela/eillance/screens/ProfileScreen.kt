@@ -32,7 +32,6 @@ import hela.eillance.screens.profile.ProfileEditDialog
 import hela.eillance.screens.profile.ProfileHeader
 import hela.eillance.screens.profile.ProfileMenu
 import hela.eillance.viewmodels.ContactsViewModel
-import hela.eillance.viewmodels.DebugViewModel
 import hela.eillance.viewmodels.ProfileViewModel
 import hela.eillance.viewmodels.SettingsViewModel
 
@@ -42,7 +41,6 @@ fun ProfileScreen(
   profileVM: ProfileViewModel,
   contactsVM: ContactsViewModel,
   settingsVM: SettingsViewModel,
-  debugVM: DebugViewModel,
   mainViewModel: MainViewModel,
   myProfile: MyProfileInfo,
   onBack: () -> Unit,
@@ -50,8 +48,7 @@ fun ProfileScreen(
   onNavigateToBetaNotice: () -> Unit,
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit,
-  onNavigateToPermissionIssues: () -> Unit,
-  onNavigateToDebugMenu: () -> Unit // New callback
+  onNavigateToPermissionIssues: () -> Unit
 ) {
   var showEditDialog by remember { mutableStateOf(false) }
   val hasPermissionIssues by mainViewModel.hasPermissionIssues.collectAsState()
@@ -112,8 +109,7 @@ fun ProfileScreen(
             mainViewModel.navigateToPeer(peerId)
           }
         },
-        onNavigateToPermissionIssues = onNavigateToPermissionIssues,
-        onNavigateToDebugMenu = onNavigateToDebugMenu
+        onNavigateToPermissionIssues = onNavigateToPermissionIssues
       )
     }
   }

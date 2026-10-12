@@ -100,11 +100,6 @@ class PersistentStorageImpl {
   virtual auto SearchMessages(ContactID const& peer_id, std::string const& query)
       -> std::vector<messaging::HistoryEntryRecord> = 0;
   virtual auto SearchAllMessages(std::string const& query) -> std::vector<messaging::HistoryEntryRecord> = 0;
-
-  // --- Debug ---
-  virtual void DebugClearAllHistory() = 0;
-  virtual void DebugClearAllContacts() = 0;
-  virtual void DebugRevokeAllContactApprovals() = 0;
 };
 
 }  // namespace eillance::storage

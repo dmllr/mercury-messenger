@@ -353,18 +353,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     classref.RegisterClass(env, "hela/eillance/ndkio/AttachmentInfo");
     classref.RegisterCtor(env, "hela/eillance/ndkio/AttachmentInfo", "(Lhela/eillance/ndkio/Attachment;J)V");
 
-    std::string const debug_action_class = "hela/eillance/ndkio/DebugPendingAction";
-    classref.RegisterClass(env, debug_action_class);
-    classref.RegisterCtor(env, debug_action_class, "(Ljava/lang/String;JLjava/lang/String;)V");
-
-    std::string const debug_conn_class = "hela/eillance/ndkio/DebugConnectionInfo";
-    classref.RegisterClass(env, debug_conn_class);
-    classref.RegisterCtor(env, debug_conn_class, "(Ljava/lang/String;IJZZ)V");
-
-    std::string const debug_unread_class = "hela/eillance/ndkio/DebugUnreadInfo";
-    classref.RegisterClass(env, debug_unread_class);
-    classref.RegisterCtor(env, debug_unread_class, "(Ljava/lang/String;IJ)V");
-
   } catch (std::exception const& e) {
     LGE << "JNI_OnLoad failed: " << e.what();
     return JNI_ERR;

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
@@ -27,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import hela.eillance.camera.BuildConfig
 import hela.eillance.camera.R
 import hela.eillance.components.UserAvatar
 import hela.eillance.ndkio.MyProfileInfo
@@ -44,8 +42,7 @@ fun ProfileMenu(
   onNavigateToBackupAndRestore: () -> Unit,
   onNavigateToHelp: () -> Unit,
   onSendFeedback: () -> Unit,
-  onNavigateToPermissionIssues: () -> Unit,
-  onNavigateToDebugMenu: () -> Unit
+  onNavigateToPermissionIssues: () -> Unit
 ) {
   Column(modifier = Modifier.padding(horizontal = 8.dp)) {
     ListItem(
@@ -158,25 +155,5 @@ fun ProfileMenu(
         .clip(MaterialTheme.shapes.medium)
         .clickable(onClick = onNavigateToBackupAndRestore)
     )
-
-    if (BuildConfig.DEBUG) {
-      Spacer(modifier = Modifier.height(16.dp))
-      HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
-      Spacer(modifier = Modifier.height(8.dp))
-      ListItem(
-        headlineContent = { Text(stringResource(id = R.string.profile_menu_debug_title)) },
-        supportingContent = { Text(stringResource(id = R.string.profile_menu_debug_description)) },
-        leadingContent = {
-          Icon(
-            Icons.Default.BugReport,
-            contentDescription = stringResource(id = R.string.profile_menu_debug_title),
-            tint = MaterialTheme.colorScheme.primary
-          )
-        },
-        modifier = Modifier
-          .clip(MaterialTheme.shapes.medium)
-          .clickable(onClick = onNavigateToDebugMenu)
-      )
-    }
   }
 }

@@ -32,7 +32,6 @@ add_executable(h-e-tests
   test-contacts-view-model.cpp
   test-conversation-view-model.cpp
   test-crypto.cpp
-  test-debug-view-model.cpp
   test-dispatch-queue.cpp
   test-event-queue.cpp
   test-file-transfer-cancellation.cpp
