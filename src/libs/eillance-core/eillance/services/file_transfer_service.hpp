@@ -752,9 +752,11 @@ class FileTransferService {
       }
       state2.is_pumping = false;
       transfer_queue_.DispatchAfter(std::chrono::milliseconds(100), [this, peer_id, file_id]() {
-        std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
-        if (active_uploads_.contains(file_id)) {
-          active_uploads_[file_id].is_pumping = true;
+        {
+          std::lock_guard<std::mutex> const retry_lock(transfers_mutex_);
+          if (active_uploads_.contains(file_id)) {
+            active_uploads_[file_id].is_pumping = true;
+          }
         }
         PumpUploadBatch(peer_id, file_id);
       });
