@@ -56,7 +56,7 @@ TEST_F(ContactsViewModelTest, AddContact) {
   WaitFor(
       [&] {
         auto c = observer->GetContacts();
-        return !c.empty() && c[0].peer_id == peer1;
+        return !c.empty() && c[0].topic_id == TopicID(peer1);
       },
       std::chrono::milliseconds(2000)
   );
@@ -64,7 +64,7 @@ TEST_F(ContactsViewModelTest, AddContact) {
   auto contacts = observer->GetContacts();
   ASSERT_FALSE(contacts.empty());
   auto const& contact = contacts[0];
-  EXPECT_EQ(contact.peer_id, peer1);
+  EXPECT_EQ(contact.topic_id, TopicID(peer1));
   EXPECT_EQ(contact.status, identity::ContactStatus::pendingApproval);
 }
 
@@ -83,6 +83,10 @@ TEST_F(ContactsViewModelTest, ContactConnectionState) {
   }
 
   // Simulate connection state change via MockTransport
+  if (auto p = mock_data_transport_->GetPeer(peer1)) {
+    p->data_channel_is_open = true;
+    p->is_connecting = false;
+  }
   EventQueue::Instance().Push(EventDataPeerConnectionStateChanged{peer1, transport::PeerConnectionState::connected});
 
   // Wait for update and specific state
@@ -132,4 +136,30 @@ TEST_F(ContactsViewModelTest, BlockAndUnblock) {
   contacts = observer->GetContacts();
   ASSERT_FALSE(contacts.empty());
   EXPECT_EQ(contacts[0].status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ContactsViewModelTest, GroupAndChannelDisplay) {
+  auto observer = std::make_shared<MockContactsObserver>();
+
+  client_->CreateGroup("My Group", {peer1});
+  client_->CreateChannel("My Channel", "Desc");
+
+  WaitFor([&] {
+    auto contacts = observer->GetContacts();
+    int count = 0;
+    for (auto const& c : contacts) {
+      if (c.is_group || c.is_channel) count++;
+    }
+    return count == 2;
+  });
+
+  auto contacts = observer->GetContacts();
+  bool found_group = false;
+  bool found_channel = false;
+  for (auto const& c : contacts) {
+    if (c.is_group && c.display_name == "My Group") found_group = true;
+    if (c.is_channel && c.display_name == "My Channel") found_channel = true;
+  }
+  EXPECT_TRUE(found_group);
+  EXPECT_TRUE(found_channel);
 }

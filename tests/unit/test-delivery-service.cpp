@@ -56,8 +56,9 @@ TEST_F(DeliveryServiceTest, CheckReachabilityThreshold) {
        .timestamp = old_time,
        .direction = messaging::MessageDirection::sent,
        .status = messaging::MessageStatus::sending,
-       .data = messaging::MessageEntry{"Old message"},
-       .peer_id = peer1}
+       .data = messaging::ChatMessageEntry{messaging::MessageContent{"Old message"}},
+       .topic_id = TopicID(peer1),
+       .author_id = peer1}
   );
 
   bool unreachable_emitted = false;
@@ -73,11 +74,11 @@ TEST_F(DeliveryServiceTest, CheckReachabilityThreshold) {
   EventQueue::Instance().WaitFor([&]() -> bool { return unreachable_emitted; }, std::chrono::seconds(1));
 
   EXPECT_TRUE(unreachable_emitted);
-  EXPECT_TRUE(client_->IsUnreachable(peer1));
+  EXPECT_TRUE(client_->IsUnreachable(TopicID(peer1)));
 
   // Now test that manual retry clears the unreachable state
-  client_->RetrySync(peer1);
-  EXPECT_FALSE(client_->IsUnreachable(peer1));
+  client_->RetrySync(TopicID(peer1));
+  EXPECT_FALSE(client_->IsUnreachable(TopicID(peer1)));
 
   EventQueue::Instance().Unsubscribe(sub);
 }
@@ -93,9 +94,40 @@ TEST_F(DeliveryServiceTest, ContactUnwillingIgnoresRetry) {
     }
   });
 
-  client_->RetrySync(peer1);
+  client_->RetrySync(TopicID(peer1));
   EventQueue::Instance().WaitFor([]() -> bool { return false; }, std::chrono::milliseconds(100));
   EXPECT_FALSE(connection_requested) << "Unwilling contacts should not trigger connections";
+  EventQueue::Instance().Unsubscribe(sub);
+}
+
+TEST_F(DeliveryServiceTest, CheckUnreachableForGroupMember) {
+  mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+  auto gid = client_->CreateGroup("G1", {peer1});
+
+  auto const old_time = Time::Now() - (25ULL * 60 * 60 * Time::uS);
+  mock_storage_->AddHistoryEntry(
+      {.kind = messaging::HistoryEntryKind::textMessage,
+       .timestamp = old_time,
+       .direction = messaging::MessageDirection::sent,
+       .status = messaging::MessageStatus::sending,
+       .data = messaging::GroupMessageEntry{messaging::MessageContent{"Old group message"}, {}},
+       .topic_id = TopicID(gid),
+       .author_id = client_->GetId()}
+  );
+
+  bool unreachable_emitted = false;
+  auto const sub = EventQueue::Instance().Subscribe<EventContactUnreachable>([&](auto const& e) -> void {
+    if (e.peer_id == peer1 && e.is_unreachable) {
+      unreachable_emitted = true;
+    }
+  });
+
+  EventQueue::Instance().Push(EventServiceConnectionStateChanged{ServiceConnectionState::online});
+
+  EventQueue::Instance().WaitFor([&]() -> bool { return unreachable_emitted; }, std::chrono::seconds(1));
+
+  EXPECT_TRUE(unreachable_emitted);
   EventQueue::Instance().Unsubscribe(sub);
 }
 

@@ -22,7 +22,7 @@ class ConversationViewModelTest : public ViewModelTest {
         std::chrono::milliseconds(2000)
     );
 
-    vm_ = std::make_shared<ConversationViewModel>(peer1, client_);
+    vm_ = std::make_shared<ConversationViewModel>(TopicID(peer1), client_);
 
     // Wait for the background initial load to finish and apply to state
     EventQueue::Instance().WaitFor([&] { return !vm_->GetState().history.empty(); }, std::chrono::milliseconds(2000));
@@ -40,14 +40,14 @@ struct MockConversationObserver {
 
   MockConversationObserver(ContactID peer_id) {
     sub1 = EventQueue::Instance().Subscribe<EventConversationStateUpdated>([this, peer_id](auto const& e) {
-      if (e.peer_id == peer_id) {
+      if (e.topic_id == TopicID(peer_id)) {
         std::lock_guard<std::mutex> const lock(mutex);
         state = e.state;
         updated = true;
       }
     });
     sub2 = EventQueue::Instance().Subscribe<EventTransferProgressUpdated>([this, peer_id](auto const& e) {
-      if (e.peer_id == peer_id) {
+      if (e.topic_id == TopicID(peer_id)) {
         std::lock_guard<std::mutex> const lock(mutex);
         progress_updates[e.attachment_id] = e.progress;
       }
@@ -74,7 +74,7 @@ struct MockConversationObserver {
 
 TEST_F(ConversationViewModelTest, InitialState) {
   auto state = vm_->GetState();
-  EXPECT_EQ(state.peer_id, peer1);
+  EXPECT_EQ(state.topic_id, TopicID(peer1));
 }
 
 TEST_F(ConversationViewModelTest, SendMessage) {
@@ -87,8 +87,8 @@ TEST_F(ConversationViewModelTest, SendMessage) {
   WaitFor([&] {
     auto s = observer->GetState();
     for (auto const& msg : s.history) {
-      if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-        if (std::get<messaging::MessageEntry>(msg.data).content == "Hello World") return true;
+      if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+        if (std::get<messaging::ChatMessageEntry>(msg.data).message.content == "Hello World") return true;
       }
     }
     return false;
@@ -97,9 +97,9 @@ TEST_F(ConversationViewModelTest, SendMessage) {
   auto state = observer->GetState();
   bool found = false;
   for (auto const& msg : state.history) {
-    if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-      auto const& data = std::get<messaging::MessageEntry>(msg.data);
-      if (data.content == "Hello World") {
+    if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+      auto const& data = std::get<messaging::ChatMessageEntry>(msg.data);
+      if (data.message.content == "Hello World") {
         EXPECT_EQ(msg.direction, messaging::MessageDirection::sent);
         // Expect Sending, never Sent
         EXPECT_EQ(msg.status, messaging::MessageStatus::sending);
@@ -121,20 +121,21 @@ TEST_F(ConversationViewModelTest, ReceiveMessage) {
        .timestamp = Time::Now(),
        .direction = messaging::MessageDirection::received,
        .status = messaging::MessageStatus::read,
-       .data = messaging::MessageEntry{"Hi there"},
-       .peer_id = peer1}
+       .data = messaging::ChatMessageEntry{messaging::MessageContent{"Hi there"}},
+       .topic_id = TopicID(peer1),
+       .author_id = peer1}
   );
 
   // Push event to queue (simulating what Client would do)
-  EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
+  EventQueue::Instance().Push(EventChatMessageReceived{TopicID(peer1), entry});
 
   WaitFor([&] {
     auto s = observer->GetState();
     if (s.history.empty()) return false;
     // Search for our message
     for (auto const& msg : s.history) {
-      if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-        if (std::get<messaging::MessageEntry>(msg.data).content == "Hi there") return true;
+      if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+        if (std::get<messaging::ChatMessageEntry>(msg.data).message.content == "Hi there") return true;
       }
     }
     return false;
@@ -143,8 +144,8 @@ TEST_F(ConversationViewModelTest, ReceiveMessage) {
   auto state = observer->GetState();
   bool found = false;
   for (auto const& msg : state.history) {
-    if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-      if (std::get<messaging::MessageEntry>(msg.data).content == "Hi there") {
+    if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+      if (std::get<messaging::ChatMessageEntry>(msg.data).message.content == "Hi there") {
         EXPECT_EQ(msg.direction, messaging::MessageDirection::received);
         found = true;
         break;
@@ -165,8 +166,8 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
   WaitFor([&] {
     auto s = observer->GetState();
     for (auto const& msg : s.history) {
-      if (std::holds_alternative<messaging::MessageEntry>(msg.data) &&
-          std::get<messaging::MessageEntry>(msg.data).content == "Status Test") {
+      if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data) &&
+          std::get<messaging::ChatMessageEntry>(msg.data).message.content == "Status Test") {
         msg_id = msg.id;
         return true;
       }
@@ -175,7 +176,7 @@ TEST_F(ConversationViewModelTest, MessageStatusUpdate) {
   });
 
   // Simulate status update event
-  EventQueue::Instance().Push(EventMessageStatusChanged{peer1, msg_id, messaging::MessageStatus::delivered});
+  EventQueue::Instance().Push(EventMessageStatusChanged{TopicID(peer1), msg_id, messaging::MessageStatus::delivered});
 
   WaitFor([&] {
     auto s = observer->GetState();
@@ -206,15 +207,15 @@ TEST_F(ConversationViewModelTest, TransferProgressUpdates) {
   std::string att_id = "test-att-id";
 
   // Simulate progress events
-  EventQueue::Instance().Push(EventTransferProgress{peer1, att_id, 0.1f});
+  EventQueue::Instance().Push(EventTransferProgress{TopicID(peer1), att_id, 0.1f});
   WaitFor([&] { return observer->GetProgress(att_id) >= 0.1f; });
   EXPECT_NEAR(observer->GetProgress(att_id), 0.1f, 0.001f);
 
-  EventQueue::Instance().Push(EventTransferProgress{peer1, att_id, 0.5f});
+  EventQueue::Instance().Push(EventTransferProgress{TopicID(peer1), att_id, 0.5f});
   WaitFor([&] { return observer->GetProgress(att_id) >= 0.5f; });
   EXPECT_NEAR(observer->GetProgress(att_id), 0.5f, 0.001f);
 
-  EventQueue::Instance().Push(EventTransferProgress{peer1, att_id, 1.0f});
+  EventQueue::Instance().Push(EventTransferProgress{TopicID(peer1), att_id, 1.0f});
   WaitFor([&] { return observer->GetProgress(att_id) >= 1.0f; });
   EXPECT_NEAR(observer->GetProgress(att_id), 1.0f, 0.001f);
 }
@@ -229,13 +230,13 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   att.status = messaging::AttachmentStatus::transferring;
   att.is_downloaded = false;
 
-  messaging::MessageEntry msg_data;
-  msg_data.attachments.push_back(att);
+  messaging::ChatMessageEntry msg_data;
+  msg_data.message.attachments.push_back(att);
 
-  auto entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
+  auto entry = mock_storage_->AddHistoryEntry({.data = msg_data, .topic_id = TopicID(peer1), .author_id = peer1});
 
   // Inject into VM (simulate load or receive)
-  EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
+  EventQueue::Instance().Push(EventChatMessageReceived{TopicID(peer1), entry});
   WaitFor([&] {
     for (auto const& m : observer->GetState().history) {
       if (m.id == entry.id) return true;
@@ -253,9 +254,9 @@ TEST_F(ConversationViewModelTest, CancelTransferPropagates) {
   WaitFor([&] {
     auto s = observer->GetState();
     for (auto const& msg : s.history) {
-      if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-        auto& m = std::get<messaging::MessageEntry>(msg.data);
-        for (auto& a : m.attachments) {
+      if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+        auto& m = std::get<messaging::ChatMessageEntry>(msg.data);
+        for (auto& a : m.message.attachments) {
           // Download cancellation results in PAUSED state locally
           if (a.id == "cancel-test-id" && a.status == messaging::AttachmentStatus::paused) return true;
         }
@@ -277,12 +278,12 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   att.size_bytes = 100;
   att.file_path = "resume-test-id.dat";
 
-  messaging::MessageEntry msg_data;
-  msg_data.attachments.push_back(att);
+  messaging::ChatMessageEntry msg_data;
+  msg_data.message.attachments.push_back(att);
 
-  auto const entry = mock_storage_->AddHistoryEntry({.data = msg_data, .peer_id = peer1});
+  auto const entry = mock_storage_->AddHistoryEntry({.data = msg_data, .topic_id = TopicID(peer1), .author_id = peer1});
 
-  EventQueue::Instance().Push(EventChatMessageReceived{peer1, entry});
+  EventQueue::Instance().Push(EventChatMessageReceived{TopicID(peer1), entry});
   WaitFor([&] {
     for (auto const& m : observer->GetState().history) {
       if (m.id == entry.id) return true;
@@ -296,9 +297,9 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
       [&] {
         auto s = observer->GetState();
         for (auto const& msg : s.history) {
-          if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-            auto& m = std::get<messaging::MessageEntry>(msg.data);
-            for (auto& a : m.attachments) {
+          if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+            auto& m = std::get<messaging::ChatMessageEntry>(msg.data);
+            for (auto& a : m.message.attachments) {
               if (a.id == "resume-test-id" && a.status == messaging::AttachmentStatus::transferring) return true;
             }
           }
@@ -341,10 +342,10 @@ TEST_F(ConversationViewModelTest, SendSmallAttachment_UpdatesStatusSynchronously
       [&]() -> bool {
         auto state = observer->GetState();
         for (auto const& entry : state.history) {
-          if (std::holds_alternative<messaging::MessageEntry>(entry.data)) {
-            auto const& message = std::get<messaging::MessageEntry>(entry.data);
-            if (message.content == "Small File" && !message.attachments.empty()) {
-              if (message.attachments[0].status == messaging::AttachmentStatus::transferring) {
+          if (std::holds_alternative<messaging::ChatMessageEntry>(entry.data)) {
+            auto const& message = std::get<messaging::ChatMessageEntry>(entry.data);
+            if (message.message.content == "Small File" && !message.message.attachments.empty()) {
+              if (message.message.attachments[0].status == messaging::AttachmentStatus::transferring) {
                 success = true;
                 return true;
               }
@@ -372,8 +373,9 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage) {
          .timestamp = Time::Now() + i,
          .direction = messaging::MessageDirection::sent,
          .status = messaging::MessageStatus::delivered,
-         .data = messaging::MessageEntry{"Message " + std::to_string(i)},
-         .peer_id = peer1}
+         .data = messaging::ChatMessageEntry{messaging::MessageContent{"Message " + std::to_string(i)}},
+         .topic_id = TopicID(peer1),
+         .author_id = peer1}
     );
     if (i == 20) {  // Deep in history
       target_id = entry.id;
@@ -382,7 +384,7 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage) {
 
   // Re-initialize VM to simulate fresh entry
   vm_.reset();  // Destroy the old VM so it doesn't push conflicting events!
-  auto vm = std::make_shared<ConversationViewModel>(peer1, client_);
+  auto vm = std::make_shared<ConversationViewModel>(TopicID(peer1), client_);
   WaitFor([&] { return observer->GetState().history.size() >= 50; }, std::chrono::milliseconds(2000));
 
   // Initially, it should only load 50 messages
@@ -424,15 +426,16 @@ TEST_F(ConversationViewModelTest, LoadUpToMessage_OverridesInitialLoad) {
          .timestamp = Time::Now() + i,
          .direction = messaging::MessageDirection::sent,
          .status = messaging::MessageStatus::delivered,
-         .data = messaging::MessageEntry{"msg"},
-         .peer_id = peer1}
+         .data = messaging::ChatMessageEntry{messaging::MessageContent{"msg"}},
+         .topic_id = TopicID(peer1),
+         .author_id = peer1}
     );
     if (i == 5) target_id = entry.id;  // Older message, not in first page of 50
   }
 
   // Re-create VM. This triggers StartInitialLoad in a thread.
   vm_.reset();
-  auto vm = std::make_shared<ConversationViewModel>(peer1, client_);
+  auto vm = std::make_shared<ConversationViewModel>(TopicID(peer1), client_);
 
   // Immediately request loading specific message.
   // This should increment load_generation, causing the StartInitialLoad to abort
@@ -467,15 +470,15 @@ TEST_F(ConversationViewModelTest, EditMessagePropagates) {
   WaitFor([&] {
     auto s = observer->GetState();
     if (s.history.empty()) return false;
-    if (std::holds_alternative<messaging::MessageEntry>(s.history.back().data)) {
-      return std::get<messaging::MessageEntry>(s.history.back().data).content == "Typo";
+    if (std::holds_alternative<messaging::ChatMessageEntry>(s.history.back().data)) {
+      return std::get<messaging::ChatMessageEntry>(s.history.back().data).message.content == "Typo";
     }
     return false;
   });
 
   auto state = observer->GetState();
   auto msg = state.history.back();
-  EXPECT_EQ(std::get<messaging::MessageEntry>(msg.data).content, "Typo");
+  EXPECT_EQ(std::get<messaging::ChatMessageEntry>(msg.data).message.content, "Typo");
 
   vm_->EditMessage(msg.id, "Fixed");
 
@@ -483,7 +486,7 @@ TEST_F(ConversationViewModelTest, EditMessagePropagates) {
     auto s = observer->GetState();
     if (s.history.empty()) return false;
     for (auto const& m : s.history) {
-      if (m.id == msg.id && std::get<messaging::MessageEntry>(m.data).content == "Fixed") {
+      if (m.id == msg.id && std::get<messaging::ChatMessageEntry>(m.data).message.content == "Fixed") {
         return true;
       }
     }
@@ -509,8 +512,8 @@ TEST_F(ConversationViewModelTest, DeleteMessagePropagates) {
   WaitFor([&] {
     auto s = observer->GetState();
     if (s.history.empty()) return false;
-    if (std::holds_alternative<messaging::MessageEntry>(s.history.back().data)) {
-      return std::get<messaging::MessageEntry>(s.history.back().data).content == "Mistake";
+    if (std::holds_alternative<messaging::ChatMessageEntry>(s.history.back().data)) {
+      return std::get<messaging::ChatMessageEntry>(s.history.back().data).message.content == "Mistake";
     }
     return false;
   });
@@ -535,8 +538,8 @@ TEST_F(ConversationViewModelTest, ReactMessagePropagates) {
   WaitFor([&] {
     auto s = observer->GetState();
     if (s.history.empty()) return false;
-    if (std::holds_alternative<messaging::MessageEntry>(s.history.back().data)) {
-      return std::get<messaging::MessageEntry>(s.history.back().data).content == "React me";
+    if (std::holds_alternative<messaging::ChatMessageEntry>(s.history.back().data)) {
+      return std::get<messaging::ChatMessageEntry>(s.history.back().data).message.content == "React me";
     }
     return false;
   });
@@ -569,8 +572,8 @@ TEST_F(ConversationViewModelTest, SendReply) {
   WaitFor([&] {
     auto s = observer->GetState();
     for (auto const& msg : s.history) {
-      if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-        if (std::get<messaging::MessageEntry>(msg.data).content == "Reply") return true;
+      if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+        if (std::get<messaging::ChatMessageEntry>(msg.data).message.content == "Reply") return true;
       }
     }
     return false;
@@ -579,10 +582,10 @@ TEST_F(ConversationViewModelTest, SendReply) {
   auto state = observer->GetState();
   bool found = false;
   for (auto const& msg : state.history) {
-    if (std::holds_alternative<messaging::MessageEntry>(msg.data)) {
-      auto const& data = std::get<messaging::MessageEntry>(msg.data);
-      if (data.content == "Reply") {
-        EXPECT_EQ(data.reply_to_id, 12345);
+    if (std::holds_alternative<messaging::ChatMessageEntry>(msg.data)) {
+      auto const& data = std::get<messaging::ChatMessageEntry>(msg.data);
+      if (data.message.content == "Reply") {
+        EXPECT_EQ(data.message.reply_to_id, 12345);
         found = true;
         break;
       }
