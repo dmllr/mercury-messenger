@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "プロフィールが更新されました"
 msgid "sys_unsupported"
 msgstr "サポートされていないメッセージ形式です。アプリを更新してください。"
+msgid "sys_group_created"
+msgstr "グループチャットが作成されました"
 msgid "sys_default"
 msgstr "システムメッセージ"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "連絡先に到達できません。メッセージが24時間以上配信されていません。"
 msgid "contact_unwilling"
 msgstr "連絡先が通信を拒否しました"
+msgid "message_read_by"
+msgstr "受信済|既読"
 
 # Versioning
 msgid "version_we_need_update"

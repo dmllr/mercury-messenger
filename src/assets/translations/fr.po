@@ -148,6 +148,8 @@ msgid "sys_profile_update"
 msgstr "Profil mis à jour"
 msgid "sys_unsupported"
 msgstr "Format de message non pris en charge. Veuillez mettre à jour l'application."
+msgid "sys_group_created"
+msgstr "Discussion de groupe créée"
 msgid "sys_default"
 msgstr "Message système"
 
@@ -734,6 +736,8 @@ msgid "contact_unreachable"
 msgstr "Contact injoignable. Messages non distribués depuis plus de 24 heures."
 msgid "contact_unwilling"
 msgstr "Le contact a refusé la communication"
+msgid "message_read_by"
+msgstr "Reçu|Lu par"
 
 # Versioning
 msgid "version_we_need_update"
