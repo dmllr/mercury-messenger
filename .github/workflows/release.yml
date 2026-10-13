@@ -82,15 +82,10 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses || true
           yes | "$SDKMANAGER" --channel=3 "ndk;29.0.13113456"
-          yes | "$SDKMANAGER" --channel=3 "platforms;android-37.0" || yes | "$SDKMANAGER" --channel=3 "platforms;android-37" || true
-          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
-            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
-          elif [ -d "$ANDROID_HOME/platforms/android-37" ] && [ ! -e "$ANDROID_HOME/platforms/android-37.0" ]; then
-            ln -s "$ANDROID_HOME/platforms/android-37" "$ANDROID_HOME/platforms/android-37.0"
-          fi
+          yes | "$SDKMANAGER" "cmake;3.22.1"
           echo "sdk.dir=$ANDROID_HOME" > src/apps/android/local.properties
-          echo "ndk.dir=$ANDROID_HOME/ndk/29.0.13113456" >> src/apps/android/local.properties
-          cp src/apps/android/local.properties src/apps/android/app/local.properties
+          echo "android.ndkVersion=29.0.13113456" >> src/apps/android/gradle.properties
+          echo "android.sync.suppressAgpWarnings=EXTERNAL_NATIVE_BUILD_CONFIGURATION" >> src/apps/android/gradle.properties
 
       - name: Prepare keystores
         env:
