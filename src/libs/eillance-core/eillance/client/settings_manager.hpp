@@ -108,7 +108,7 @@ class SettingsManager {
 
   // --- Auditory Feedback ---
   [[nodiscard]] auto GetPlaySoundOnSend() const -> bool {
-    auto val = storage_->GetSetting(keyPlaySoundOnSend);
+    auto const val = storage_->GetSetting(keyPlaySoundOnSend);
     return !val || (*val == "1");
   }
 
@@ -173,7 +173,7 @@ class SettingsManager {
   }
 
   [[nodiscard]] auto GetIgnoreBatteryOptimization() const -> bool {
-    auto val = storage_->GetSetting(keyIgnoreBattery);
+    auto const val = storage_->GetSetting(keyIgnoreBattery);
     return val && (*val == "1");
   }
 
@@ -182,7 +182,7 @@ class SettingsManager {
   }
 
   [[nodiscard]] auto GetIgnoreCallPermissions() const -> bool {
-    auto val = storage_->GetSetting(keyIgnoreCalls);
+    auto const val = storage_->GetSetting(keyIgnoreCalls);
     return val && (*val == "1");
   }
 
