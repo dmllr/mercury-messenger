@@ -1,7 +1,9 @@
 package hela.eillance.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -43,12 +46,13 @@ fun ConnectionSettingsScreen(
 ) {
   val context = LocalContext.current
   val bootstrapNodeUrls by settingsVM.bootstrapNodeUrls.collectAsState()
+  val appendBootstrapNodes by settingsVM.appendBootstrapNodes.collectAsState()
   val peerInactivityTimeout by settingsVM.peerInactivityTimeout.collectAsState()
 
-  val customStun by settingsVM.customStun.collectAsState()
   val customTurn by settingsVM.customTurn.collectAsState()
   val customTurnUser by settingsVM.customTurnUser.collectAsState()
   val customTurnPass by settingsVM.customTurnPass.collectAsState()
+  val useCustomTurnOnly by settingsVM.useCustomTurnOnly.collectAsState()
 
   Scaffold(
     topBar = {
@@ -77,7 +81,7 @@ fun ConnectionSettingsScreen(
         value = bootstrapNodeUrls,
         onValueChange = settingsVM::onBootstrapNodeUrlsChange,
         label = { Text(stringResource(id = R.string.settings_bootstrap_node_url_label)) },
-        placeholder = { Text(stringResource(id = R.string.settings_bootstrap_node_url_placeholder)) },
+        placeholder = { Text("/dns4/node101.example.com/tcp/10807") },
         modifier = Modifier.fillMaxWidth(),
         singleLine = false,
         minLines = 4,
@@ -89,6 +93,28 @@ fun ConnectionSettingsScreen(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
+      Spacer(modifier = Modifier.height(8.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+          Text(
+            text = stringResource(id = R.string.settings_bootstrap_append_title),
+            style = MaterialTheme.typography.bodyMedium
+          )
+          Text(
+            text = stringResource(id = R.string.settings_bootstrap_append_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        Switch(
+          checked = appendBootstrapNodes,
+          onCheckedChange = settingsVM::onAppendBootstrapNodesChange
+        )
+      }
 
       Spacer(modifier = Modifier.height(16.dp))
 
@@ -118,28 +144,23 @@ fun ConnectionSettingsScreen(
 
       HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-      // Custom ICE Servers
+      // Custom TURN Servers
       Text(
-        stringResource(id = R.string.settings_custom_ice_title),
+        stringResource(id = R.string.settings_custom_turn_title),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp)
       )
 
       OutlinedTextField(
-        value = customStun,
-        onValueChange = settingsVM::onCustomStunChange,
-        label = { Text(stringResource(id = R.string.settings_custom_stun_label)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true
-      )
-      Spacer(modifier = Modifier.height(8.dp))
-      OutlinedTextField(
         value = customTurn,
         onValueChange = settingsVM::onCustomTurnChange,
         label = { Text(stringResource(id = R.string.settings_custom_turn_label)) },
+        placeholder = { Text("turn:node101.example.com:3478?transport=udp") },
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true
+        singleLine = false,
+        minLines = 2,
+        maxLines = 5
       )
       Spacer(modifier = Modifier.height(8.dp))
       OutlinedTextField(
@@ -158,6 +179,28 @@ fun ConnectionSettingsScreen(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true
       )
+      Spacer(modifier = Modifier.height(8.dp))
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+          Text(
+            text = stringResource(id = R.string.settings_turn_in_addition_title),
+            style = MaterialTheme.typography.bodyMedium
+          )
+          Text(
+            text = stringResource(id = R.string.settings_turn_in_addition_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+          )
+        }
+        Switch(
+          checked = !useCustomTurnOnly,
+          onCheckedChange = { settingsVM.onUseCustomTurnOnlyChange(!it) }
+        )
+      }
 
       Spacer(modifier = Modifier.height(24.dp))
 

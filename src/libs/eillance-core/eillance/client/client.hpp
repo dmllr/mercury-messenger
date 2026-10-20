@@ -271,9 +271,7 @@ class Client final {
       return;
     }
     ReevaluateIceConfiguration();
-    if (auto const urls = sm_->account->GetSettings()->GetBootstrapNodeUrls()) {
-      sm_->data_transport->SetBootstrapNodeUrls(SettingsManager::ParseUrls(*urls));
-    }
+    sm_->data_transport->SetBootstrapNodeUrls(sm_->account->GetSettings()->GetEffectiveBootstrapNodeUrls());
 
     sm_->data_transport->SetId(sm_->account->GetId());
     sm_->data_transport->SetDeviceId(ContactID(sm_->account->GetDevicePublicKey()));
@@ -357,8 +355,8 @@ class Client final {
     return false;
   }
 
-  void UpdateBootstrapNodeUrls(std::string const& urls) const {
-    sm_->account->UpdateBootstrapNodeUrls(urls);
+  void UpdateBootstrapNodeUrls(std::string const& urls, bool append_to_default) const {
+    sm_->account->UpdateBootstrapNodeUrls(urls, append_to_default);
   }
 
   void UpdateMyProfile(identity::ProfileUpdate const& profile) {
@@ -886,26 +884,25 @@ class Client final {
   void ReevaluateIceConfiguration() {
     Json final_config = Json::array();
     auto* settings = sm_->account->GetSettings();
-    if (auto stun = settings->GetCustomStun(); stun && !stun->empty()) {
-      final_config.push_back({{"urls", std::vector<std::string>{*stun}}});
-    }
     if (auto turn = settings->GetCustomTurn(); turn && !turn->empty()) {
-      Json turn_server;
-      turn_server["urls"] = std::vector<std::string>{*turn};
-      if (auto user = settings->GetCustomTurnUser(); user && !user->empty()) {
-        turn_server["username"] = *user;
+      if (auto parsed_turn_urls = transport::ParseUrls(*turn); !parsed_turn_urls.empty()) {
+        Json turn_server;
+        turn_server["urls"] = parsed_turn_urls;
+        if (auto user = settings->GetCustomTurnUser(); user && !user->empty()) {
+          turn_server["username"] = *user;
+        }
+        if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) {
+          turn_server["credential"] = *pass;
+        }
+        final_config.push_back(turn_server);
       }
-      if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) {
-        turn_server["credential"] = *pass;
-      }
-      final_config.push_back(turn_server);
     }
 
     {
       std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
       auto const now = std::chrono::steady_clock::now();
       std::erase_if(dynamic_turn_servers_, [&](auto const& s) -> bool {
-        return (now - s.discovered_at) > std::chrono::minutes(10);
+        return (now - s.discovered_at) > std::chrono::minutes(10);  // NOLINT(*-magic-numbers)
       });
 
       for (auto const& ts : dynamic_turn_servers_) {
