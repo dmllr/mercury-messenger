@@ -5,7 +5,6 @@ set -euo pipefail
 readonly PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 readonly APP_DIR="${PROJECT_ROOT}/src/apps/mercury-bot"
 readonly BUILD_DIR="build-deploy"
-readonly VERSION_FILE="${PROJECT_ROOT}/version.properties"
 
 # Devenv configuration
 readonly DEVENV_IMAGE_NAME="mercury-devenv"
