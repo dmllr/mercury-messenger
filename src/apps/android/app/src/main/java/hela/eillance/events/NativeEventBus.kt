@@ -44,8 +44,7 @@ object NativeEventBus {
 
   class SettingsWrapper(
     val bootstrapNodeUrls: String?, val appendBootstrapNodes: Boolean, val timeout: Int,
-    val customTurn: String?, val customTurnUser: String?, val customTurnPass: String?,
-    val useCustomTurnOnly: Boolean, val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean,
+    val customTurn: String?, val useCustomTurnOnly: Boolean, val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean,
     val showNotificationContent: Boolean
   )
 
@@ -89,9 +88,9 @@ object NativeEventBus {
   @JvmStatic
   fun onSettingsUpdated(
     urls: String?, appendUrls: Boolean, t: Int, turn: String?,
-    tUser: String?, tPass: String?, turnOnly: Boolean, sndS: Boolean, sndR: Boolean, showNotifContent: Boolean
+    turnOnly: Boolean, sndS: Boolean, sndR: Boolean, showNotifContent: Boolean
   ) {
-    settings.value = SettingsWrapper(urls, appendUrls, t, turn, tUser, tPass, turnOnly, sndS, sndR, showNotifContent)
+    settings.value = SettingsWrapper(urls, appendUrls, t, turn, turnOnly, sndS, sndR, showNotifContent)
   }
 
   @JvmStatic

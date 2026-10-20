@@ -36,12 +36,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _customTurn = MutableStateFlow("")
   val customTurn = _customTurn.asStateFlow()
 
-  private val _customTurnUser = MutableStateFlow("")
-  val customTurnUser = _customTurnUser.asStateFlow()
-
-  private val _customTurnPass = MutableStateFlow("")
-  val customTurnPass = _customTurnPass.asStateFlow()
-
   private val _useCustomTurnOnly = MutableStateFlow(false)
   val useCustomTurnOnly = _useCustomTurnOnly.asStateFlow()
 
@@ -69,8 +63,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
           _appendBootstrapNodes.value = s.appendBootstrapNodes
           _peerInactivityTimeout.value = s.timeout
           _customTurn.value = s.customTurn ?: ""
-          _customTurnUser.value = s.customTurnUser ?: ""
-          _customTurnPass.value = s.customTurnPass ?: ""
           _useCustomTurnOnly.value = s.useCustomTurnOnly
           _playSoundOnSend.value = s.playSoundOnSend
           _playSoundOnReceive.value = s.playSoundOnReceive
@@ -112,14 +104,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     _customTurn.value = newValue
   }
 
-  fun onCustomTurnUserChange(newValue: String) {
-    _customTurnUser.value = newValue
-  }
-
-  fun onCustomTurnPassChange(newValue: String) {
-    _customTurnPass.value = newValue
-  }
-
   fun onUseCustomTurnOnlyChange(onlyCustom: Boolean) {
     _useCustomTurnOnly.value = onlyCustom
   }
@@ -136,18 +120,171 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     if (nativePtr != 0L) nativeSetSoundSettings(nativePtr, _playSoundOnSend.value, enabled)
   }
 
-  fun saveSettings() {
+  sealed class SaveResult {
+    data object Success : SaveResult()
+    data class InvalidBootstrap(val invalidEntries: List<String>) : SaveResult()
+    data class InvalidTurn(val invalidEntries: List<String>) : SaveResult()
+  }
+
+  fun validateBootstrapUrls(input: String): List<String> {
+    val invalid = mutableListOf<String>()
+    val delimiters = charArrayOf('\n', '\r', ',', ';')
+    val tokens = input.split(*delimiters).map { it.trim() }.filter { it.isNotEmpty() }
+    for (token in tokens) {
+      if (!isValidBootstrapUrl(token)) {
+        invalid.add(token)
+      }
+    }
+    return invalid
+  }
+
+  private fun isValidBootstrapUrl(url: String): Boolean {
+    if (!url.startsWith("/")) return false
+    val parts = url.split("/").filter { it.isNotEmpty() }
+    if (parts.size != 4 && parts.size != 6) return false
+
+    val proto = parts[0]
+    if (proto !in listOf("dns", "dns4", "dns6", "ip4", "ip6")) return false
+
+    val host = parts[1]
+    if (!isValidHost(proto, host)) return false
+
+    val trans = parts[2]
+    if (trans !in listOf("tcp", "udp", "quic", "quic-v1")) return false
+
+    val port = parts[3].toIntOrNull() ?: return false
+    if (port <= 0 || port > 65535) return false
+
+    return true
+  }
+
+  private fun isValidHost(proto: String, host: String): Boolean {
+    return when (proto) {
+      "ip4" -> isValidIpv4(host)
+      "ip6" -> isValidIpv6(host)
+      "dns", "dns4", "dns6" -> isValidDomainName(host)
+      else -> false
+    }
+  }
+
+  private fun isValidIpv4(ip: String): Boolean {
+    val segments = ip.split(".")
+    if (segments.size != 4) return false
+    return segments.all { seg ->
+      val num = seg.toIntOrNull() ?: return false
+      num in 0..255 && (seg == "0" || !seg.startsWith("0"))
+    }
+  }
+
+  private fun isValidIpv6(ip: String): Boolean {
+    return try {
+      java.net.Inet6Address.getByName(ip) is java.net.Inet6Address
+    } catch (_: Exception) {
+      false
+    }
+  }
+
+  private fun isValidDomainName(domain: String): Boolean {
+    if (domain.isEmpty() || domain.length > 253) return false
+    if (isValidIpv4(domain)) return true
+    val labels = domain.split(".")
+    return labels.all { label ->
+      label.isNotEmpty() && label.length <= 63 &&
+          !label.startsWith("-") && !label.endsWith("-") &&
+          label.all { it.isLetterOrDigit() || it == '-' }
+    }
+  }
+
+  fun validateTurnUrls(input: String): List<String> {
+    val invalid = mutableListOf<String>()
+    val delimiters = charArrayOf('\n', '\r', ',', ';')
+    val tokens = input.split(*delimiters).map { it.trim() }.filter { it.isNotEmpty() }
+    for (token in tokens) {
+      if (!isValidTurnUrl(token)) {
+        invalid.add(token)
+      }
+    }
+    return invalid
+  }
+
+  private fun isValidTurnUrl(raw: String): Boolean {
+    var s = raw.trim()
+    if (s.isEmpty()) return true
+
+    if (s.startsWith("turn://") || s.startsWith("stun://")) {
+      s = s.substring(7)
+    } else if (s.startsWith("turns://") || s.startsWith("stuns://")) {
+      s = s.substring(8)
+    } else if (s.startsWith("turn:") || s.startsWith("stun:")) {
+      s = s.substring(5)
+    } else if (s.startsWith("turns:") || s.startsWith("stuns:")) {
+      s = s.substring(6)
+    } else if (s.contains("://")) {
+      return false
+    }
+
+    if (s.contains('@')) {
+      val atPos = s.indexOf('@')
+      val userPass = s.substring(0, atPos)
+      s = s.substring(atPos + 1)
+      val username = if (userPass.contains(':')) userPass.substringBefore(':') else userPass
+      if (username.isEmpty() || username.contains(' ')) return false
+    }
+
+    val hostPort = if (s.contains('?')) s.substringBefore('?') else s
+    val query = if (s.contains('?')) s.substringAfter('?') else ""
+
+    if (query.isNotEmpty() && query != "transport=udp" && query != "transport=tcp") {
+      return false
+    }
+
+    if (hostPort.isEmpty() || hostPort.contains(' ') || hostPort.contains('/')) return false
+
+    val host: String
+    val portStr: String
+
+    if (hostPort.startsWith('[')) {
+      val closeBracket = hostPort.indexOf(']')
+      if (closeBracket == -1 || closeBracket + 2 >= hostPort.length || hostPort[closeBracket + 1] != ':') {
+        return false
+      }
+      host = hostPort.substring(1, closeBracket)
+      portStr = hostPort.substring(closeBracket + 2)
+      if (!isValidIpv6(host)) return false
+    } else {
+      val firstColon = hostPort.indexOf(':')
+      val lastColon = hostPort.lastIndexOf(':')
+      if (firstColon == -1 || firstColon != lastColon) {
+        return false
+      }
+      host = hostPort.substring(0, firstColon)
+      portStr = hostPort.substring(firstColon + 1)
+      if (!isValidDomainName(host)) return false
+    }
+
+    val port = portStr.toIntOrNull() ?: return false
+    return port in 1..65535
+  }
+
+  fun saveSettings(): SaveResult {
+    val invalidBootstrap = validateBootstrapUrls(_bootstrapNodeUrls.value)
+    if (invalidBootstrap.isNotEmpty()) {
+      return SaveResult.InvalidBootstrap(invalidBootstrap)
+    }
+    val invalidTurn = validateTurnUrls(_customTurn.value)
+    if (invalidTurn.isNotEmpty()) {
+      return SaveResult.InvalidTurn(invalidTurn)
+    }
     if (nativePtr != 0L) {
       nativeUpdateBootstrapNodeUrls(nativePtr, _bootstrapNodeUrls.value, _appendBootstrapNodes.value)
       nativeSetTimeout(nativePtr, _peerInactivityTimeout.value)
       nativeUpdateIceConfig(
         nativePtr,
         _customTurn.value,
-        _customTurnUser.value,
-        _customTurnPass.value,
         _useCustomTurnOnly.value
       )
     }
+    return SaveResult.Success
   }
 
   private external fun nativeCreate(): Long
@@ -157,8 +294,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private external fun nativeUpdateIceConfig(
     ptr: Long,
     turn: String,
-    user: String,
-    pass: String,
     useCustomTurnOnly: Boolean
   )
 

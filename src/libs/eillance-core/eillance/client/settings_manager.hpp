@@ -13,8 +13,6 @@ namespace eillance {
 
 struct IceConfigParams {
   std::string turn;
-  std::string turn_user;
-  std::string turn_pass;
   bool use_custom_turn_only = false;
 };
 
@@ -63,7 +61,7 @@ class SettingsManager {
     return combined;
   }
 
-  void SetBootstrapNodeUrls(std::string const& urls, bool append_to_default) {
+  void SetBootstrapNodeUrls(std::string const& urls, bool const append_to_default) {
     appendBootstrapNodes_ = append_to_default;
     storage_->SetSetting(keyAppendBootstrapNodes, append_to_default ? "1" : "0");
     bootstrapNodeUrls_ = urls;
@@ -152,24 +150,16 @@ class SettingsManager {
   [[nodiscard]] auto GetCustomTurn() const -> std::optional<std::string> {
     return customTurn_;
   }
-  [[nodiscard]] auto GetCustomTurnUser() const -> std::optional<std::string> {
-    return customTurnUser_;
-  }
-  [[nodiscard]] auto GetCustomTurnPass() const -> std::optional<std::string> {
-    return customTurnPass_;
-  }
   [[nodiscard]] auto GetUseCustomTurnOnly() const -> bool {
     return useCustomTurnOnly_;
   }
 
   void SetCustomIceConfig(IceConfigParams const& params) {
     customTurn_ = params.turn;
-    customTurnUser_ = params.turn_user;
-    customTurnPass_ = params.turn_pass;
     useCustomTurnOnly_ = params.use_custom_turn_only;
 
     storage_->SetSetting(keyCustomTurn, params.turn);
-    storage_->SetSetting(keyCustomTurnUser, params.turn_user);
+    storage_->SetSetting(keyUseCustomTurnOnly, params.use_custom_turn_only ? "1" : "0");
   }
 
   [[nodiscard]] auto GetIgnoreBatteryOptimization() const -> bool {
@@ -208,8 +198,6 @@ class SettingsManager {
     myBio_ = storage_->GetSetting(keyMyBio);
     myPhotoBase64_ = storage_->GetSetting(keyMyPhotoBase64);
     customTurn_ = storage_->GetSetting(keyCustomTurn);
-    customTurnUser_ = storage_->GetSetting(keyCustomTurnUser);
-    customTurnPass_ = storage_->GetSetting(keyCustomTurnPass);
     auto const turn_only_val = storage_->GetSetting(keyUseCustomTurnOnly);
     useCustomTurnOnly_ = turn_only_val && (*turn_only_val == "1");
   }
@@ -221,8 +209,6 @@ class SettingsManager {
   static constexpr auto keyMyPhotoBase64 = "my_photo_base64";
   static constexpr auto keyPeerInactivityTimeout = "peer_inactivity_timeout";
   static constexpr auto keyCustomTurn = "custom_ice_turn";
-  static constexpr auto keyCustomTurnUser = "custom_ice_turn_user";
-  static constexpr auto keyCustomTurnPass = "custom_ice_turn_pass";
   static constexpr auto keyUseCustomTurnOnly = "use_custom_turn_only";
   static constexpr auto keyPlaySoundOnSend = "sound_on_send";
   static constexpr auto keyPlaySoundOnRecv = "sound_on_recv";
@@ -239,8 +225,6 @@ class SettingsManager {
   std::optional<std::string> myBio_;
   std::optional<std::string> myPhotoBase64_;
   std::optional<std::string> customTurn_;
-  std::optional<std::string> customTurnUser_;
-  std::optional<std::string> customTurnPass_;
   bool useCustomTurnOnly_ = false;
 };
 

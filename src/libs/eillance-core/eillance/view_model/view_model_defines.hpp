@@ -75,8 +75,6 @@ struct SettingsState {
   int peer_inactivity_timeout_seconds = 120;
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
   std::optional<std::string> custom_turn;
-  std::optional<std::string> custom_turn_user;
-  std::optional<std::string> custom_turn_pass;
   bool use_custom_turn_only = false;
   bool play_sound_on_send = true;
   bool play_sound_on_receive = true;

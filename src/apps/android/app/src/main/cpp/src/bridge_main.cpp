@@ -264,7 +264,7 @@ jint JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
         env,
         "hela/eillance/events/NativeEventBus",
         "onSettingsUpdated",
-        "(Ljava/lang/String;ZILjava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZZ)V"
+        "(Ljava/lang/String;ZILjava/lang/String;ZZZZ)V"
     );
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onConnectionStateChanged", "(I)V");
     classref.RegisterStaticMethod(env, "hela/eillance/events/NativeEventBus", "onPermissionBannerChanged", "(I)V");
