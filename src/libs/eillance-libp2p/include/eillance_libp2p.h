@@ -1,8 +1,7 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,7 +22,7 @@ typedef void (*eillance_libp2p_on_message_cb)(
     void* context,
     char const* peer_id_hex,
     std::uint8_t const* data,
-    size_t len
+    std::size_t len
 );
 typedef void (*eillance_libp2p_log_cb)(void* context, int level, char const* message);
 typedef void (*eillance_libp2p_on_turn_relays_discovered_cb)(void* context, char const* providers_csv);
@@ -68,8 +67,10 @@ void eillance_libp2p_node_set_callbacks(
 
 void eillance_libp2p_node_disconnect(void* node, char const* peer_id_hex);
 
-auto eillance_libp2p_node_send_chat(void* node, char const* peer_id_hex, std::uint8_t const* data, size_t len) -> bool;
-auto eillance_libp2p_node_send_file(void* node, char const* peer_id_hex, std::uint8_t const* data, size_t len) -> bool;
+auto eillance_libp2p_node_send_chat(void* node, char const* peer_id_hex, std::uint8_t const* data, std::size_t len)
+    -> bool;
+auto eillance_libp2p_node_send_file(void* node, char const* peer_id_hex, std::uint8_t const* data, std::size_t len)
+    -> bool;
 void eillance_libp2p_node_dial(void* node, char const* peer_id_hex);
 void eillance_libp2p_node_add_bootstrap_node(void* node, char const* multiaddr);
 void eillance_libp2p_node_listen(void* node, char const* multiaddr);
@@ -77,6 +78,8 @@ void eillance_libp2p_node_listen(void* node, char const* multiaddr);
 void eillance_libp2p_node_discover_turn_relays(void* node);
 void eillance_libp2p_node_auth_turn_relay(void* node, char const* peer_id_hex);
 void eillance_libp2p_node_set_turn_eligibility(void* node, bool eligible);
+void eillance_libp2p_node_set_turn_port(void* node, std::uint16_t port);
+void eillance_libp2p_node_set_turn_port_range(void* node, std::uint16_t min_port, std::uint16_t max_port);
 
 void eillance_libp2p_node_start_providing(void* node, char const* key_hex);
 void eillance_libp2p_node_get_providers(void* node, char const* key_hex);

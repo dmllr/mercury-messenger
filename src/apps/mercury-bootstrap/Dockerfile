@@ -9,14 +9,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY mercury-bootstrap-bin /app/mercury-bootstrap
-RUN chmod +x /app/mercury-bootstrap
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/mercury-bootstrap /app/entrypoint.sh
 
 RUN mkdir -p /data && \
     chown -R ubuntu:ubuntu /data
 
 USER ubuntu
 
-EXPOSE 10807
+EXPOSE 10807/tcp 10807/udp 3478/udp 50000-50500/udp
 
-ENTRYPOINT ["/app/mercury-bootstrap"]
-CMD ["--port", "10807", "--identity-file", "/data/bootstrap_identity.key"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD []

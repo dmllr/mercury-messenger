@@ -190,6 +190,22 @@ class Libp2pNode final {
     eillance_libp2p_node_set_turn_eligibility(node_, eligible);
   }
 
+  void SetTurnPort(std::uint16_t port) const {
+    if (port == 0) {
+      throw std::invalid_argument("Invalid TURN port: 0");
+    }
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_set_turn_port(node_, port);
+  }
+
+  void SetTurnPortRange(std::uint16_t min_port, std::uint16_t max_port) const {
+    if (min_port == 0 || min_port > max_port) {
+      throw std::invalid_argument("Invalid TURN port range");
+    }
+    INVARIANT_NOT_NULL(node_);
+    eillance_libp2p_node_set_turn_port_range(node_, min_port, max_port);
+  }
+
   void StartProviding(std::string const& key_hex) const {
     INVARIANT_NOT_NULL(node_);
     eillance_libp2p_node_start_providing(node_, key_hex.c_str());

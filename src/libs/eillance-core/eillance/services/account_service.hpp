@@ -137,7 +137,7 @@ class AccountService {
     EventQueue::Instance().Push(EventMyProfileUpdated{});
   }
 
-  void UpdateBootstrapNodeUrls(std::string const& urls, bool append_to_default) {
+  void UpdateBootstrapNodeUrls(std::string const& urls, bool const append_to_default) {
     settings_manager_->SetBootstrapNodeUrls(urls, append_to_default);
     transport_->SetBootstrapNodeUrls(settings_manager_->GetEffectiveBootstrapNodeUrls());
     transport_->Reconnect();

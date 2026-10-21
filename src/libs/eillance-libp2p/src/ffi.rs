@@ -67,6 +67,8 @@ pub extern "C" fn eillance_libp2p_node_new(secret_key: *const u8, role_val: i32)
         keypair,
         role: NodeRole::from(role_val),
         callbacks: Callbacks::default(),
+        turn_port: None,
+        turn_port_range: None,
       });
       Box::into_raw(node) as *mut c_void
     }),
@@ -224,6 +226,48 @@ pub extern "C" fn eillance_libp2p_node_set_turn_eligibility(ptr: *mut c_void, el
 }
 
 #[no_mangle]
+pub extern "C" fn eillance_libp2p_node_set_turn_port(ptr: *mut c_void, port: u16) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() || port == 0 {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if node.turn_port_range.is_some() {
+        eprintln!("Error: Cannot specify both exact TURN port and port range");
+        return;
+      }
+      node.turn_port = Some(port);
+      if let Some(tx) = &node.command_tx {
+        let _ = tx.send(Command::SetTurnPort(port));
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
+pub extern "C" fn eillance_libp2p_node_set_turn_port_range(ptr: *mut c_void, min_port: u16, max_port: u16) {
+  run_ffi(
+    AssertUnwindSafe(|| {
+      if ptr.is_null() || min_port == 0 || min_port > max_port {
+        return;
+      }
+      let node = unsafe { &mut *(ptr as *mut Node) };
+      if node.turn_port.is_some() {
+        eprintln!("Error: Cannot specify both exact TURN port and port range");
+        return;
+      }
+      node.turn_port_range = Some((min_port, max_port));
+      if let Some(tx) = &node.command_tx {
+        let _ = tx.send(Command::SetTurnPortRange(min_port, max_port));
+      }
+    }),
+    (),
+  );
+}
+
+#[no_mangle]
 pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
   run_ffi(
     AssertUnwindSafe(|| {
@@ -242,6 +286,8 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
       let local_key = node.keypair.clone();
       let callbacks = node.callbacks.clone();
       let role = node.role;
+      let initial_turn_port = node.turn_port;
+      let initial_turn_port_range = node.turn_port_range;
 
       node.runtime.spawn(async move {
         let tcp_cfg = tcp::Config::default();
@@ -278,7 +324,16 @@ pub extern "C" fn eillance_libp2p_node_start(ptr: *mut c_void) {
           }
         };
 
-        run_event_loop(swarm, rx, tx, callbacks, role).await;
+        run_event_loop(
+          swarm,
+          rx,
+          tx,
+          callbacks,
+          role,
+          initial_turn_port,
+          initial_turn_port_range,
+        )
+        .await;
       });
     }),
     (),
