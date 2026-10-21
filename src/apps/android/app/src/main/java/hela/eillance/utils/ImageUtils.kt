@@ -8,6 +8,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 
+object BitmapUtils {
+  fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    if (reqWidth <= 0 || reqHeight <= 0) return 1
+    val widthInSampleSize = (options.outWidth / reqWidth).takeHighestOneBit()
+    val heightInSampleSize = (options.outHeight / reqHeight).takeHighestOneBit()
+    return maxOf(widthInSampleSize, heightInSampleSize).coerceAtLeast(1)
+  }
+}
+
 @Composable
 fun rememberImageBitmapFromBase64(base64: String?): ImageBitmap? {
   return remember(base64) {

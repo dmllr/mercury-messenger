@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import hela.eillance.utils.BitmapUtils
 import hela.eillance.screens.profile.ImageEditorDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,8 +56,15 @@ fun AvatarPicker(
     uri?.let {
       scope.launch(Dispatchers.IO) {
         try {
+          val options = BitmapFactory.Options()
+          options.inJustDecodeBounds = true
           context.contentResolver.openInputStream(it)?.use { inputStream ->
-            val bitmap = BitmapFactory.decodeStream(inputStream)
+            BitmapFactory.decodeStream(inputStream, null, options)
+          }
+          options.inSampleSize = BitmapUtils.calculateInSampleSize(options, 1024, 1024)
+          options.inJustDecodeBounds = false
+          context.contentResolver.openInputStream(it)?.use { inputStream ->
+            val bitmap = BitmapFactory.decodeStream(inputStream, null, options)
             if (bitmap != null) {
               withContext(Dispatchers.Main) {
                 rawSelectedImage = bitmap
