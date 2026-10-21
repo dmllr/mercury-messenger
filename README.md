@@ -17,6 +17,11 @@ It operates without traditional registration; users are identified solely via an
 
 ## Architecture
 
+## Screenshots
+
+| <img src="src/assets/graphics/screenshots/Screenshot_20260514_171254.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260216_181803.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171413.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171438.png" width="400"> |
+|:--:|:--:|:--:|:--:|
+
 ### Architectural Philosophy
 
 Project Mercury is built around a strict separation of concerns where the **Core** module acts as the sole engine of the application.
