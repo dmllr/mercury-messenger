@@ -111,3 +111,47 @@ def test_large_attachment(test_environment):
   ])
 
   test_environment.execute_scenario(scenario, timeout_seconds=80, stop_on_first_exit=False)
+
+
+def test_huge_attachment_relayed(test_environment):
+  """
+  100MB+ file transfer strictly over a relay to ensure
+  the bootstrap node doesn't interrupt or drop large relayed streams.
+  """
+  id_a, key_a = test_environment.gen_identity()
+  id_b, key_b = test_environment.gen_identity()
+
+  scenario = Scenario()
+  # Isolate networks so direct P2P is impossible, forcing relay via Bootstrap Node
+  scenario.add_network("net-a", "192.168.82.0/24", "192.168.82.1")
+  scenario.add_network("net-b", "192.168.83.0/24", "192.168.83.1")
+
+  # Bootstrap node on both networks
+  scenario.add_process("signaling", "/app/bin/mercury-bootstrap", ["--port", "8000"], 
+                       {"net-a": "192.168.82.30", "net-b": "192.168.83.30"})
+
+  # 105MB file (105 * 1024 * 1024 = 110100480 bytes)
+  script_a = (
+    "mkfile /tmp/huge.dat 110100480, "
+    "connect, wait 5, "
+    f"message {id_b} \"init\", "
+    "wait 15, "
+    f"attach {id_b} \"Huge Relayed\" /tmp/huge.dat, "
+    "wait 150, disconnect"
+  )
+  scenario.add_process("app-a", "/app/bin/mercury-mock-app",
+                       ["--key", key_a, "--signaling-url", "/ip4/192.168.82.30/tcp/8000", "--db-path", "/tmp/a.db",
+                        "--script", script_a], {"net-a": "192.168.82.31"})
+
+  script_b = f"connect, wait 180, disconnect"
+  scenario.add_process("app-b", "/app/bin/mercury-mock-app",
+                       ["--key", key_b, "--signaling-url", "/ip4/192.168.83.30/tcp/8000", "--db-path", "/tmp/b.db",
+                        "--script", script_b], {"net-b": "192.168.83.32"})
+
+  scenario.expect_logs("app-b", [
+    f"[mock] Message from {id_a} received: Huge Relayed",
+    f"downloaded from {id_a}",
+    "[mock] File transfer status changed to 2",
+  ])
+
+  test_environment.execute_scenario(scenario, timeout_seconds=190, stop_on_first_exit=False)
