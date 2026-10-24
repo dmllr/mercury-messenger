@@ -20,12 +20,15 @@ It operates without traditional registration; users are identified solely via an
 
 ---
 
-## Architecture
-
 ## Screenshots
 
 | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171254.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260216_181803.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171413.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171438.png" width="400"> |
 |:--:|:--:|:--:|:--:|
+
+## Published release
+<a href="https://play.google.com/store/apps/details?id=hela.eillance"><img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" height="80" alt="Get it on Google Play"></a>
+
+## Architecture
 
 ### Architectural Philosophy
 
