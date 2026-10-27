@@ -355,7 +355,7 @@ class Client final {
     return false;
   }
 
-  void UpdateBootstrapNodeUrls(std::string const& urls, bool append_to_default) const {
+  void UpdateBootstrapNodeUrls(std::string const& urls, bool const append_to_default) const {
     sm_->account->UpdateBootstrapNodeUrls(urls, append_to_default);
   }
 
