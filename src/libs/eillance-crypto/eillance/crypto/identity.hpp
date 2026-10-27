@@ -34,7 +34,7 @@ class Identity {
 
     std::vector<uint8_t> seed(seed_buffer_size);
     // BIP39 uses "mnemonic" as the salt prefix. Here, just "mnemonic" for simplicity.
-    std::string const salt_str = "mnemonic";
+    const std::string salt_str = "mnemonic";
     // BIP39 specifies 2048 iterations and SHA512.
     // NOLINTNEXTLINE(*-reinterpret-cast)
     if (PKCS5_PBKDF2_HMAC(
