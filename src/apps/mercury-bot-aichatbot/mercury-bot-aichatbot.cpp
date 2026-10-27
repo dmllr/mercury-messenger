@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -194,11 +195,10 @@ auto ExtractContentFromResponse(std::string_view json) -> std::optional<std::str
   return std::nullopt;
 }
 
-auto QueryLlm(LlmConfig const& config, std::string_view user_message) -> std::optional<std::string> {
+auto QueryLlm(LlmConfig const& config, std::string_view user_message) -> std::string {
   UniqueCurlHandle const curl(curl_easy_init());
   if (!curl) {
-    LGE << "Failed to allocate curl easy handle";
-    return std::nullopt;
+    throw std::runtime_error("Failed to allocate curl easy handle");
   }
 
   curl_slist* raw_headers = nullptr;
@@ -226,22 +226,22 @@ auto QueryLlm(LlmConfig const& config, std::string_view user_message) -> std::op
   curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, defaultHttpTimeoutSeconds);
 
   if (CURLcode const res = curl_easy_perform(curl.get()); res != CURLE_OK) {
-    LGE << "LLM request failed: " << curl_easy_strerror(res);
-    return std::nullopt;
+    throw std::runtime_error(std::string("LLM request failed: ") + curl_easy_strerror(res));
   }
 
   std::int32_t response_code = 0;
   curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &response_code);
   if (response_code < 200 || response_code >= 300) {
     LGE << "LLM HTTP error status " << response_code << ": " << response_body;
-    return std::nullopt;
+    throw std::runtime_error("LLM HTTP error status " + std::to_string(response_code));
   }
 
   auto content = ExtractContentFromResponse(response_body);
   if (!content) {
     LGE << "Failed to parse content from response: " << response_body;
+    throw std::runtime_error("Failed to parse content from response");
   }
-  return content;
+  return *content;
 }
 
 auto ResolveConfigValue(
@@ -324,8 +324,24 @@ auto main(int argc, char** argv) -> int {
 
       // Execute LLM call off the event loop thread to avoid blocking client messaging.
       std::thread([&bot, &config, chat_id = message.chat_id, text = message.text]() -> void {
-        if (auto const reply = QueryLlm(config, text); reply && !reply->empty()) {
-          bot.SendMessage(chat_id, *reply);
+        std::string reply;
+        try {
+          reply = QueryLlm(config, text);
+          if (reply.empty()) {
+            reply = "Error: LLM returned an empty response.";
+          }
+        } catch (std::exception const& e) {
+          LGE << "LLM request failed: " << e.what();
+          reply = std::string("Error: ") + e.what();
+        } catch (...) {
+          LGE << "LLM request failed with unknown error";
+          reply = "Error: An unknown internal error occurred.";
+        }
+
+        try {
+          bot.SendMessage(chat_id, reply);
+        } catch (std::exception const& e) {
+          LGE << "Failed to send message: " << e.what();
         }
       }).detach();
     });
