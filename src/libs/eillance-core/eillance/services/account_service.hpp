@@ -137,10 +137,9 @@ class AccountService {
     EventQueue::Instance().Push(EventMyProfileUpdated{});
   }
 
-  // Updates the bootstrap URL in settings and triggers transport reconnect
-  void UpdateBootstrapNodeUrls(std::string const& urls) {
-    settings_manager_->SetBootstrapNodeUrls(urls);
-    transport_->SetBootstrapNodeUrls(SettingsManager::ParseUrls(urls));
+  void UpdateBootstrapNodeUrls(std::string const& urls, bool append_to_default) {
+    settings_manager_->SetBootstrapNodeUrls(urls, append_to_default);
+    transport_->SetBootstrapNodeUrls(settings_manager_->GetEffectiveBootstrapNodeUrls());
     transport_->Reconnect();
   }
 

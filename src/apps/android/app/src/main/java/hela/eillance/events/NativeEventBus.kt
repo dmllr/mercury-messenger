@@ -43,9 +43,10 @@ object NativeEventBus {
   val peerVersionMismatch = MutableSharedFlow<Pair<String, Boolean>>(extraBufferCapacity = 10)
 
   class SettingsWrapper(
-    val bootstrapNodeUrls: String?, val timeout: Int, val customStun: String?,
+    val bootstrapNodeUrls: String?, val appendBootstrapNodes: Boolean, val timeout: Int,
     val customTurn: String?, val customTurnUser: String?, val customTurnPass: String?,
-    val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean, val showNotificationContent: Boolean
+    val useCustomTurnOnly: Boolean, val playSoundOnSend: Boolean, val playSoundOnReceive: Boolean,
+    val showNotificationContent: Boolean
   )
 
   val settings = MutableStateFlow<SettingsWrapper?>(null)
@@ -87,10 +88,10 @@ object NativeEventBus {
 
   @JvmStatic
   fun onSettingsUpdated(
-    urls: String?, t: Int, stun: String?, turn: String?,
-    tUser: String?, tPass: String?, sndS: Boolean, sndR: Boolean, showNotifContent: Boolean
+    urls: String?, appendUrls: Boolean, t: Int, turn: String?,
+    tUser: String?, tPass: String?, turnOnly: Boolean, sndS: Boolean, sndR: Boolean, showNotifContent: Boolean
   ) {
-    settings.value = SettingsWrapper(urls, t, stun, turn, tUser, tPass, sndS, sndR, showNotifContent)
+    settings.value = SettingsWrapper(urls, appendUrls, t, turn, tUser, tPass, turnOnly, sndS, sndR, showNotifContent)
   }
 
   @JvmStatic

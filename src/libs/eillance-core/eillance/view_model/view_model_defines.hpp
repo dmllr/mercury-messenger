@@ -71,12 +71,13 @@ struct ConversationState {
 
 struct SettingsState {
   std::optional<std::string> bootstrap_node_urls;
+  bool append_bootstrap_nodes = true;
   int peer_inactivity_timeout_seconds = 120;
   ServiceConnectionState connection_state = ServiceConnectionState::unknown;
-  std::optional<std::string> custom_stun;
   std::optional<std::string> custom_turn;
   std::optional<std::string> custom_turn_user;
   std::optional<std::string> custom_turn_pass;
+  bool use_custom_turn_only = false;
   bool play_sound_on_send = true;
   bool play_sound_on_receive = true;
   bool show_notification_content = true;

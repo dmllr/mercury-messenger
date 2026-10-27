@@ -232,7 +232,6 @@ static void SubscribeNotificationEvents(JavaVM* jvm, EventQueue& q) {
     if (auto* env = env_scope.Get()) {
       auto& class_refs = ClassRefs::Instance();
       jstring url_str = e.state.bootstrap_node_urls ? env->NewStringUTF(e.state.bootstrap_node_urls->c_str()) : nullptr;
-      jstring stun_str = e.state.custom_stun ? env->NewStringUTF(e.state.custom_stun->c_str()) : nullptr;
       jstring turn_str = e.state.custom_turn ? env->NewStringUTF(e.state.custom_turn->c_str()) : nullptr;
       jstring user_str = e.state.custom_turn_user ? env->NewStringUTF(e.state.custom_turn_user->c_str()) : nullptr;
       jstring pass_str = e.state.custom_turn_pass ? env->NewStringUTF(e.state.custom_turn_pass->c_str()) : nullptr;
@@ -241,17 +240,17 @@ static void SubscribeNotificationEvents(JavaVM* jvm, EventQueue& q) {
           bus_holder.Class(),
           bus_holder.GetMethod("onSettingsUpdated"),
           url_str,
+          static_cast<jboolean>(e.state.append_bootstrap_nodes),
           static_cast<jint>(e.state.peer_inactivity_timeout_seconds),
-          stun_str,
           turn_str,
           user_str,
           pass_str,
+          static_cast<jboolean>(e.state.use_custom_turn_only),
           static_cast<jboolean>(e.state.play_sound_on_send),
           static_cast<jboolean>(e.state.play_sound_on_receive),
           static_cast<jboolean>(e.state.show_notification_content)
       );
       if (url_str) env->DeleteLocalRef(url_str);
-      if (stun_str) env->DeleteLocalRef(stun_str);
       if (turn_str) env->DeleteLocalRef(turn_str);
       if (user_str) env->DeleteLocalRef(user_str);
       if (pass_str) env->DeleteLocalRef(pass_str);

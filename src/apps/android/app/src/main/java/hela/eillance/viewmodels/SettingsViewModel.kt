@@ -27,11 +27,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
   private val _bootstrapNodeUrls = MutableStateFlow("")
   val bootstrapNodeUrls = _bootstrapNodeUrls.asStateFlow()
 
+  private val _appendBootstrapNodes = MutableStateFlow(true)
+  val appendBootstrapNodes = _appendBootstrapNodes.asStateFlow()
+
   private val _peerInactivityTimeout = MutableStateFlow(120)
   val peerInactivityTimeout = _peerInactivityTimeout.asStateFlow()
-
-  private val _customStun = MutableStateFlow("")
-  val customStun = _customStun.asStateFlow()
 
   private val _customTurn = MutableStateFlow("")
   val customTurn = _customTurn.asStateFlow()
@@ -41,6 +41,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   private val _customTurnPass = MutableStateFlow("")
   val customTurnPass = _customTurnPass.asStateFlow()
+
+  private val _useCustomTurnOnly = MutableStateFlow(false)
+  val useCustomTurnOnly = _useCustomTurnOnly.asStateFlow()
 
   private val _playSoundOnSend = MutableStateFlow(true)
   val playSoundOnSend = _playSoundOnSend.asStateFlow()
@@ -63,11 +66,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
       NativeEventBus.settings.collect { s ->
         if (s != null) {
           _bootstrapNodeUrls.value = s.bootstrapNodeUrls ?: ""
+          _appendBootstrapNodes.value = s.appendBootstrapNodes
           _peerInactivityTimeout.value = s.timeout
-          _customStun.value = s.customStun ?: ""
           _customTurn.value = s.customTurn ?: ""
           _customTurnUser.value = s.customTurnUser ?: ""
           _customTurnPass.value = s.customTurnPass ?: ""
+          _useCustomTurnOnly.value = s.useCustomTurnOnly
           _playSoundOnSend.value = s.playSoundOnSend
           _playSoundOnReceive.value = s.playSoundOnReceive
           _showNotificationContent.value = s.showNotificationContent
@@ -96,12 +100,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     _bootstrapNodeUrls.value = newUrls
   }
 
-  fun onPeerInactivityTimeoutChange(newValue: Int) {
-    _peerInactivityTimeout.value = newValue
+  fun onAppendBootstrapNodesChange(append: Boolean) {
+    _appendBootstrapNodes.value = append
   }
 
-  fun onCustomStunChange(newValue: String) {
-    _customStun.value = newValue
+  fun onPeerInactivityTimeoutChange(newValue: Int) {
+    _peerInactivityTimeout.value = newValue
   }
 
   fun onCustomTurnChange(newValue: String) {
@@ -114,6 +118,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   fun onCustomTurnPassChange(newValue: String) {
     _customTurnPass.value = newValue
+  }
+
+  fun onUseCustomTurnOnlyChange(onlyCustom: Boolean) {
+    _useCustomTurnOnly.value = onlyCustom
   }
 
   fun onShowNotificationContentChange(enabled: Boolean) {
@@ -130,28 +138,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
   fun saveSettings() {
     if (nativePtr != 0L) {
-      nativeUpdateBootstrapNodeUrls(nativePtr, _bootstrapNodeUrls.value)
+      nativeUpdateBootstrapNodeUrls(nativePtr, _bootstrapNodeUrls.value, _appendBootstrapNodes.value)
       nativeSetTimeout(nativePtr, _peerInactivityTimeout.value)
       nativeUpdateIceConfig(
         nativePtr,
-        _customStun.value,
         _customTurn.value,
         _customTurnUser.value,
-        _customTurnPass.value
+        _customTurnPass.value,
+        _useCustomTurnOnly.value
       )
     }
   }
 
   private external fun nativeCreate(): Long
   private external fun nativeDestroy(ptr: Long)
-  private external fun nativeUpdateBootstrapNodeUrls(ptr: Long, urls: String)
+  private external fun nativeUpdateBootstrapNodeUrls(ptr: Long, urls: String, appendToDefault: Boolean)
   private external fun nativeSetTimeout(ptr: Long, seconds: Int)
   private external fun nativeUpdateIceConfig(
     ptr: Long,
-    stun: String,
     turn: String,
     user: String,
-    pass: String
+    pass: String,
+    useCustomTurnOnly: Boolean
   )
 
   private external fun nativeSetSoundSettings(ptr: Long, send: Boolean, receive: Boolean)
