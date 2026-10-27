@@ -4,6 +4,7 @@
 
 #include "eillance/client/client.hpp"
 #include "eillance/events/client_events.hpp"
+#include "eillance/logging/logging.hpp"
 #include "eillance/rtc/media_transport_impl_libdatachannel.hpp"
 #include "eillance/storage/sqlite/persistent_storage_impl_sqlite.hpp"
 #include "eillance/utils/event_queue.hpp"
@@ -121,6 +122,33 @@ void Bot::Start() const {
   // We detach the thread running the client event loop.
   // The lifecycle is managed by the Bot class destructor calling Stop().
   std::thread([client = impl_->client_]() -> void { client->Start(); }).detach();
+}
+
+void Bot::InitializeIdentity(ProfileConfig const& profile) const {
+  if (impl_->client_->IdentityExists()) {
+    return;
+  }
+
+  LGI << "Identity not found. Generating new identity...";
+  std::string const mnemonic = impl_->client_->GenerateNewIdentity();
+  LGI << "New identity generated. Mnemonic: " << mnemonic;
+
+  UpdateProfile(profile);
+}
+
+void Bot::UpdateProfile(ProfileConfig const& profile) const {
+  eillance::identity::ProfileUpdate update;
+  if (profile.display_name) {
+    update.display_name = profile.display_name;
+  }
+  if (profile.bio) {
+    update.bio = profile.bio;
+  }
+  if (profile.photo) {
+    update.photo_base64 = profile.photo;
+  }
+  impl_->client_->UpdateMyProfile(update);
+  LGI << "Profile updated.";
 }
 
 void Bot::Stop() const {

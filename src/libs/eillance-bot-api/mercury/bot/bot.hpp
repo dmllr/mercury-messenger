@@ -37,6 +37,12 @@ class Bot {
   // Starts the bot (non-blocking).
   void Start() const;
 
+  // Initializes a new identity if none exists. Returns true if a new identity was generated.
+  void InitializeIdentity(ProfileConfig const& profile = {}) const;
+
+  // Overwrites profile information (display name, bio, photo).
+  void UpdateProfile(ProfileConfig const& profile) const;
+
   // Stops the bot and releases resources.
   void Stop() const;
 

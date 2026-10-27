@@ -86,13 +86,27 @@ auto EscapeJson(std::string_view input) -> std::string {
   output.reserve(input.size() + 16);
   for (char const c : input) {
     switch (c) {
-      case '"': output += "\\\""; break;
-      case '\\': output += "\\\\"; break;
-      case '\b': output += "\\b"; break;
-      case '\f': output += "\\f"; break;
-      case '\n': output += "\\n"; break;
-      case '\r': output += "\\r"; break;
-      case '\t': output += "\\t"; break;
+      case '"':
+        output += "\\\"";
+        break;
+      case '\\':
+        output += "\\\\";
+        break;
+      case '\b':
+        output += "\\b";
+        break;
+      case '\f':
+        output += "\\f";
+        break;
+      case '\n':
+        output += "\\n";
+        break;
+      case '\r':
+        output += "\\r";
+        break;
+      case '\t':
+        output += "\\t";
+        break;
       default:
         if (static_cast<unsigned char>(c) < 0x20) {
           std::stringstream ss;
@@ -115,15 +129,33 @@ auto UnescapeJson(std::string_view input) -> std::string {
     if (input[i] == '\\' && i + 1 < input.size()) {
       ++i;
       switch (input[i]) {
-        case '"': output += '"'; break;
-        case '\\': output += '\\'; break;
-        case '/': output += '/'; break;
-        case 'b': output += '\b'; break;
-        case 'f': output += '\f'; break;
-        case 'n': output += '\n'; break;
-        case 'r': output += '\r'; break;
-        case 't': output += '\t'; break;
-        default: output += input[i]; break;
+        case '"':
+          output += '"';
+          break;
+        case '\\':
+          output += '\\';
+          break;
+        case '/':
+          output += '/';
+          break;
+        case 'b':
+          output += '\b';
+          break;
+        case 'f':
+          output += '\f';
+          break;
+        case 'n':
+          output += '\n';
+          break;
+        case 'r':
+          output += '\r';
+          break;
+        case 't':
+          output += '\t';
+          break;
+        default:
+          output += input[i];
+          break;
       }
     } else {
       output += input[i];
@@ -212,12 +244,15 @@ auto QueryLlm(LlmConfig const& config, std::string_view user_message) -> std::op
   return content;
 }
 
-auto ResolveConfigValue(std::optional<std::string> const& cli_arg, char const* env_name,
-    std::string_view const fallback = "") -> std::string {
+auto ResolveConfigValue(
+    std::optional<std::string> const& cli_arg,
+    char const* env_name,
+    std::string_view const fallback = ""
+) -> std::string {
   if (cli_arg && !cli_arg->empty()) {
     return *cli_arg;
   }
-  if (char const* env_val = std::getenv(env_name); env_val != nullptr && *env_val != '\0') { // NOLINT(*-mt-unsafe)
+  if (char const* env_val = std::getenv(env_name); env_val != nullptr && *env_val != '\0') {  // NOLINT(*-mt-unsafe)
     return {env_val};
   }
   return std::string(fallback);
@@ -239,6 +274,10 @@ auto main(int argc, char** argv) -> int {
   }
 
   std::filesystem::path const identity_path(*identity_dir_str);
+  if (args.Has("--init") && !std::filesystem::exists(identity_path)) {
+    std::filesystem::create_directories(identity_path);
+  }
+
   if (!std::filesystem::is_directory(identity_path)) {
     LGE << "Identity directory does not exist: " << identity_path;
     return 1;
@@ -246,8 +285,8 @@ auto main(int argc, char** argv) -> int {
 
   LlmConfig const config{
       .api_url = ResolveConfigValue(args.Get("--api-url"), "LLM_API_URL", defaultOpenAiUrl),
-      .api_key = ResolveConfigValue(args.Get("--api-key"), "OPENAI_API_KEY",
-                                    ResolveConfigValue(std::nullopt, "LLM_API_KEY")),
+      .api_key =
+          ResolveConfigValue(args.Get("--api-key"), "OPENAI_API_KEY", ResolveConfigValue(std::nullopt, "LLM_API_KEY")),
       .model = ResolveConfigValue(args.Get("--model"), "LLM_MODEL", defaultModel),
       .system_prompt = ResolveConfigValue(args.Get("--system-prompt"), "LLM_SYSTEM_PROMPT", defaultSystemPrompt),
   };
@@ -259,6 +298,20 @@ auto main(int argc, char** argv) -> int {
 
   try {
     mercury::bot::Bot const bot(options);
+
+    mercury::bot::ProfileConfig const profile{
+        .display_name = args.Get("--display-name"),
+        .bio = args.Get("--bio"),
+        .photo = args.Get("--photo")
+    };
+
+    if (args.Has("--init")) {
+      bot.InitializeIdentity(profile);
+    }
+    if (args.Has("--overwrite")) {
+      bot.UpdateProfile(profile);
+    }
+
     std::string const bot_id = bot.GetId();
     LGI << "LLM Bot initialized with ID: " << bot_id;
 

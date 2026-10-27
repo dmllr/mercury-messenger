@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace mercury::bot {
@@ -19,6 +20,12 @@ struct Message {
   std::string chat_id;
   std::string text;
   std::uint64_t date{};  // Unix timestamp (microseconds)
+};
+
+struct ProfileConfig {
+  std::optional<std::string> display_name;
+  std::optional<std::string> bio;
+  std::optional<std::string> photo;
 };
 
 }  // namespace mercury::bot
