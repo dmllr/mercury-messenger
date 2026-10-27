@@ -38,7 +38,7 @@ class SettingsManager {
   }
 
   [[nodiscard]] auto GetAppendBootstrapNodes() const -> bool {
-    auto const val = storage_->GetSetting(kAppendBootstrapNodesKey);
+    auto const val = storage_->GetSetting(keyAppendBootstrapNodes);
     return !val || (*val == "1");
   }
 
@@ -65,9 +65,9 @@ class SettingsManager {
 
   void SetBootstrapNodeUrls(std::string const& urls, bool append_to_default) {
     appendBootstrapNodes_ = append_to_default;
-    storage_->SetSetting(kAppendBootstrapNodesKey, append_to_default ? "1" : "0");
+    storage_->SetSetting(keyAppendBootstrapNodes, append_to_default ? "1" : "0");
     bootstrapNodeUrls_ = urls;
-    storage_->SetSetting(kBootstrapNodeUrlsKey, urls);
+    storage_->SetSetting(keyBootstrapNodeUrls, urls);
   }
 
   // --- User Profile ---
@@ -88,7 +88,7 @@ class SettingsManager {
     } else {
       myDisplayName_ = name;
     }
-    storage_->SetSetting(kMyDisplayNameKey, *myDisplayName_);
+    storage_->SetSetting(keyMyDisplayName, *myDisplayName_);
   }
 
   void SetMyBio(std::string const& bio) {
@@ -98,46 +98,46 @@ class SettingsManager {
     } else {
       myBio_ = bio;
     }
-    storage_->SetSetting(kMyBioKey, *myBio_);
+    storage_->SetSetting(keyMyBio, *myBio_);
   }
 
   void SetMyPhotoBase64(std::string const& photo) {
     myPhotoBase64_ = photo;
-    storage_->SetSetting(kMyPhotoBase64Key, photo);
+    storage_->SetSetting(keyMyPhotoBase64, photo);
   }
 
   // --- Auditory Feedback ---
   [[nodiscard]] auto GetPlaySoundOnSend() const -> bool {
-    auto val = storage_->GetSetting(kPlaySoundOnSendKey);
+    auto val = storage_->GetSetting(keyPlaySoundOnSend);
     return !val || (*val == "1");
   }
 
   void SetPlaySoundOnSend(bool enabled) {
-    storage_->SetSetting(kPlaySoundOnSendKey, enabled ? "1" : "0");
+    storage_->SetSetting(keyPlaySoundOnSend, enabled ? "1" : "0");
   }
 
   [[nodiscard]] auto GetPlaySoundOnReceive() const -> bool {
-    auto const val = storage_->GetSetting(kPlaySoundOnRecvKey);
+    auto const val = storage_->GetSetting(keyPlaySoundOnRecv);
     return !val || (*val == "1");
   }
 
   void SetPlaySoundOnReceive(bool enabled) {
-    storage_->SetSetting(kPlaySoundOnRecvKey, enabled ? "1" : "0");
+    storage_->SetSetting(keyPlaySoundOnRecv, enabled ? "1" : "0");
   }
 
   // --- Notifications ---
   [[nodiscard]] auto GetShowNotificationContent() const -> bool {
-    auto const val = storage_->GetSetting(kShowNotificationContentKey);
+    auto const val = storage_->GetSetting(keyShowNotificationContent);
     return !val || (*val == "1");
   }
 
   void SetShowNotificationContent(bool enabled) {
-    storage_->SetSetting(kShowNotificationContentKey, enabled ? "1" : "0");
+    storage_->SetSetting(keyShowNotificationContent, enabled ? "1" : "0");
   }
 
   // --- Peer Connection ---
   [[nodiscard]] auto GetPeerInactivityTimeout() -> std::chrono::seconds {
-    if (auto const str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
+    if (auto const str_val = storage_->GetSetting(keyPeerInactivityTimeout)) {
       // TODO(unknown): check for user input correctness
       return std::chrono::seconds(std::stoi(*str_val));
     }
@@ -146,7 +146,7 @@ class SettingsManager {
   }
 
   void SetPeerInactivityTimeout(std::chrono::seconds timeout) {
-    storage_->SetSetting(kPeerInactivityTimeoutKey, std::to_string(timeout.count()));
+    storage_->SetSetting(keyPeerInactivityTimeout, std::to_string(timeout.count()));
   }
 
   [[nodiscard]] auto GetCustomTurn() const -> std::optional<std::string> {
@@ -168,68 +168,67 @@ class SettingsManager {
     customTurnPass_ = params.turn_pass;
     useCustomTurnOnly_ = params.use_custom_turn_only;
 
-    storage_->SetSetting(kCustomTurnKey, params.turn);
-    storage_->SetSetting(kCustomTurnUserKey, params.turn_user);
+    storage_->SetSetting(keyCustomTurn, params.turn);
+    storage_->SetSetting(keyCustomTurnUser, params.turn_user);
   }
 
   [[nodiscard]] auto GetIgnoreBatteryOptimization() const -> bool {
-    auto val = storage_->GetSetting(kIgnoreBatteryKey);
+    auto val = storage_->GetSetting(keyIgnoreBattery);
     return val && (*val == "1");
   }
 
   void SetIgnoreBatteryOptimization(bool ignore) {
-    storage_->SetSetting(kIgnoreBatteryKey, ignore ? "1" : "0");
+    storage_->SetSetting(keyIgnoreBattery, ignore ? "1" : "0");
   }
 
   [[nodiscard]] auto GetIgnoreCallPermissions() const -> bool {
-    auto val = storage_->GetSetting(kIgnoreCallsKey);
+    auto val = storage_->GetSetting(keyIgnoreCalls);
     return val && (*val == "1");
   }
 
   void SetIgnoreCallPermissions(bool ignore) {
-    storage_->SetSetting(kIgnoreCallsKey, ignore ? "1" : "0");
+    storage_->SetSetting(keyIgnoreCalls, ignore ? "1" : "0");
   }
 
  private:
   void Load() {
-    bootstrapNodeUrls_ = storage_->GetSetting(kBootstrapNodeUrlsKey);
+    bootstrapNodeUrls_ = storage_->GetSetting(keyBootstrapNodeUrls);
     if (!bootstrapNodeUrls_) {
-      auto legacy = storage_->GetSetting("bootstrap_node_url");
-      if (legacy) {
+      if (auto const legacy = storage_->GetSetting("bootstrap_node_url")) {
         if (*legacy != "/dns4/app.hela.me/tcp/10807") {
           bootstrapNodeUrls_ = *legacy;
-          storage_->SetSetting(kBootstrapNodeUrlsKey, *bootstrapNodeUrls_);
+          storage_->SetSetting(keyBootstrapNodeUrls, *bootstrapNodeUrls_);
         }
         storage_->DeleteSetting("bootstrap_node_url");
       }
     }
     appendBootstrapNodes_ = GetAppendBootstrapNodes();
 
-    myDisplayName_ = storage_->GetSetting(kMyDisplayNameKey);
-    myBio_ = storage_->GetSetting(kMyBioKey);
-    myPhotoBase64_ = storage_->GetSetting(kMyPhotoBase64Key);
-    customTurn_ = storage_->GetSetting(kCustomTurnKey);
-    customTurnUser_ = storage_->GetSetting(kCustomTurnUserKey);
-    customTurnPass_ = storage_->GetSetting(kCustomTurnPassKey);
-    auto const turn_only_val = storage_->GetSetting(kUseCustomTurnOnlyKey);
+    myDisplayName_ = storage_->GetSetting(keyMyDisplayName);
+    myBio_ = storage_->GetSetting(keyMyBio);
+    myPhotoBase64_ = storage_->GetSetting(keyMyPhotoBase64);
+    customTurn_ = storage_->GetSetting(keyCustomTurn);
+    customTurnUser_ = storage_->GetSetting(keyCustomTurnUser);
+    customTurnPass_ = storage_->GetSetting(keyCustomTurnPass);
+    auto const turn_only_val = storage_->GetSetting(keyUseCustomTurnOnly);
     useCustomTurnOnly_ = turn_only_val && (*turn_only_val == "1");
   }
 
-  static constexpr auto kBootstrapNodeUrlsKey = "bootstrap_node_urls";
-  static constexpr auto kAppendBootstrapNodesKey = "append_bootstrap_nodes";
-  static constexpr auto kMyDisplayNameKey = "my_display_name";
-  static constexpr auto kMyBioKey = "my_bio";
-  static constexpr auto kMyPhotoBase64Key = "my_photo_base64";
-  static constexpr auto kPeerInactivityTimeoutKey = "peer_inactivity_timeout";
-  static constexpr auto kCustomTurnKey = "custom_ice_turn";
-  static constexpr auto kCustomTurnUserKey = "custom_ice_turn_user";
-  static constexpr auto kCustomTurnPassKey = "custom_ice_turn_pass";
-  static constexpr auto kUseCustomTurnOnlyKey = "use_custom_turn_only";
-  static constexpr auto kPlaySoundOnSendKey = "sound_on_send";
-  static constexpr auto kPlaySoundOnRecvKey = "sound_on_recv";
-  static constexpr auto kShowNotificationContentKey = "show_notifications_content";
-  static constexpr auto kIgnoreBatteryKey = "ignore_battery_opt";
-  static constexpr auto kIgnoreCallsKey = "ignore_call_perms";
+  static constexpr auto keyBootstrapNodeUrls = "bootstrap_node_urls";
+  static constexpr auto keyAppendBootstrapNodes = "append_bootstrap_nodes";
+  static constexpr auto keyMyDisplayName = "my_display_name";
+  static constexpr auto keyMyBio = "my_bio";
+  static constexpr auto keyMyPhotoBase64 = "my_photo_base64";
+  static constexpr auto keyPeerInactivityTimeout = "peer_inactivity_timeout";
+  static constexpr auto keyCustomTurn = "custom_ice_turn";
+  static constexpr auto keyCustomTurnUser = "custom_ice_turn_user";
+  static constexpr auto keyCustomTurnPass = "custom_ice_turn_pass";
+  static constexpr auto keyUseCustomTurnOnly = "use_custom_turn_only";
+  static constexpr auto keyPlaySoundOnSend = "sound_on_send";
+  static constexpr auto keyPlaySoundOnRecv = "sound_on_recv";
+  static constexpr auto keyShowNotificationContent = "show_notifications_content";
+  static constexpr auto keyIgnoreBattery = "ignore_battery_opt";
+  static constexpr auto keyIgnoreCalls = "ignore_call_perms";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 
