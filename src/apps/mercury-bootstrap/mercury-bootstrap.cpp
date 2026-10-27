@@ -195,8 +195,8 @@ auto main(int argc, char* argv[]) -> int {
   std::string const listen_addr = "/ip4/0.0.0.0/tcp/" + std::to_string(port);
   node.Listen(listen_addr);
 
-  auto const default_urls = eillance::transport::ParseUrls(eillance::transport::GetDefaultBootstrapNodeUrls());
-  for (auto const& url : default_urls) {
+  for (auto const default_urls = eillance::transport::ParseUrls(eillance::transport::GetDefaultBootstrapNodeUrls());
+       auto const& url : default_urls) {
     LGD << "Adding peer bootstrap node: " << url;
     node.AddBootstrapNode(url);
   }
