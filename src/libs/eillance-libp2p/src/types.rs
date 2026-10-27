@@ -55,6 +55,8 @@ pub enum Command {
   DiscoverTurnRelays,
   AuthTurnRelay(PeerId),
   SetTurnEligibility(bool),
+  SetTurnPort(u16),
+  SetTurnPortRange(u16, u16),
   StartProviding(Vec<u8>),
   GetProviders(Vec<u8>),
 }
