@@ -24,6 +24,7 @@ import hela.eillance.ndkio.AttachmentType
 import hela.eillance.ndkio.DraftAttachment
 import hela.eillance.ndkio.HistoryEntry
 import hela.eillance.ndkio.HistoryPage
+import hela.eillance.utils.BitmapUtils
 import hela.eillance.ndkio.Reaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -276,7 +277,7 @@ class ConversationViewModel(
         } else if (type == AttachmentType.Image) {
           val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
           BitmapFactory.decodeFile(file.absolutePath, options)
-          options.inSampleSize = calculateInSampleSize(options, 320, 320)
+          options.inSampleSize = BitmapUtils.calculateInSampleSize(options, 320, 320)
           options.inJustDecodeBounds = false
           BitmapFactory.decodeFile(file.absolutePath, options)
         } else {
@@ -286,23 +287,6 @@ class ConversationViewModel(
     } catch (_: Exception) {
       null
     }
-  }
-
-  private fun calculateInSampleSize(
-    options: BitmapFactory.Options,
-    reqWidth: Int,
-    reqHeight: Int
-  ): Int {
-    val (height: Int, width: Int) = options.outHeight to options.outWidth
-    var inSampleSize = 1
-    if (height > reqHeight || width > reqWidth) {
-      val halfHeight: Int = height / 2
-      val halfWidth: Int = width / 2
-      while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
-        inSampleSize *= 2
-      }
-    }
-    return inSampleSize
   }
 
   fun loadOlderMessages() {

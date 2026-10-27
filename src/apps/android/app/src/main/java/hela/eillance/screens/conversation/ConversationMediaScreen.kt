@@ -68,6 +68,7 @@ import hela.eillance.ndkio.Attachment
 import hela.eillance.ndkio.AttachmentInfo
 import hela.eillance.ndkio.AttachmentType
 import hela.eillance.utils.shareContent
+import hela.eillance.utils.BitmapUtils
 import hela.eillance.viewmodels.ConversationViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -316,7 +317,12 @@ fun ConversationMediaScreen(
                 if (fileExists) {
                   if (isGif) {
                     val gifBitmap = remember(item.attachment.path) {
-                      android.graphics.BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                      val options = android.graphics.BitmapFactory.Options()
+                      options.inJustDecodeBounds = true
+                      android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
+                      options.inSampleSize = BitmapUtils.calculateInSampleSize(options, 1024, 1024)
+                      options.inJustDecodeBounds = false
+                      android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)?.asImageBitmap()
                     }
                     if (gifBitmap != null) {
                       androidx.compose.foundation.Image(
@@ -354,7 +360,12 @@ fun ConversationMediaScreen(
                     if (!item.attachment.thumbnail.isNullOrEmpty()) {
                       try {
                         val bytes = android.util.Base64.decode(item.attachment.thumbnail, android.util.Base64.DEFAULT)
-                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                        val options = android.graphics.BitmapFactory.Options()
+                        options.inJustDecodeBounds = true
+                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                        options.inSampleSize = BitmapUtils.calculateInSampleSize(options, 512, 512)
+                        options.inJustDecodeBounds = false
+                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
                       } catch (e: Exception) {
                         null
                       }
