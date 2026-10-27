@@ -67,7 +67,8 @@ auto ParseIpv6Section(std::string_view const s, int& word_count, bool const allo
 }  // namespace
 
 auto Trim(std::string_view text) noexcept -> std::string_view {
-  while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' || text.front() == '\n')) {
+  while (!text.empty() &&
+         (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' || text.front() == '\n')) {
     text.remove_prefix(1);
   }
   while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' || text.back() == '\n')) {
@@ -236,9 +237,8 @@ auto ValidateBootstrapUrl(std::string_view const raw) -> bool {
     if (peer_id.empty()) return false;
   }
 
-  if (port_str.empty() || !std::ranges::all_of(port_str, [](char const c) {
-        return std::isdigit(static_cast<unsigned char>(c)) != 0;
-      })) {
+  if (port_str.empty() ||
+      !std::ranges::all_of(port_str, [](char const c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; })) {
     return false;
   }
 
@@ -349,9 +349,8 @@ auto ParseTurnServerEntry(std::string_view const raw) -> std::optional<ParsedTur
     }
   }
 
-  if (port_str.empty() || !std::ranges::all_of(port_str, [](char const c) {
-        return std::isdigit(static_cast<unsigned char>(c)) != 0;
-      })) {
+  if (port_str.empty() ||
+      !std::ranges::all_of(port_str, [](char const c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; })) {
     return std::nullopt;
   }
 
