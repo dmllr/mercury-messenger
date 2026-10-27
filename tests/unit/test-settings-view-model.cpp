@@ -59,7 +59,7 @@ TEST_F(SettingsViewModelTest, UpdateUrl) {
   }
 
   std::string new_url = "/ip4/127.0.0.1/tcp/1234";
-  vm_->UpdateBootstrapNodeUrls(new_url);
+  vm_->UpdateBootstrapNodeUrls(new_url, false);
 
   WaitFor([&] {
     std::lock_guard<std::mutex> const lock(observer->mutex);

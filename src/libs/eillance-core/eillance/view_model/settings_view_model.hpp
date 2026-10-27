@@ -92,8 +92,6 @@ class SettingsViewModel {
       {
         std::lock_guard<std::mutex> const lock(mutex);
         state.custom_turn = params.turn;
-        state.custom_turn_user = params.turn_user;
-        state.custom_turn_pass = params.turn_pass;
         state.use_custom_turn_only = params.use_custom_turn_only;
         NotifySettings();
       }
@@ -132,8 +130,6 @@ class SettingsViewModel {
       state.append_bootstrap_nodes = mgr->GetAppendBootstrapNodes();
       state.peer_inactivity_timeout_seconds = static_cast<int>(mgr->GetPeerInactivityTimeout().count());
       state.custom_turn = mgr->GetCustomTurn();
-      state.custom_turn_user = mgr->GetCustomTurnUser();
-      state.custom_turn_pass = mgr->GetCustomTurnPass();
       state.use_custom_turn_only = mgr->GetUseCustomTurnOnly();
       state.show_notification_content = mgr->GetShowNotificationContent();
     }

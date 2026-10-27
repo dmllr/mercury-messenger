@@ -28,12 +28,14 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import hela.eillance.camera.R
 import hela.eillance.viewmodels.SettingsViewModel
@@ -50,9 +52,9 @@ fun ConnectionSettingsScreen(
   val peerInactivityTimeout by settingsVM.peerInactivityTimeout.collectAsState()
 
   val customTurn by settingsVM.customTurn.collectAsState()
-  val customTurnUser by settingsVM.customTurnUser.collectAsState()
-  val customTurnPass by settingsVM.customTurnPass.collectAsState()
   val useCustomTurnOnly by settingsVM.useCustomTurnOnly.collectAsState()
+  var bootstrapError by remember { mutableStateOf<String?>(null) }
+  var turnError by remember { mutableStateOf<String?>(null) }
 
   Scaffold(
     topBar = {
@@ -79,13 +81,20 @@ fun ConnectionSettingsScreen(
       // Setting Item: Bootstrap Node URL
       OutlinedTextField(
         value = bootstrapNodeUrls,
-        onValueChange = settingsVM::onBootstrapNodeUrlsChange,
+        onValueChange = {
+          settingsVM.onBootstrapNodeUrlsChange(it)
+          bootstrapError = null
+        },
         label = { Text(stringResource(id = R.string.settings_bootstrap_node_url_label)) },
         placeholder = { Text("/dns4/node101.example.com/tcp/10807") },
         modifier = Modifier.fillMaxWidth(),
         singleLine = false,
         minLines = 4,
-        maxLines = 10
+        maxLines = 10,
+        isError = bootstrapError != null,
+        supportingText = if (bootstrapError != null) {
+          { Text(bootstrapError!!, color = MaterialTheme.colorScheme.error) }
+        } else null
       )
       Spacer(modifier = Modifier.height(4.dp))
       Text(
@@ -154,30 +163,26 @@ fun ConnectionSettingsScreen(
 
       OutlinedTextField(
         value = customTurn,
-        onValueChange = settingsVM::onCustomTurnChange,
+        onValueChange = {
+          settingsVM.onCustomTurnChange(it)
+          turnError = null
+        },
         label = { Text(stringResource(id = R.string.settings_custom_turn_label)) },
-        placeholder = { Text("turn:node101.example.com:3478?transport=udp") },
+        placeholder = { Text("user:password@turn.example.com:3478?transport=udp") },
         modifier = Modifier.fillMaxWidth(),
         singleLine = false,
-        minLines = 2,
-        maxLines = 5
+        minLines = 4,
+        maxLines = 10,
+        isError = turnError != null,
+        supportingText = if (turnError != null) {
+          { Text(turnError!!, color = MaterialTheme.colorScheme.error) }
+        } else null
       )
-      Spacer(modifier = Modifier.height(8.dp))
-      OutlinedTextField(
-        value = customTurnUser,
-        onValueChange = settingsVM::onCustomTurnUserChange,
-        label = { Text(stringResource(id = R.string.settings_custom_turn_user_label)) },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true
-      )
-      Spacer(modifier = Modifier.height(8.dp))
-      OutlinedTextField(
-        value = customTurnPass,
-        onValueChange = settingsVM::onCustomTurnPassChange,
-        label = { Text(stringResource(id = R.string.settings_custom_turn_pass_label)) },
-        visualTransformation = PasswordVisualTransformation(),
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true
+      Spacer(modifier = Modifier.height(4.dp))
+      Text(
+        stringResource(id = R.string.settings_custom_turn_description),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
       )
       Spacer(modifier = Modifier.height(8.dp))
       Row(
@@ -207,12 +212,29 @@ fun ConnectionSettingsScreen(
       // Action Button
       Button(
         onClick = {
-          settingsVM.saveSettings()
-          Toast.makeText(
-            context,
-            context.getString(R.string.settings_saved_toast),
-            Toast.LENGTH_SHORT
-          ).show()
+          when (val result = settingsVM.saveSettings()) {
+            is SettingsViewModel.SaveResult.Success -> {
+              bootstrapError = null
+              turnError = null
+              Toast.makeText(
+                context,
+                context.getString(R.string.settings_saved_toast),
+                Toast.LENGTH_SHORT
+              ).show()
+            }
+            is SettingsViewModel.SaveResult.InvalidBootstrap -> {
+              val firstErr = result.invalidEntries.first()
+              val msg = context.getString(R.string.settings_invalid_bootstrap_url, firstErr)
+              bootstrapError = msg
+              Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
+            is SettingsViewModel.SaveResult.InvalidTurn -> {
+              val firstErr = result.invalidEntries.first()
+              val msg = context.getString(R.string.settings_invalid_turn_url, firstErr)
+              turnError = msg
+              Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
+          }
         },
         modifier = Modifier.align(Alignment.End)
       ) {

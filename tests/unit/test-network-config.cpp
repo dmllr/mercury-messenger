@@ -8,14 +8,33 @@
 using namespace eillance::transport;
 
 TEST(NetworkConfigTest, ParseUrls) {
-  std::string const input = "url1\nurl2,url3; url4\rurl5";
+  std::string const input =
+      "/dns4/node101.example.com/tcp/10807\n/dns4/node102.example.com/tcp/10807,"
+      "/dns4/node103.example.com/tcp/10807; /dns4/node104.example.com/tcp/10807\r"
+      "/dns4/node105.example.com/tcp/10807\n/dns4/10.2.3.4/tcp/10807";
   auto const urls = ParseUrls(input);
-  ASSERT_EQ(urls.size(), 5);
-  EXPECT_EQ(urls[0], "url1");
-  EXPECT_EQ(urls[1], "url2");
-  EXPECT_EQ(urls[2], "url3");
-  EXPECT_EQ(urls[3], "url4");
-  EXPECT_EQ(urls[4], "url5");
+  ASSERT_EQ(urls.size(), 6);
+  EXPECT_EQ(urls[0], "/dns4/node101.example.com/tcp/10807");
+  EXPECT_EQ(urls[1], "/dns4/node102.example.com/tcp/10807");
+  EXPECT_EQ(urls[2], "/dns4/node103.example.com/tcp/10807");
+  EXPECT_EQ(urls[3], "/dns4/node104.example.com/tcp/10807");
+  EXPECT_EQ(urls[4], "/dns4/node105.example.com/tcp/10807");
+  EXPECT_EQ(urls[5], "/dns4/10.2.3.4/tcp/10807");
+}
+
+TEST(NetworkConfigTest, ParseUrlsWithErrors) {
+  std::string const input =
+      "/dns4/node101.example.com/tcp/10807\n/dns4/node102.example.com/tcp/10807,"
+      "/dns4/node103.example.com/tcp/10807; /fake/tcp/10807;/dns4/node104.example.com/tcp/10807\r"
+      "/dns4/node105.example.com/tcp/10807\n/dns4/10.2.3.4/tcp/10807\nbad-item";
+  auto const urls = ParseUrls(input);
+  ASSERT_EQ(urls.size(), 6);
+  EXPECT_EQ(urls[0], "/dns4/node101.example.com/tcp/10807");
+  EXPECT_EQ(urls[1], "/dns4/node102.example.com/tcp/10807");
+  EXPECT_EQ(urls[2], "/dns4/node103.example.com/tcp/10807");
+  EXPECT_EQ(urls[3], "/dns4/node104.example.com/tcp/10807");
+  EXPECT_EQ(urls[4], "/dns4/node105.example.com/tcp/10807");
+  EXPECT_EQ(urls[5], "/dns4/10.2.3.4/tcp/10807");
 }
 
 TEST(NetworkConfigTest, ParseUrlsEmpty) {

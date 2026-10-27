@@ -51,25 +51,14 @@ extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewMode
     jobject /*instance*/,
     jlong ptr,
     jstring turn,
-    jstring user,
-    jstring pass,
     jboolean use_custom_turn_only
 ) {
   auto* vm = reinterpret_cast<eillance::view_model::SettingsViewModel*>(ptr);
   char const* t = env->GetStringUTFChars(turn, nullptr);
-  char const* u = env->GetStringUTFChars(user, nullptr);
-  char const* p = env->GetStringUTFChars(pass, nullptr);
 
-  vm->UpdateIceConfig(
-      {.turn = t ? t : "",
-       .turn_user = u ? u : "",
-       .turn_pass = p ? p : "",
-       .use_custom_turn_only = (use_custom_turn_only != 0U)}
-  );
+  vm->UpdateIceConfig({.turn = t ? t : "", .use_custom_turn_only = (use_custom_turn_only != 0U)});
 
   env->ReleaseStringUTFChars(turn, t);
-  env->ReleaseStringUTFChars(user, u);
-  env->ReleaseStringUTFChars(pass, p);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_hela_eillance_viewmodels_SettingsViewModel_nativeSetSoundSettings(
