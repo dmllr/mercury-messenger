@@ -8,10 +8,15 @@ It operates without traditional registration; users are identified solely via an
 
 **Key Features:**
 
-*   **Registration-Free:** Users are identified solely by an anonymous, non-linked ID number.
-*   **P2P Encryption:** Text messages, voice, and video calls are fully encrypted and transferred directly device-to-device (P2P).
-*   **Multi-Platform Support:** Native Android client, headless CLI client, and automated bot agents.
-*   **Decentralized Discovery & Transport:** P2P peer routing and signaling built on `libp2p` and audio/video calls based on WebRTC.
+* **Registration-Free:** Users are identified solely by an anonymous, non-linked ID number.
+* **P2P Encryption:** Text messages, voice, and video calls are fully encrypted and transferred directly device-to-device (P2P).
+* **Decentralized Discovery & Transport:** P2P peer routing and signaling built on `libp2p` and audio/video calls based on WebRTC.
+* **Multi-Platform Support:**
+  * Cross-platform C++ Core
+  * Cross-platform internationalization support, all translations are managed unified in a `gettext` format in `src/assets/translations`
+  * Native Android application
+  * Headless all-platform CLI application
+  * Bot automations
 
 ---
 
