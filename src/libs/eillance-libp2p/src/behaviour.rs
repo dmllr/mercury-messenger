@@ -95,7 +95,7 @@ pub fn build_behaviour(
       max_circuits_per_peer: 1024,
       circuit_src_rate_limiters: vec![],
       max_circuit_duration: Duration::from_secs(86400 * 7), // 7 days
-      max_circuit_bytes: 1 << 40,                           // 1 TB
+      max_circuit_bytes: 1_u64 << 40,                       // 1 TB
       reservation_duration: Duration::from_secs(3600),      // 1 hour
       ..Default::default()
     }

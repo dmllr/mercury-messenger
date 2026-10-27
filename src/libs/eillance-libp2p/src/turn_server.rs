@@ -33,7 +33,12 @@ impl TurnAuthenticator {
   #[allow(dead_code)]
   pub fn get_password(&self, username: &str) -> Option<String> {
     let lock = self.users.lock().unwrap();
-    lock.get(username).map(|(pw, _)| pw.clone())
+    if let Some((pw, time)) = lock.get(username) {
+      if time.elapsed() < Duration::from_secs(86400) {
+        return Some(pw.clone());
+      }
+    }
+    None
   }
 }
 
@@ -43,10 +48,6 @@ struct MercuryAuthHandler {
 
 impl turn::auth::AuthHandler for MercuryAuthHandler {
   fn auth_handle(&self, username: &str, realm: &str, src_addr: std::net::SocketAddr) -> Result<Vec<u8>, turn::Error> {
-    {
-      let mut lock = self.auth.users.lock().unwrap();
-      lock.retain(|_, (_, time)| time.elapsed() < Duration::from_secs(86400));
-    }
     crate::node_log!(
       &self.auth.callbacks,
       5,
@@ -95,10 +96,6 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
     requested_port: u16,
   ) -> Result<(Arc<dyn webrtc_util::Conn + Send + Sync>, std::net::SocketAddr), turn::Error> {
     let bind_ip = if use_ipv4 { "0.0.0.0" } else { "::" };
-    let mut port = requested_port;
-    if port == 0 {
-      port = self.min_port + (rand::random::<u16>() % (self.max_port - self.min_port + 1));
-    }
 
     crate::node_log!(
       &self.callbacks,
@@ -108,8 +105,26 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
       requested_port
     );
 
-    let mut attempts = 0;
-    loop {
+    if requested_port != 0 {
+      let bind_addr = format!("{}:{}", bind_ip, requested_port);
+      if let Ok(socket) = UdpSocket::bind(&bind_addr).await {
+        if let Ok(local_addr) = socket.local_addr() {
+          let relay_addr = std::net::SocketAddr::new(self.relay_address, local_addr.port());
+          crate::node_log!(
+            &self.callbacks,
+            4,
+            "[TURN] Allocated requested relay connection on {} mapped to {}",
+            local_addr,
+            relay_addr
+          );
+          return Ok((Arc::new(socket), relay_addr));
+        }
+      }
+    }
+
+    let offset = rand::random::<u16>() % (self.max_port - self.min_port + 1);
+    for i in 0..=(self.max_port - self.min_port) {
+      let port = self.min_port + ((offset + i) % (self.max_port - self.min_port + 1));
       let bind_addr = format!("{}:{}", bind_ip, port);
       if let Ok(socket) = UdpSocket::bind(&bind_addr).await {
         if let Ok(local_addr) = socket.local_addr() {
@@ -124,19 +139,14 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
           return Ok((Arc::new(socket), relay_addr));
         }
       }
-
-      attempts += 1;
-      if attempts >= 10 {
-        crate::node_log!(
-          &self.callbacks,
-          1,
-          "[TURN] Failed to allocate relay connection after 10 attempts"
-        );
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "max retries exceeded").into());
-      }
-
-      port = self.min_port + (rand::random::<u16>() % (self.max_port - self.min_port + 1));
     }
+
+    crate::node_log!(
+      &self.callbacks,
+      1,
+      "[TURN] Failed to allocate relay connection after trying all ports"
+    );
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "all ports exhausted").into())
   }
 }
 
