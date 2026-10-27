@@ -55,8 +55,8 @@ pub fn build_behaviour(
   mdns_config.query_interval = Duration::from_secs(300);
   let mdns = mdns::tokio::Behaviour::new(mdns_config, peer_id).expect("mDNS valid");
 
-  let mut rr_config = request_response::Config::default();
-  rr_config.set_request_timeout(Duration::from_secs(30));
+  let rr_config = request_response::Config::default()
+    .with_request_timeout(Duration::from_secs(30));
 
   let chat = request_response::cbor::Behaviour::new(
     [(StreamProtocol::new("/mercury/chat/1.0.0"), ProtocolSupport::Full)],
