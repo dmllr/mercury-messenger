@@ -8,9 +8,19 @@
 
 #include "mercury/bot/types.hpp"
 
+#ifdef SendMessage
+// Windows has a conflict with SendMessage and GetMessage symbols:
+//   #ifdef Unicode
+//   #define SendMessage SendMessageW
+//   #else
+//   #define SendMessage SendMessageA
+//   #endif
+#undef SendMessage
+#endif
+
 namespace eillance {
 class Client;
-}
+}  // namespace eillance
 
 namespace mercury::bot {
 

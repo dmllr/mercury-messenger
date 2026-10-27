@@ -12,8 +12,9 @@ set(shared_cmake_libs_path "${REPO_ROOT}/src/cmake")
 
 include("${shared_cmake_libs_path}/setup.cmake")
 include("${shared_cmake_libs_path}/import_remote.cmake")
-
-find_package(CURL REQUIRED)
+include("${shared_cmake_libs_path}/libboringssl.cmake")
+include("${shared_cmake_libs_path}/libzlib.cmake")
+include("${shared_cmake_libs_path}/libcurl.cmake")
 
 add_executable(mercury-bot-aichatbot
   mercury-bot-aichatbot.cpp
@@ -25,5 +26,6 @@ target_compile_features(mercury-bot-aichatbot PRIVATE cxx_std_20)
 target_link_libraries(mercury-bot-aichatbot PRIVATE
   eillance-bot-api
   eillance-logging
-  CURL::libcurl
+  libcurl_static
 )
+target_include_directories(mercury-bot-aichatbot PUBLIC "${OPENSSL_INCLUDE_DIR}")

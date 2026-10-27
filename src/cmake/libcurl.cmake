@@ -1,0 +1,14 @@
+set(BUILD_STATIC_LIBS ON)
+set(CURL_USE_LIBPSL OFF)
+set(CURL_BUILD_TESTING OFF)
+set(BUILD_EXAMPLES OFF)
+set(BUILD_LIBCURL_DOCS OFF)
+set(ENABLE_CURL_MANUAL OFF)
+set(CURL_DISABLE_INSTALL ON)
+set(CURL_ENABLE_EXPORT_TARGET OFF)
+
+import_remote("https://github.com/curl/curl.git"
+	TAG "curl-8_23_0"
+	DST "${REPO_ROOT}/_imported"
+	ALIAS curl
+)
