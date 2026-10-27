@@ -23,7 +23,7 @@
 namespace {
 
 constexpr auto defaultHttpTimeoutSeconds = 60L;
-constexpr std::string_view defaultOpenAiUrl = "https://mllr.i234.me:11480/v1/chat/completions";
+constexpr std::string_view defaultOpenAiUrl = "https://arcai.mllr.i234.me/v1/chat/completions";
 constexpr std::string_view defaultModel = "local/llama3.2:3b";
 constexpr std::string_view defaultSystemPrompt =
     "You are a human-like assistant. Keep answers concise and avoid unnecessary verbiage.";
