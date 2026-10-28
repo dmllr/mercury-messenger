@@ -240,6 +240,7 @@ auto QueryLlm(LlmConfig const& config, std::string_view user_message) -> std::st
   curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, WriteCallback);
   curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response_body);
   curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, defaultHttpTimeoutSeconds);
+  curl_easy_setopt(curl.get(), CURLOPT_NOSIGNAL, 1L);
 
   curl_blob const ca_blob{
       const_cast<void*>(static_cast<void const*>(trustedRootCaCert.data())),
@@ -252,14 +253,14 @@ auto QueryLlm(LlmConfig const& config, std::string_view user_message) -> std::st
     throw std::runtime_error(std::string("LLM request failed: ") + curl_easy_strerror(res));
   }
 
-  std::int32_t response_code = 0;
+  long response_code = 0;
   curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &response_code);
   if (response_code < 200 || response_code >= 300) {
     LGE << "LLM HTTP error status " << response_code << ": " << response_body;
     throw std::runtime_error("LLM HTTP error status " + std::to_string(response_code));
   }
 
-  auto content = ExtractContentFromResponse(response_body);
+  auto const content = ExtractContentFromResponse(response_body);
   if (!content) {
     LGE << "Failed to parse content from response: " << response_body;
     throw std::runtime_error("Failed to parse content from response");
@@ -346,7 +347,7 @@ auto main(int argc, char** argv) -> int {
       bot.MarkAsRead(message.chat_id, message.message_id);
 
       // Execute LLM call off the event loop thread to avoid blocking client messaging.
-      std::thread([&bot, &config, chat_id = message.chat_id, text = message.text]() -> void {
+      std::thread([&bot, &config, chat_id = std::string{message.chat_id}, text = std::string{message.text}]() -> void {
         std::string reply;
         try {
           reply = QueryLlm(config, text);
