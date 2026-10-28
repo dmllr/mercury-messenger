@@ -40,6 +40,7 @@ IMAGE_NAME=""
 EXPORT_BIN=""
 PACK_IMAGE=false
 NO_CACHE=false
+DEBUG_MODE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,9 +50,10 @@ while [[ $# -gt 0 ]]; do
     --export-bin) EXPORT_BIN="$2"; shift 2 ;;
     --pack) PACK_IMAGE=true; shift ;;
     --no-cache) NO_CACHE=true; shift ;;
+    --debug) DEBUG_MODE=true; shift ;;
     *)
       error "Unknown argument: $1"
-      echo "Usage: $0 --target <target> --app-dir <dir> [--image-name <name>] [--export-bin <path>] [--pack] [--no-cache]"
+      echo "Usage: $0 --target <target> --app-dir <dir> [--image-name <name>] [--export-bin <path>] [--pack] [--no-cache] [--debug]"
       exit 1
       ;;
   esac
@@ -59,7 +61,7 @@ done
 
 if [[ -z "${TARGET}" || -z "${APP_DIR}" ]]; then
   error "Missing required arguments."
-  echo "Usage: $0 --target <target> --app-dir <dir> [--image-name <name>] [--export-bin <path>] [--pack] [--no-cache]"
+  echo "Usage: $0 --target <target> --app-dir <dir> [--image-name <name>] [--export-bin <path>] [--pack] [--no-cache] [--debug]"
   exit 1
 fi
 
@@ -77,11 +79,19 @@ else
   docker build -t "${DEVENV_IMAGE_NAME}" "${DEVENV_CONTEXT_DIR}"
 fi
 
-info "Building ${TARGET} in Release mode..."
+CMAKE_BUILD_TYPE="Release"
+STRIP_COMMAND="llvm-strip ${BUILD_DIR}/${APP_DIR}/${TARGET}"
+
+if [[ "${DEBUG_MODE}" == "true" ]]; then
+  CMAKE_BUILD_TYPE="Debug"
+  STRIP_COMMAND="true"
+fi
+
+info "Building ${TARGET} in ${CMAKE_BUILD_TYPE} mode..."
 run_in_devenv bash -c "
-  cmake -S . -B ${BUILD_DIR} -G Ninja -DCMAKE_BUILD_TYPE=Release \\
+  cmake -S . -B ${BUILD_DIR} -G Ninja -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \\
   && cmake --build ${BUILD_DIR} -j 20 --target ${TARGET} \\
-  && llvm-strip ${BUILD_DIR}/${APP_DIR}/${TARGET}
+  && ${STRIP_COMMAND}
 "
 success "Build complete."
 
