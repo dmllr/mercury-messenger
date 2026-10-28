@@ -86,7 +86,7 @@ TEST_F(AccountServiceTest, UpdateProfile) {
 
 TEST_F(AccountServiceTest, UpdateBootstrapNodeUrl) {
   std::string const new_url = "/ip4/127.0.0.1/tcp/1234";
-  service_->UpdateBootstrapNodeUrls(new_url);
+  service_->UpdateBootstrapNodeUrls(new_url, false);
 
   EXPECT_EQ(service_->GetSettings()->GetBootstrapNodeUrls(), new_url);
 

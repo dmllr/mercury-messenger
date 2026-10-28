@@ -8,9 +8,19 @@
 
 #include "mercury/bot/types.hpp"
 
+#ifdef SendMessage
+// Windows has a conflict with SendMessage and GetMessage symbols:
+//   #ifdef Unicode
+//   #define SendMessage SendMessageW
+//   #else
+//   #define SendMessage SendMessageA
+//   #endif
+#undef SendMessage
+#endif
+
 namespace eillance {
 class Client;
-}
+}  // namespace eillance
 
 namespace mercury::bot {
 
@@ -36,6 +46,12 @@ class Bot {
 
   // Starts the bot (non-blocking).
   void Start() const;
+
+  // Initializes a new identity if none exists. Returns true if a new identity was generated.
+  void InitializeIdentity(ProfileConfig const& profile = {}) const;
+
+  // Overwrites profile information (display name, bio, photo).
+  void UpdateProfile(ProfileConfig const& profile) const;
 
   // Stops the bot and releases resources.
   void Stop() const;

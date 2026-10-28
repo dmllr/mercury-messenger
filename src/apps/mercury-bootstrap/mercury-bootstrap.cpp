@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <openssl/rand.h>
@@ -48,6 +49,43 @@ constexpr auto ParseLogLevel(std::string_view const level) -> plog::Severity {
   return plog::info;
 }
 
+constexpr std::uint32_t minPort = 1;
+constexpr std::uint32_t maxPort = 65535;
+
+auto ParsePort(std::string_view const str, std::uint16_t& out_port) -> bool {
+  if (str.empty()) {
+    return false;
+  }
+  std::uint32_t val = 0;
+  for (char const c : str) {
+    if (c < '0' || c > '9') {
+      return false;
+    }
+    val = val * 10 + static_cast<std::uint32_t>(c - '0');
+    if (val > maxPort) {
+      return false;
+    }
+  }
+  if (val < minPort) {
+    return false;
+  }
+  out_port = static_cast<std::uint16_t>(val);
+  return true;
+}
+
+auto ParsePortRange(std::string_view const str, std::uint16_t& out_min, std::uint16_t& out_max) -> bool {
+  auto const sep = str.find_first_of("-:");
+  if (sep == std::string_view::npos || sep == 0 || sep == str.size() - 1) {
+    return false;
+  }
+  auto const min_str = str.substr(0, sep);
+  auto const max_str = str.substr(sep + 1);
+  if (!ParsePort(min_str, out_min) || !ParsePort(max_str, out_max)) {
+    return false;
+  }
+  return out_min <= out_max;
+}
+
 }  // namespace
 
 auto main(int argc, char* argv[]) -> int {
@@ -67,8 +105,44 @@ auto main(int argc, char* argv[]) -> int {
   auto const log_level = ParseLogLevel(log_level_str);
   plog::init<logInstanceId>(log_level, &appender);
 
-  std::uint16_t const port = static_cast<std::uint16_t>(args.GetInt("--port").value_or(10807));
+  std::uint16_t port = 10807;
+  if (auto const port_str = args.Get("--port"); port_str.has_value()) {
+    if (!ParsePort(*port_str, port)) {
+      LGE << "Invalid port specified for --port: " << *port_str << " (expected 1-65535)";
+      return 1;
+    }
+  }
+
   std::string const identity_file = args.Get("--identity-file").value_or("bootstrap_identity.key");
+  auto const turn_port_arg = args.Get("--turn-port");
+  auto const turn_port_range_arg = args.Get("--turn-port-range");
+
+  if (turn_port_arg.has_value() && turn_port_range_arg.has_value()) {
+    LGE << "Error: Cannot specify both --turn-port and --turn-port-range";
+    return 1;
+  }
+
+  std::optional<std::uint16_t> turn_port;
+  if (turn_port_arg.has_value()) {
+    std::uint16_t p = 0;
+    if (!ParsePort(*turn_port_arg, p)) {
+      LGE << "Invalid TURN port specified for --turn-port: " << *turn_port_arg << " (expected 1-65535)";
+      return 1;
+    }
+    turn_port = p;
+  }
+
+  std::optional<std::pair<std::uint16_t, std::uint16_t>> turn_port_range;
+  if (turn_port_range_arg.has_value()) {
+    std::uint16_t min_p = 0;
+    std::uint16_t max_p = 0;
+    if (!ParsePortRange(*turn_port_range_arg, min_p, max_p)) {
+      LGE << "Invalid TURN port range specified for --turn-port-range: " << *turn_port_range_arg
+          << " (expected min-max with 1 <= min <= max <= 65535)";
+      return 1;
+    }
+    turn_port_range = std::make_pair(min_p, max_p);
+  }
 
   LGD << "Starting bootstrap node on 0.0.0.0:" << port;
 
@@ -108,6 +182,11 @@ auto main(int argc, char* argv[]) -> int {
   }
 
   eillance::transport::Libp2pNode const node(secret_key, eillance::transport::NodeRole::bootstrapNode);
+  if (turn_port.has_value()) {
+    node.SetTurnPort(*turn_port);
+  } else if (turn_port_range.has_value()) {
+    node.SetTurnPortRange(turn_port_range->first, turn_port_range->second);
+  }
   node.SetTurnEligibility(true);
   node.Start();
 
@@ -116,8 +195,8 @@ auto main(int argc, char* argv[]) -> int {
   std::string const listen_addr = "/ip4/0.0.0.0/tcp/" + std::to_string(port);
   node.Listen(listen_addr);
 
-  auto const default_urls = eillance::transport::ParseUrls(eillance::transport::GetDefaultBootstrapNodeUrls());
-  for (auto const& url : default_urls) {
+  for (auto const default_urls = eillance::transport::ParseUrls(eillance::transport::GetDefaultBootstrapNodeUrls());
+       auto const& url : default_urls) {
     LGD << "Adding peer bootstrap node: " << url;
     node.AddBootstrapNode(url);
   }

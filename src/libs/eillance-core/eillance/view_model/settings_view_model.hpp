@@ -36,8 +36,8 @@ class SettingsViewModel {
     return impl_->GetState();
   }
 
-  void UpdateBootstrapNodeUrls(std::string const& urls) {
-    impl_->UpdateBootstrapNodeUrls(urls);
+  void UpdateBootstrapNodeUrls(std::string const& urls, bool append_to_default) {
+    impl_->UpdateBootstrapNodeUrls(urls, append_to_default);
   }
   void SetPeerInactivityTimeout(int seconds) {
     impl_->SetPeerInactivityTimeout(seconds);
@@ -68,11 +68,12 @@ class SettingsViewModel {
       return state;
     }
 
-    void UpdateBootstrapNodeUrls(std::string const& urls) {
-      client->UpdateBootstrapNodeUrls(urls);
+    void UpdateBootstrapNodeUrls(std::string const& urls, bool append_to_default) {
+      client->UpdateBootstrapNodeUrls(urls, append_to_default);
       {
         std::lock_guard<std::mutex> const lock(mutex);
         state.bootstrap_node_urls = urls;
+        state.append_bootstrap_nodes = append_to_default;
         NotifySettings();
       }
     }
@@ -90,10 +91,8 @@ class SettingsViewModel {
       client->UpdateIceConfig(params);
       {
         std::lock_guard<std::mutex> const lock(mutex);
-        state.custom_stun = params.stun;
         state.custom_turn = params.turn;
-        state.custom_turn_user = params.turn_user;
-        state.custom_turn_pass = params.turn_pass;
+        state.use_custom_turn_only = params.use_custom_turn_only;
         NotifySettings();
       }
     }
@@ -128,11 +127,10 @@ class SettingsViewModel {
     void LoadSettingsInternal() {
       auto* mgr = client->GetSettingsManager();
       state.bootstrap_node_urls = mgr->GetBootstrapNodeUrls();
+      state.append_bootstrap_nodes = mgr->GetAppendBootstrapNodes();
       state.peer_inactivity_timeout_seconds = static_cast<int>(mgr->GetPeerInactivityTimeout().count());
-      state.custom_stun = mgr->GetCustomStun();
       state.custom_turn = mgr->GetCustomTurn();
-      state.custom_turn_user = mgr->GetCustomTurnUser();
-      state.custom_turn_pass = mgr->GetCustomTurnPass();
+      state.use_custom_turn_only = mgr->GetUseCustomTurnOnly();
       state.show_notification_content = mgr->GetShowNotificationContent();
     }
 

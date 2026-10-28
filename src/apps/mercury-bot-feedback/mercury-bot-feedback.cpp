@@ -59,6 +59,10 @@ auto main(int argc, char** argv) -> int {
   std::filesystem::path const identity_path(*identity_dir_str);
   std::filesystem::path const output_path(*output_dir_str);
 
+  if (args.Has("--init") && !std::filesystem::exists(identity_path)) {
+    std::filesystem::create_directories(identity_path);
+  }
+
   if (!std::filesystem::is_directory(identity_path)) {
     LGE << "Identity directory does not exist: " << identity_path;
     return 1;
@@ -80,6 +84,19 @@ auto main(int argc, char** argv) -> int {
 
   try {
     mercury::bot::Bot const bot(options);
+
+    mercury::bot::ProfileConfig const profile{
+        .display_name = args.Get("--display-name"),
+        .bio = args.Get("--bio"),
+        .photo = args.Get("--photo")
+    };
+
+    if (args.Has("--init")) {
+      bot.InitializeIdentity(profile);
+    }
+    if (args.Has("--overwrite")) {
+      bot.UpdateProfile(profile);
+    }
 
     LGI << "Bot initialized with ID: " << bot.GetId();
 

@@ -8,10 +8,25 @@ It operates without traditional registration; users are identified solely via an
 
 **Key Features:**
 
-*   **Registration-Free:** Users are identified solely by an anonymous, non-linked ID number.
-*   **P2P Encryption:** Text messages, voice, and video calls are fully encrypted and transferred directly device-to-device (P2P).
+* **Registration-Free:** Users are identified solely by an anonymous, non-linked ID number.
+* **P2P Encryption:** Text messages, voice, and video calls are fully encrypted and transferred directly device-to-device (P2P).
+* **Decentralized Discovery & Transport:** P2P peer routing and signaling built on `libp2p` and audio/video calls based on WebRTC.
+* **Multi-Platform Support:**
+  * Cross-platform C++ Core
+  * Cross-platform internationalization support, all translations are managed unified in a `gettext` format in `src/assets/translations`
+  * Native Android application
+  * Headless all-platform CLI application
+  * Bot automations
 
 ---
+
+## Screenshots
+
+| <img src="src/assets/graphics/screenshots/Screenshot_20260514_171254.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260216_181803.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171413.png" width="400"> | <img src="src/assets/graphics/screenshots/Screenshot_20260514_171438.png" width="400"> |
+|:--:|:--:|:--:|:--:|
+
+## Published release
+<a href="https://play.google.com/store/apps/details?id=hela.eillance"><img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png" height="80" alt="Get it on Google Play"></a>
 
 ## Architecture
 
@@ -19,50 +34,54 @@ It operates without traditional registration; users are identified solely via an
 
 Project Mercury is built around a strict separation of concerns where the **Core** module acts as the sole engine of the application.
 
-The core business logic is encapsulated within a set of C++ libraries collectively known as **Eillance**. End applications (Android, CLI, etc.) are designed to be extremely thin wrappers around this core. They serve as the user interface and platform liaison, handling device-specific concerns (like rendering, input events, and permissions). All state management, cryptography, and network orchestration reside exclusively within the Eillance libraries.
+The core business logic is encapsulated within a set of C++ libraries collectively known as **Eillance**. End applications (Android, CLI, Bot runners, etc.) are thin wrappers around this core. They serve as the interface and platform liaison, handling device-specific concerns (like rendering, audio/video input events, OS Telecom hooks, and platform permissions). All state management, cryptography, and network orchestration reside exclusively within the Eillance libraries.
 
 ### Component Breakdown
 
 | Library / App | Location | Responsibility |
 | :--- | :--- | :--- |
-| `eillance-core` | `src/libs/eillance-core` | The primary module containing all application logic, data models, protocol handlers, and the presentation view model that bridges the core state to the UI layer. |
-| `eillance-crypto` | `src/libs/eillance-crypto` | A dedicated cryptography layer wrapping BoringSSL for identity management and end-to-end encrypted session establishment. |
-| `eillance-rtc` | `src/libs/eillance-rtc` | Provides a cross-platform RTC transport implementation for desktop/CLI clients based on `libdatachannel`. |
-| `eillance-storage-sqlite`| `src/libs/eillance-storage-sqlite`| An SQLite-based implementation of the persistent storage interface, handling all database operations and schema migrations. |
-| `eillance-utils` | `src/libs/eillance-utils` | A collection of common, reusable utilities such as custom dispatch queues, argument parsers, and data structures. |
-| `eillance-logging` | `src/libs/eillance-logging` | A lightweight logging abstraction. |
-| `eillance-h264` | `src/libs/eillance-h264` | Helper utilities for parsing H.264 video streams. |
-| **Bootstrap Node** | `src/apps/mercury-bootstrap` | A libp2p bootstrap node that provides initial peer discovery and connection relaying across the network. |
-| **Android App** | `src/apps/android` | The mobile presentation layer built upon the Eillance libraries, using Google's official WebRTC library for transport. |
-| **CLI Client** | `src/apps/mercury-cli` | A minimal application useful for robust end-to-end testing and integration verification, using `libdatachannel` for transport. |
+| `eillance-core` | `libs/eillance-core` | The primary module containing all application logic, identity, messaging, data models, protocol handlers, and the presentation view model. |
+| `eillance-crypto` | `libs/eillance-crypto` | A dedicated cryptography layer wrapping BoringSSL for identity generation and end-to-end encrypted session establishment. |
+| `eillance-libp2p` | `libs/eillance-libp2p` | Transport and network abstraction implementing `libp2p` for decentralized node discovery, routing, and signaling. |
+| `eillance-rtc` | `libs/eillance-rtc` | Cross-platform WebRTC/DataChannel transport abstraction based on `libdatachannel`. |
+| `eillance-capture` | `libs/eillance-capture` | Cross-platform audio and video capture pipelines, hardware abstraction, and media encoding. |
+| `eillance-bot-api` | `libs/eillance-bot-api` | High-level C++ API and SDK for developing headless Mercury bots and integrations. |
+| `eillance-storage-sqlite` | `libs/eillance-storage-sqlite` | Persistent storage implementation utilizing SQLite, handling database operations and schema migrations. |
+| `eillance-logging` | `libs/eillance-logging` | Lightweight logging abstraction. |
+| `eillance-utils` | `libs/eillance-utils` | Reusable utilities such as dispatch queues, argument parsers, threading primitives, and data structures. |
+| **Android App** | `apps/android` | Native Android client built with Jetpack Compose, native C++ NDK bindings, Android Telecom framework integration, and WebRTC. |
+| **CLI Client** | `apps/mercury-cli` | Terminal-based client for headless operation, automated testing, and verification. |
+| **Mercury Bot** | `apps/mercury-bot` | Executable bot runner leveraging `eillance-bot-api` for automated agents and network services. |
+| **Bootstrap Node** | `apps/mercury-bootstrap` | Network bootstrap and discovery node using libp2p for initial peer coordination and relaying. |
 
 ### Tech Stack
 
 #### Key Libraries & Implementations
 
-*   **Cross-platform Core:** C++20
-*   **RTC/Data Transport:**
-    *   **`libdatachannel`**: Used for the CLI client and future desktop platforms.
-    *   **Google WebRTC (`org.webrtc`)**: Used for the Android application.
-*   **Database:** SQLite via the `eillance-storage-sqlite` library.
-*   **Cryptography:** BoringSSL, abstracted by the `eillance-crypto` library.
-*   **CLI Media Handling:**
-    *   **OpenCV**: Video capture.
-    *   **FFmpeg**: Video encoding.
-    *   **miniaudio**: Audio capture.
-    *   **Opus**: Audio encoding.
-*   **Android UI:** Jetpack Compose.
+*   **Cross-platform Core:** C++20 (managed with CMake)
+*   **Networking & Signaling:** `libp2p` via `eillance-libp2p`
+*   **RTC / Data Transport:**
+    *   **`libdatachannel`**: Used for CLI clients, bots, and native desktop runtimes.
+    *   **Google WebRTC (`org.webrtc`)**: Used for the Android application via NDK / JNI.
+*   **Database:** SQLite via `eillance-storage-sqlite`
+*   **Cryptography:** BoringSSL, abstracted by `eillance-crypto`
+*   **Media Capture & Encoding (`eillance-capture`):** (non-Android)
+    *   **Video:** OpenCV / platform capture APIs & FFmpeg encoding
+    *   **Audio:** miniaudio & Opus encoding
+*   **Android Presentation:**
+    *   **UI:** Jetpack Compose & Material 3
+    *   **System Integration:** Android Telecom framework (CallStyle notifications, native in-call system screens)
+    *   **JNI / NDK:** Custom C++ bridge bindings (`ndkio`)
 
 #### Protocol Stack
 
-Project Mercury utilizes real-time data and media exchange through a Peer Connection, a negotiated peer-to-peer connection capable of carrying both data and media tracks based on the following standards:
+Project Mercury utilizes real-time data and media exchange through negotiated peer-to-peer connections capable of multiplexing both secure data channels and real-time media tracks:
 
-**Protocol Stack:**
-
-*   **Data Channels:** SCTP (RFC8831)
-*   **Media Transport:** SRTP (RFC8834)
-*   **Security & Key Exchange:** DTLS/UDP (RFC7350 and RFC8261)
-*   **Connection Establishment:** ICE (RFC8445) with STUN (RFC8489) and its extension TURN (RFC8656)
+*   **Peer Discovery & Signaling:** libp2p (DHT / Relays)
+*   **Data Channels:** SCTP (RFC 8831)
+*   **Media Transport:** SRTP (RFC 8834)
+*   **Security & Key Exchange:** DTLS/UDP (RFC 7350 and RFC 8261)
+*   **Connection Establishment:** ICE (RFC 8445) with STUN (RFC 8489) and TURN (RFC 8656)
 
 ---
 

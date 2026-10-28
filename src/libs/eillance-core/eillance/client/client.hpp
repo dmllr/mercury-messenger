@@ -271,9 +271,7 @@ class Client final {
       return;
     }
     ReevaluateIceConfiguration();
-    if (auto const urls = sm_->account->GetSettings()->GetBootstrapNodeUrls()) {
-      sm_->data_transport->SetBootstrapNodeUrls(SettingsManager::ParseUrls(*urls));
-    }
+    sm_->data_transport->SetBootstrapNodeUrls(sm_->account->GetSettings()->GetEffectiveBootstrapNodeUrls());
 
     sm_->data_transport->SetId(sm_->account->GetId());
     sm_->data_transport->SetDeviceId(ContactID(sm_->account->GetDevicePublicKey()));
@@ -357,8 +355,8 @@ class Client final {
     return false;
   }
 
-  void UpdateBootstrapNodeUrls(std::string const& urls) const {
-    sm_->account->UpdateBootstrapNodeUrls(urls);
+  void UpdateBootstrapNodeUrls(std::string const& urls, bool const append_to_default) const {
+    sm_->account->UpdateBootstrapNodeUrls(urls, append_to_default);
   }
 
   void UpdateMyProfile(identity::ProfileUpdate const& profile) {
@@ -886,44 +884,48 @@ class Client final {
   void ReevaluateIceConfiguration() {
     Json final_config = Json::array();
     auto* settings = sm_->account->GetSettings();
-    if (auto stun = settings->GetCustomStun(); stun && !stun->empty()) {
-      final_config.push_back({{"urls", std::vector<std::string>{*stun}}});
-    }
+    bool has_custom_turn = false;
     if (auto turn = settings->GetCustomTurn(); turn && !turn->empty()) {
-      Json turn_server;
-      turn_server["urls"] = std::vector<std::string>{*turn};
-      if (auto user = settings->GetCustomTurnUser(); user && !user->empty()) {
-        turn_server["username"] = *user;
+      auto const parsed_servers = transport::ParseTurnServers(*turn);
+      for (auto const& server : parsed_servers) {
+        Json turn_server;
+        turn_server["urls"] = std::vector<std::string>{server.url};
+        if (!server.username.empty()) {
+          turn_server["username"] = server.username;
+        }
+        if (!server.credential.empty()) {
+          turn_server["credential"] = server.credential;
+        }
+        final_config.push_back(turn_server);
+        has_custom_turn = true;
       }
-      if (auto pass = settings->GetCustomTurnPass(); pass && !pass->empty()) {
-        turn_server["credential"] = *pass;
-      }
-      final_config.push_back(turn_server);
     }
 
-    {
-      std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
-      auto const now = std::chrono::steady_clock::now();
-      std::erase_if(dynamic_turn_servers_, [&](auto const& s) -> bool {
-        return (now - s.discovered_at) > std::chrono::minutes(10);
-      });
+    if (!settings->GetUseCustomTurnOnly() || !has_custom_turn) {
+      {
+        std::lock_guard<std::mutex> const lock(dynamic_turn_mutex_);
+        auto const now = std::chrono::steady_clock::now();
+        std::erase_if(dynamic_turn_servers_, [&](auto const& s) -> bool {
+          return (now - s.discovered_at) > std::chrono::minutes(10);  // NOLINT(*-magic-numbers)
+        });
 
-      for (auto const& ts : dynamic_turn_servers_) {
-        std::string ip_str = ts.ip;
-        if (ip_str.find(':') != std::string::npos) {
-          ip_str = "[" + ip_str + "]";
+        for (auto const& ts : dynamic_turn_servers_) {
+          std::string ip_str = ts.ip;
+          if (ip_str.find(':') != std::string::npos) {
+            ip_str = "[" + ip_str + "]";
+          }
+
+          Json turn_server;
+          turn_server["urls"] =
+              std::vector<std::string>{"turn:" + ip_str + ":" + std::to_string(ts.port) + "?transport=udp"};
+          turn_server["username"] = ts.username;
+          turn_server["credential"] = ts.credential;
+          final_config.push_back(turn_server);
+
+          Json stun_server;
+          stun_server["urls"] = std::vector<std::string>{"stun:" + ip_str + ":" + std::to_string(ts.port)};
+          final_config.push_back(stun_server);
         }
-
-        Json turn_server;
-        turn_server["urls"] =
-            std::vector<std::string>{"turn:" + ip_str + ":" + std::to_string(ts.port) + "?transport=udp"};
-        turn_server["username"] = ts.username;
-        turn_server["credential"] = ts.credential;
-        final_config.push_back(turn_server);
-
-        Json stun_server;
-        stun_server["urls"] = std::vector<std::string>{"stun:" + ip_str + ":" + std::to_string(ts.port)};
-        final_config.push_back(stun_server);
       }
     }
 

@@ -116,7 +116,7 @@ auto main(int argc, char** argv) -> int {
 
   auto client = std::make_shared<eillance::Client>(storage, media_transport);
 
-  client->UpdateBootstrapNodeUrls(*signaling_url);
+  client->UpdateBootstrapNodeUrls(*signaling_url, false);
 
   bool const auto_confirm = !args.Has("--no-auto-confirm");
 
@@ -229,8 +229,8 @@ auto main(int argc, char** argv) -> int {
     } else if (cmd == "start") {
       client->Start();
     } else if (cmd == "reconnect") {
-      client->GetSettingsManager()->SetBootstrapNodeUrls(*signaling_url);
-      client->UpdateBootstrapNodeUrls(*signaling_url);
+      client->GetSettingsManager()->SetBootstrapNodeUrls(*signaling_url, false);
+      client->UpdateBootstrapNodeUrls(*signaling_url, false);
       LGI << "[mock] Executed reconnect";
     } else if (cmd.starts_with("confirm ")) {
       auto peer_hex = cmd.substr(8);

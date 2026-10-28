@@ -21,6 +21,7 @@ target_link_libraries(mercury-bootstrap PUBLIC
   plog::plog
   crypto
   nlohmann_json
+  eillance-core
   eillance-libp2p
   eillance-utils
   eillance-crypto

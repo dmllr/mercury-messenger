@@ -35,6 +35,8 @@ pub struct EventLoopState {
   pub bootstrap_addrs: HashSet<Multiaddr>,
   pub active_relay_listeners: HashMap<Multiaddr, libp2p::core::transport::ListenerId>,
   pub turn_auth: std::sync::Arc<crate::turn_server::TurnAuthenticator>,
+  pub configured_turn_port: Option<u16>,
+  pub configured_turn_port_range: Option<(u16, u16)>,
   pub turn_port: Option<u16>,
   pub public_ip: Option<String>,
   pub public_port: Option<u16>,
@@ -48,7 +50,12 @@ pub struct EventLoopState {
 }
 
 impl EventLoopState {
-  pub fn new(role: NodeRole, callbacks: crate::types::Callbacks) -> Self {
+  pub fn new(
+    role: NodeRole,
+    callbacks: crate::types::Callbacks,
+    turn_port: Option<u16>,
+    turn_port_range: Option<(u16, u16)>,
+  ) -> Self {
     Self {
       pending_dials: HashMap::new(),
       known_addresses: HashMap::new(),
@@ -58,6 +65,8 @@ impl EventLoopState {
       bootstrap_addrs: HashSet::new(),
       active_relay_listeners: HashMap::new(),
       turn_auth: std::sync::Arc::new(crate::turn_server::TurnAuthenticator::new(callbacks)),
+      configured_turn_port: turn_port,
+      configured_turn_port_range: turn_port_range,
       turn_port: None,
       public_ip: None,
       public_port: None,
@@ -146,8 +155,10 @@ pub async fn run_event_loop(
   tx: mpsc::UnboundedSender<Command>,
   callbacks: Callbacks,
   role: NodeRole,
+  turn_port: Option<u16>,
+  turn_port_range: Option<(u16, u16)>,
 ) {
-  let mut state = EventLoopState::new(role, callbacks.clone());
+  let mut state = EventLoopState::new(role, callbacks.clone(), turn_port, turn_port_range);
   let mut keepalive_interval = tokio::time::interval(Duration::from_secs(60));
   let mut stats_interval = tokio::time::interval(Duration::from_secs(15));
   let mut provider_retry_interval = tokio::time::interval(Duration::from_secs(10));
@@ -325,10 +336,20 @@ pub(crate) fn try_start_turn_server(
       let turn_auth = state.turn_auth.clone();
       let tx_clone = tx.clone();
       let callbacks_clone = callbacks.clone();
-      let requested_port = state.public_port.unwrap_or(0);
+      let custom_port = state.configured_turn_port;
+      let custom_range = state.configured_turn_port_range;
+      let fallback_port = state.public_port.unwrap_or(0);
 
       tokio::spawn(async move {
-        match crate::turn_server::start_turn_server(public_ip.clone(), requested_port, turn_auth).await {
+        match crate::turn_server::start_turn_server(
+          public_ip.clone(),
+          custom_port,
+          custom_range,
+          fallback_port,
+          turn_auth,
+        )
+        .await
+        {
           Ok((port, handle)) => {
             let _ = tx_clone.send(Command::TurnServerStarted {
               port,
@@ -519,6 +540,26 @@ fn handle_command(
           .behaviour_mut()
           .kademlia
           .stop_providing(&libp2p::kad::RecordKey::new(&"mercury/turn_relays"));
+      }
+    }
+    Command::SetTurnPort(port) => {
+      if state.configured_turn_port_range.is_some() {
+        crate::node_log!(callbacks, 1, "Error: Both TURN exact port and port range specified");
+        return;
+      }
+      state.configured_turn_port = Some(port);
+      if state.is_turn_eligible {
+        try_start_turn_server(state, tx, callbacks);
+      }
+    }
+    Command::SetTurnPortRange(min_port, max_port) => {
+      if state.configured_turn_port.is_some() {
+        crate::node_log!(callbacks, 1, "Error: Both TURN exact port and port range specified");
+        return;
+      }
+      state.configured_turn_port_range = Some((min_port, max_port));
+      if state.is_turn_eligible {
+        try_start_turn_server(state, tx, callbacks);
       }
     }
     Command::StartProviding(key_bytes) => {
