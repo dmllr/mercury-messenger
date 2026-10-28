@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY mercury-llm-chatbot-bin /app/mercury-bot-aichatbot
+COPY mercury-bot-aichatbot-bin /app/mercury-bot-aichatbot
 RUN chmod +x /app/mercury-bot-aichatbot
 
 RUN mkdir -p /data/identity && \
