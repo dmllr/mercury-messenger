@@ -125,7 +125,7 @@ TEST_F(ContactServiceTest, ConfirmContact) {
   EXPECT_TRUE(contact_service_->IsConfirmed(peer1));
 
   bool signaling_sent = false;
-  for (auto const& [p, json] : mock_dt_->sent_jsons) {
+  for (auto const& [p, json] : mock_dt_->SentJsonsSnapshot()) {
     if (p == peer1 && json.value("type", "") == "crcp_confirm") {
       signaling_sent = true;
       break;
@@ -295,13 +295,14 @@ TEST_F(ContactServiceTest, ConfirmMessageCarriesProofFromPeer) {
 
   mock_dt_->MarkVerified(friend_id);
   mock_dt_->GetPeer(friend_id)->data_channel_is_open = true;
-  mock_dt_->sent_jsons.clear();
+  mock_dt_->ClearSent();
   contact_service_->ConfirmContact(friend_id);
 
-  auto const it = std::ranges::find_if(mock_dt_->sent_jsons, [&](auto const& p) {
+  auto const sent = mock_dt_->SentJsonsSnapshot();
+  auto const it = std::ranges::find_if(sent, [&](auto const& p) {
     return p.first == friend_id && p.second.value("type", "") == "crcp_confirm";
   });
-  ASSERT_NE(it, mock_dt_->sent_jsons.end());
+  ASSERT_NE(it, sent.end());
   ASSERT_TRUE(it->second.contains("proof"));
   // The proof we echo is the friend's signature over our ID - which the friend can verify with its own key.
   EXPECT_TRUE(crypto::Identity::Verify(

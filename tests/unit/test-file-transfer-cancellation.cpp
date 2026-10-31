@@ -220,7 +220,7 @@ class FileTransferAuthorizationTest : public FileTransferCancellationTest {
 
   [[nodiscard]] auto ChunksSentTo(ContactID const& id) const -> int {
     int count = 0;
-    for (auto const& [to, data] : mock_dt_->sent_data) {
+    for (auto const& [to, data] : mock_dt_->SentDataSnapshot()) {
       if (to == id && IsChunk(data)) ++count;
     }
     return count;

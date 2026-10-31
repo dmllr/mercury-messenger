@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -121,13 +122,32 @@ class MockDataTransport : public DataTransport::Interface {
   }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> data) -> bool override {
+    std::lock_guard const lock(sent_mutex_);
     sent_data.push_back({peer_id, std::vector<std::byte>(data.begin(), data.end())});
     return true;
   }
   auto SendJson(ContactID const& peer_id, nlohmann::json const& msg) -> bool override {
+    std::lock_guard const lock(sent_mutex_);
     sent_jsons.push_back({peer_id, msg});
     return true;
   }
+
+  // Thread-safe accessors for tests that inspect sends while background services are running.
+  [[nodiscard]] auto SentJsonsSnapshot() const -> std::vector<std::pair<ContactID, nlohmann::json>> {
+    std::lock_guard const lock(sent_mutex_);
+    return sent_jsons;
+  }
+  [[nodiscard]] auto SentDataSnapshot() const -> std::vector<std::pair<ContactID, std::vector<std::byte>>> {
+    std::lock_guard const lock(sent_mutex_);
+    return sent_data;
+  }
+  void ClearSent() {
+    std::lock_guard const lock(sent_mutex_);
+    sent_jsons.clear();
+    sent_data.clear();
+  }
+
+  mutable std::mutex sent_mutex_;
   void DiscoverTurnRelays() override {
   }
   void AuthTurnRelay(ContactID const&) override {
