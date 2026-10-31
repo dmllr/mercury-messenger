@@ -340,6 +340,11 @@ class SyncEngine {
       if (topic_id == TopicID(my_id_)) {
         topic_id = TopicID(transport_->GetMasterId(peer_id));
       }
+      if (!IsPeerAuthorizedForTopic(peer_id, topic_id)) {
+        LGW << "[Sync] Rejecting " << type << " from " << peer_id.ToString() << " for unauthorized topic "
+            << topic_id.ToString();
+        return;
+      }
       std::string const session_key = GetSessionKey(topic_id, peer_id);
 
       {
@@ -362,6 +367,32 @@ class SyncEngine {
     } catch (std::exception const& e) {
       LGE << "[Sync] Exception in ProcessSyncMessage: " << e.what();
     }
+  }
+
+  /// A peer may only sync topics it participates in: its own 1:1 conversation with us, groups/channels it is a
+  /// member of, or anything if it is one of our own verified devices. The topic in sync messages is peer-chosen.
+  [[nodiscard]] auto IsPeerAuthorizedForTopic(ContactID const& network_id, TopicID const& topic_id) const -> bool {
+    ContactID const master_id = transport_->GetMasterId(network_id);
+    if (master_id == my_id_) {
+      return true;
+    }
+    if (topic_id == TopicID(master_id)) {
+      return true;
+    }
+    auto const is_member = [&](auto const& members) -> bool {
+      return std::ranges::any_of(members, [&](auto const& m) -> bool { return m.contact_id == master_id; });
+    };
+    for (auto const& g : storage_->GetGroups()) {
+      if (TopicID(g.id) == topic_id) {
+        return is_member(g.members);
+      }
+    }
+    for (auto const& c : storage_->GetChannels()) {
+      if (TopicID(c.id) == topic_id) {
+        return is_member(c.members);
+      }
+    }
+    return false;
   }
 
   void AbortSync(ContactID const& target_master_id) {

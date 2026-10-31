@@ -446,3 +446,73 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
     EXPECT_EQ(entry->status, messaging::MessageStatus::read);
   }
 }
+
+// --- Security regression tests (audit H1): peers may only sync topics they participate in ---
+
+namespace {
+auto CountEntriesSentForTopic(transport::MockDataTransport const* mock, TopicID const& topic) -> size_t {
+  size_t count = 0;
+  for (auto const& [to, msg] : mock->sent_jsons) {
+    if (msg.value("topic", "") == topic.ToString() && msg.contains("entries")) {
+      count += msg["entries"].size();
+    }
+  }
+  return count;
+}
+}  // namespace
+
+TEST_F(SyncEngineTest, PeerCannotSyncForeignOneToOneTopic) {
+  ContactID const idC("aa4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e99");
+  A->InjectEntry(TopicID(idC), "private conversation with C", 1000, idC);
+
+  nlohmann::json const checkpoints = {
+      {"type", "sync_checkpoints"}, {"topic", TopicID(idC).ToString()}, {"checkpoints", {""}}
+  };
+  A->engine->ProcessSyncMessage(idB_, checkpoints);
+  nlohmann::json const batch = {
+      {"type", "sync_batch"},
+      {"topic", TopicID(idC).ToString()},
+      {"lca", ""},
+      {"batch_index", 0},
+      {"total_entries", 0},
+      {"entries", nlohmann::json::array()}
+  };
+  A->engine->ProcessSyncMessage(idB_, batch);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(CountEntriesSentForTopic(A->transport_mock, TopicID(idC)), 0U);
+}
+
+TEST_F(SyncEngineTest, PeerCannotSyncGroupItIsNotMemberOf) {
+  identity::Group g;
+  g.id = GroupID("bb4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e11");
+  g.owner_id = idA_;
+  g.members = {{idA_, 0}};
+  A->storage->AddGroup(g);
+  A->InjectEntry(TopicID(g.id), "group secret", 1000, idA_);
+
+  nlohmann::json const checkpoints = {
+      {"type", "sync_checkpoints"}, {"topic", TopicID(g.id).ToString()}, {"checkpoints", {""}}
+  };
+  A->engine->ProcessSyncMessage(idB_, checkpoints);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(CountEntriesSentForTopic(A->transport_mock, TopicID(g.id)), 0U);
+}
+
+TEST_F(SyncEngineTest, GroupMemberCanSyncGroup) {
+  identity::Group g;
+  g.id = GroupID("cc4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e22");
+  g.owner_id = idA_;
+  g.members = {{idA_, 0}, {idB_, 0}};
+  A->storage->AddGroup(g);
+  A->InjectEntry(TopicID(g.id), "group message", 1000, idA_);
+
+  nlohmann::json const checkpoints = {
+      {"type", "sync_checkpoints"}, {"topic", TopicID(g.id).ToString()}, {"checkpoints", {""}}
+  };
+  A->engine->ProcessSyncMessage(idB_, checkpoints);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(CountEntriesSentForTopic(A->transport_mock, TopicID(g.id)), 1U);
+}
