@@ -57,6 +57,8 @@ class ContactService {
                   {"profile", BuildMyProfileJson()}
               };
 
+              AttachApprovalProof(content, *contact);
+
               if (contact->status == identity::ContactStatus::pendingApproval) {
                 std::lock_guard<std::mutex> const t_lock(tokens_mutex_);
                 if (auto it = pending_tokens_.find(e.peer_id); it != pending_tokens_.end()) {
@@ -110,6 +112,9 @@ class ContactService {
       if (token) {
         content["token"] = crypto::ToHex(*token);
       }
+      if (existing) {
+        AttachApprovalProof(content, *existing);
+      }
 
       if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
         std::ignore = transport_->SendJson(peer_id, content);
@@ -161,11 +166,12 @@ class ContactService {
     auto const signature = sm_->account->Sign(peer_id.Span());
     manager_->StoreMySignatureFor(peer_id, signature);
 
-    Json const content = {
+    Json content = {
         {"type", "crcp_confirm"},
         {"signature", crypto::ToHex(signature)},
         {"profile", BuildMyProfileJson()}
     };
+    AttachApprovalProof(content, *contact);
     if (auto const peer = transport_->GetPeer(peer_id); peer && peer->data_channel_is_open) {
       std::ignore = transport_->SendJson(peer_id, content);
     }
@@ -313,6 +319,14 @@ class ContactService {
         return;
       }
 
+      if (!existing && HasValidApprovalProof(peer_id, json)) {
+        LGI << "CRCP request from unknown peer " << peer_id.ToString() << " carries proof of our prior approval.";
+        manager_->AddContact(peer_id);
+        OnContactConfirm(peer_id, sig, profile);
+        ConfirmContact(peer_id);
+        return;
+      }
+
       OnContactAddRequest(peer_id, token, profile, sig);
     } else if (type == "crcp_confirm") {
       std::string const signature_hex = json.value("signature", "");
@@ -328,10 +342,19 @@ class ContactService {
       if (auto existing = manager_->GetContact(peer_id); existing) {
         OnContactConfirm(peer_id, sig, profile);
       } else {
-        // Never auto-confirm: the signature only proves the sender owns its key, not that we approved it.
-        // Surface it as an incoming request (e.g. after restoring from mnemonic) so the user decides.
-        LGI << "Received crcp_confirm from unknown peer " << peer_id.ToString() << ". Treating as contact request.";
-        OnContactAddRequest(peer_id, std::nullopt, profile, sig);
+        // Auto-confirm only if the peer proves we approved it before (e.g. we restored from mnemonic and lost the
+        // contact list): `proof` must be OUR master signature over its ID. The peer's own `signature` over our
+        // public ID proves nothing - anyone can produce one. Without proof, surface it as an incoming request.
+        if (HasValidApprovalProof(peer_id, json)) {
+          LGI << "Received crcp_confirm from unknown peer " << peer_id.ToString()
+              << " with proof of prior approval. Auto-confirming.";
+          manager_->AddContact(peer_id);
+          OnContactConfirm(peer_id, sig, profile);
+        } else {
+          LGI << "Received crcp_confirm from unknown peer " << peer_id.ToString() << " without approval proof. "
+              << "Treating as contact request.";
+          OnContactAddRequest(peer_id, std::nullopt, profile, sig);
+        }
       }
     } else if (type == "crcp_reject") {
       OnContactRemoved(peer_id);
@@ -460,6 +483,21 @@ class ContactService {
   }
 
  private:
+  /// Proof that we approved `peer_id` in the past: our master signature over its ID, which only we can produce.
+  /// The peer stores it (as its `signature_from_them` for us) and echoes it back as `proof`.
+  [[nodiscard]] auto HasValidApprovalProof(ContactID const& peer_id, Json const& json) const -> bool {
+    auto const proof = crypto::FromHex(json.value("proof", ""));
+    return !proof.empty() && crypto::Identity::Verify(sm_->account->GetId().Span(), peer_id.Span(), proof);
+  }
+
+  /// Echo the signature the peer gave us (its master key over our ID) so it can recognise a prior approval after
+  /// losing its contact list.
+  static void AttachApprovalProof(Json& content, identity::Contact const& contact) {
+    if (contact.signature_from_them && !contact.signature_from_them->empty()) {
+      content["proof"] = crypto::ToHex(*contact.signature_from_them);
+    }
+  }
+
   Json BuildMyProfileJson() const {
     Json profile = Json::object();
     if (auto name = sm_->account->GetSettings()->GetMyDisplayName(); name && !name->empty()) {
