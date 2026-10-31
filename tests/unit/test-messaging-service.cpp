@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cctype>
+#include <set>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -275,4 +277,34 @@ TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
       std::chrono::milliseconds(2000)
   );
   EXPECT_TRUE(read_recorded);
+}
+
+// --- Security regression (audit H3): attachment IDs are 128-bit CSPRNG hex strings ---
+
+TEST_F(MessagingServiceTest, AttachmentIdsAreRandom128BitHex) {
+  std::set<std::string> ids;
+  for (int i = 0; i < 3; ++i) {
+    auto const file_path = (temp_dir_ / ("id_test_" + std::to_string(i) + ".txt")).string();
+    std::ofstream(file_path) << "data" << i;
+    std::vector<messaging::AttachmentRequest> atts;
+    atts.push_back({file_path, messaging::AttachmentType::file, "", "text/plain", ""});
+    client_->SendChatMessage(TopicID(peer1), "Msg", atts);
+  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return storage_->GetLedgerEntries(TopicID(peer1)).size() >= 3; },
+      std::chrono::milliseconds(3000)
+  );
+
+  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
+    auto const json = nlohmann::json::parse(entry.payload);
+    if (!json.contains("attachments")) continue;
+    for (auto const& att : json["attachments"]) {
+      std::string const id = att.value("id", "");
+      EXPECT_EQ(id.size(), 32U) << id;
+      EXPECT_TRUE(std::ranges::all_of(id, [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }))
+          << id;
+      ids.insert(id);
+    }
+  }
+  EXPECT_EQ(ids.size(), 3U);
 }

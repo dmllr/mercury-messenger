@@ -4,6 +4,8 @@
 #include <memory>
 #include <optional>
 #include <random>
+
+#include <openssl/rand.h>
 #include <string>
 #include <vector>
 
@@ -20,10 +22,10 @@ namespace eillance::messaging {
 
 inline auto GenerateMessageId() -> std::uint64_t {
   std::uint64_t const now_ms = Time::Now() / 1000ULL;
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
-  std::uniform_int_distribution<uint64_t> dis(0, 524287);  // 19 bits
-  return (now_ms << 19) | dis(gen);
+  // 19 random low bits from a CSPRNG (std::mt19937 seeded with 32 bits is predictable).
+  std::uint32_t rnd = 0;
+  RAND_bytes(reinterpret_cast<unsigned char*>(&rnd), sizeof(rnd));  // NOLINT(*-reinterpret-cast)
+  return (now_ms << 19) | (rnd & 0x7FFFFU);
 }
 
 class MessageHistory {

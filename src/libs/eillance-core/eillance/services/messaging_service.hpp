@@ -5,6 +5,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -17,6 +18,8 @@
 #include <unordered_set>
 #include <variant>
 #include <vector>
+
+#include <openssl/rand.h>
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
@@ -1164,13 +1167,12 @@ class MessagingService {
     }
   }
 
+  /// 128-bit random attachment ID (32 hex chars). Attachment IDs act as capabilities for file transfer,
+  /// so they must come from a CSPRNG.
   static auto GenerateAttachmentId() -> std::string {
-    static std::random_device random_device;
-    static std::mt19937 gen(random_device());
-    static std::uniform_int_distribution<uint64_t> dis;
-    std::stringstream sstream;
-    sstream << std::hex << dis(gen) << dis(gen);
-    return sstream.str();
+    std::array<std::byte, 16> bytes{};
+    RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()), static_cast<int>(bytes.size()));  // NOLINT
+    return crypto::ToHex(std::span<std::byte const>(bytes));
   }
 
   void FlushDeliveryReceipts(TopicID const& topic_id) {
