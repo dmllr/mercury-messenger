@@ -146,6 +146,14 @@ class InternalMessagingService {
     }
 
     if (type.starts_with("crcp_")) {
+      // crcp_request/crcp_confirm carry their own signatures. Unsigned control messages are only accepted over a
+      // session whose master identity was verified in key exchange.
+      if (type != "crcp_request" && type != "crcp_confirm") {
+        if (auto const p = data_transport_->GetPeer(network_id); !p || !p->crcp_verified) {
+          LGW << "Dropping " << type << " from unverified peer " << network_id.ToString();
+          return;
+        }
+      }
       sm_->contact->ProcessCrcpMessage(master_id, network_id, message);
       return;
     }

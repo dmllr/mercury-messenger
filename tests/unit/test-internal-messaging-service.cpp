@@ -209,3 +209,37 @@ TEST_F(KeyExchangeSecurityTest, AcceptsDeviceSignedByClaimedMaster) {
   EXPECT_TRUE(IsVerified(device_id));
   EXPECT_EQ(mock_transport_->GetMasterId(device_id), contact_id_);
 }
+
+// --- Security regression tests (audit M4): unsigned CRCP control messages need a verified session ---
+
+namespace {
+void PushJson(ContactID const& from, nlohmann::json const& j) {
+  std::string const str = j.dump();
+  std::vector<std::byte> bytes(str.size());
+  std::memcpy(bytes.data(), str.data(), str.size());
+  eillance::EventQueue::Instance().Push(EventDataChannelMessage{from, bytes});
+  eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
+}
+}  // namespace
+
+TEST_F(KeyExchangeSecurityTest, CrcpRejectFromUnverifiedSessionIsIgnored) {
+  client_->Connect(contact_id_);
+  ASSERT_FALSE(IsVerified(contact_id_));
+
+  PushJson(contact_id_, {{"type", "crcp_reject"}});
+
+  auto const contact = client_->Contacts()->GetContact(contact_id_);
+  ASSERT_TRUE(contact.has_value());
+  EXPECT_EQ(contact->status, identity::ContactStatus::confirmed);
+}
+
+TEST_F(KeyExchangeSecurityTest, CrcpRejectFromVerifiedSessionIsApplied) {
+  SendKeyExchange(contact_id_, std::nullopt, contact_ident_->Sign(contact_id_.Span()));
+  ASSERT_TRUE(IsVerified(contact_id_));
+
+  PushJson(contact_id_, {{"type", "crcp_reject"}});
+
+  auto const contact = client_->Contacts()->GetContact(contact_id_);
+  ASSERT_TRUE(contact.has_value());
+  EXPECT_EQ(contact->status, identity::ContactStatus::rejected);
+}
