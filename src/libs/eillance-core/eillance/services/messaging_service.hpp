@@ -24,6 +24,7 @@
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/group_manager.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/messaging/attachment_paths.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
@@ -59,7 +60,13 @@ auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
   return ".dat";
 }
 
-auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& filename) -> std::filesystem::path {
+auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& untrusted_filename)
+    -> std::filesystem::path {
+  // File names may come from remote peers: always reduce them to a single safe path component.
+  std::string filename = messaging::SanitizeAttachmentFileName(untrusted_filename);
+  if (filename.empty()) {
+    filename = "attachment.dat";
+  }
   std::filesystem::path candidate = dir / filename;
   if (!std::filesystem::exists(candidate)) {
     return candidate;
@@ -408,7 +415,13 @@ class MessagingService {
     auto att = storage_->GetAttachment(attachment_id);
     if (att && att->is_downloaded) {
       std::error_code ec;
-      std::filesystem::remove(att->file_path, ec);
+      std::filesystem::path const attachments_dir =
+          std::filesystem::path(storage_->GetPath()).parent_path() / "attachments";
+      if (messaging::IsPathInsideDirectory(attachments_dir, att->file_path)) {
+        std::filesystem::remove(att->file_path, ec);
+      } else {
+        LGW << "Refusing to delete attachment file outside attachments directory: " << att->file_path;
+      }
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
       EventQueue::Instance().Push(
           EventAttachmentStatusChanged{topic_id, attachment_id, messaging::AttachmentStatus::discarded}
@@ -984,6 +997,11 @@ class MessagingService {
         att.note = j_att.value("note", "");
         att.file_name = j_att.value("name", "");
 
+        if (!messaging::IsValidAttachmentId(att.id)) {
+          LGW << "Dropping incoming attachment with invalid id from " << entry.author_id.ToString();
+          continue;
+        }
+
         att.is_downloaded = false;
         att.status = messaging::AttachmentStatus::pending;
         std::string filename = att.file_name;
@@ -1051,6 +1069,13 @@ class MessagingService {
     if (!local_attachments.empty()) {
       std::error_code err;
       std::filesystem::create_directories(attachments_dir, err);
+      std::erase_if(local_attachments, [](messaging::Attachment const& att) -> bool {
+        if (!messaging::IsValidAttachmentId(att.id)) {
+          LGW << "Dropping incoming attachment with invalid id";
+          return true;
+        }
+        return false;
+      });
       for (auto& att : local_attachments) {
         std::string filename = att.file_name;
         if (filename.empty()) {

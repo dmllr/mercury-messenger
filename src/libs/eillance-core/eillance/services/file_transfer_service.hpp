@@ -19,6 +19,7 @@
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/messaging/attachment_paths.hpp"
 #include "eillance/messaging/types.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
@@ -426,6 +427,19 @@ class FileTransferService {
     active_downloads_.erase(iterator);
     lock.unlock();
 
+    if (!messaging::IsPathInsideDirectory(temp_path.parent_path(), final_path)) {
+      LGE << "Refusing to finalize attachment outside attachments directory: " << file_id;
+      std::error_code ignored;
+      std::filesystem::remove(temp_path, ignored);
+      std::filesystem::remove(progress_path, ignored);
+      storage_->UpdateAttachmentStatus(file_id, messaging::AttachmentStatus::failed, false);
+      EventQueue::Instance().Push(
+          EventAttachmentStatusChanged{TopicID(peer_id), file_id, messaging::AttachmentStatus::failed}
+      );
+      TriggerNextTransfers();
+      return;
+    }
+
     if (auto const calc_hash = crypto::CalculateFileHash(temp_path); calc_hash == expected) {
       std::error_code error_code;
       std::filesystem::rename(temp_path, final_path, error_code);
@@ -501,6 +515,14 @@ class FileTransferService {
     std::filesystem::create_directories(attachments_dir, error_code);
     if (error_code) {
       LGE << "Failed to create attachments directory: " << error_code.message();
+      TriggerNextTransfers();
+      return;
+    }
+
+    if (!messaging::IsValidAttachmentId(attachment.id) ||
+        !messaging::IsPathInsideDirectory(attachments_dir, attachment.file_path)) {
+      LGE << "Refusing download of attachment with unsafe id or path: " << attachment.id;
+      storage_->UpdateAttachmentStatus(attachment.id, messaging::AttachmentStatus::failed, false);
       TriggerNextTransfers();
       return;
     }

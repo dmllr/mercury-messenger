@@ -326,3 +326,66 @@ TEST_F(FileTransferResilienceTest, ChunkArrivesBeforeLedgerSyncDoesNotCancel) {
 
   EXPECT_TRUE(missing_sent) << "Should resume download and send Missing request after ledger sync";
 }
+
+// --- Security regression tests (audit C3): peer-supplied attachment names/ids must not escape attachments dir ---
+
+TEST_F(FileTransferResilienceTest, IncomingAttachmentNameCannotTraverse) {
+  std::string const file_data = "owned";
+  std::string const att_id = "traversal_id";
+  std::filesystem::path const outside = temp_dir_ / "evil.txt";
+
+  bool completed = false;
+  auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
+    if (e.attachment_id == att_id) completed = true;
+  });
+
+  nlohmann::json payload_msg;
+  payload_msg["type"] = "chat";
+  payload_msg["message_id"] = 9101;
+  payload_msg["payload"] = {{"c", "hi"}, {"v", 2}};
+  payload_msg["attachments"] = nlohmann::json::array(
+      {{{"id", att_id},
+        {"type", static_cast<int>(messaging::AttachmentType::file)},
+        {"mime", "text/plain"},
+        {"size", file_data.size()},
+        {"hash", crypto::Sha256Hex(file_data)},
+        {"name", "../evil.txt"}}}
+  );
+
+  messaging::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  client_->Messaging()->ProjectMessage(entry, payload_msg, false);
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
+
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, CreateChunkPacket(att_id, 0, StringToBytes(file_data))});
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, CreateEndPacket(att_id)});
+  EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::seconds(2));
+  EventQueue::Instance().Unsubscribe(sub);
+
+  EXPECT_FALSE(std::filesystem::exists(outside));
+  EXPECT_TRUE(std::filesystem::exists(attachments_dir_ / "evil.txt"));
+}
+
+TEST_F(FileTransferResilienceTest, IncomingAttachmentWithTraversingIdIsDropped) {
+  nlohmann::json payload_msg;
+  payload_msg["type"] = "chat";
+  payload_msg["message_id"] = 9102;
+  payload_msg["payload"] = {{"c", "hi"}, {"v", 2}};
+  payload_msg["attachments"] = nlohmann::json::array(
+      {{{"id", "../../escaped"},
+        {"type", static_cast<int>(messaging::AttachmentType::file)},
+        {"mime", "text/plain"},
+        {"size", 5},
+        {"hash", crypto::Sha256Hex(std::string("owned"))}}}
+  );
+
+  messaging::LedgerEntry entry;
+  entry.topic_id = TopicID(peer1);
+  entry.author_id = peer1;
+  client_->Messaging()->ProjectMessage(entry, payload_msg, false);
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(100));
+
+  EXPECT_FALSE(std::filesystem::exists(temp_dir_.parent_path() / "escaped.tmp"));
+  EXPECT_FALSE(storage_->GetAttachment("../../escaped").has_value());
+}

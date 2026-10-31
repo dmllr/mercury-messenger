@@ -276,7 +276,7 @@ TEST_F(ConversationViewModelTest, ResumeTransferPropagates) {
   att.status = messaging::AttachmentStatus::paused;
   att.is_downloaded = false;
   att.size_bytes = 100;
-  att.file_path = "resume-test-id.dat";
+  att.file_path = (temp_dir_ / "attachments" / "resume-test-id.dat").string();
 
   messaging::ChatMessageEntry msg_data;
   msg_data.message.attachments.push_back(att);
