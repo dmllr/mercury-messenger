@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -18,9 +19,13 @@
 
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
+#include "eillance/identity/channel_manager.hpp"
+#include "eillance/identity/contact_manager.hpp"
+#include "eillance/identity/group_manager.hpp"
 #include "eillance/logging/logging.hpp"
 #include "eillance/messaging/attachment_paths.hpp"
 #include "eillance/messaging/types.hpp"
+#include "eillance/services/account_service.hpp"
 #include "eillance/services/service_manager.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
@@ -40,6 +45,10 @@ class FileTransferService {
         transport_(sm->data_transport) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventDataChannelMessage>([this](auto const& e) -> void {
       if (!e.message.empty() && e.message[0] == std::byte{0xFE}) {
+        if (!IsTransferPeerAuthorized(e.peer_id)) {
+          LGW << "Dropping file transfer message from unverified or unconfirmed peer " << e.peer_id.ToString();
+          return;
+        }
         ContactID master_id = transport_->GetMasterId(e.peer_id);
         ProcessBinaryMessage(master_id, e.message);
       }
@@ -377,6 +386,9 @@ class FileTransferService {
   }
 
   void HandleCancel(ContactID const& peer_id, std::string const& file_id) {
+    if (!CanPeerAccessAttachment(peer_id, file_id)) {
+      return;
+    }
     auto const key = peer_id.ToString() + "_" + file_id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
@@ -404,6 +416,54 @@ class FileTransferService {
   }
 
  private:
+  /// File transfer messages are only accepted from peers that completed key exchange and are either
+  /// one of our own devices or a confirmed contact.
+  [[nodiscard]] auto IsTransferPeerAuthorized(ContactID const& network_id) const -> bool {
+    auto const peer = transport_->GetPeer(network_id);
+    if (!peer || !peer->crcp_verified) {
+      return false;
+    }
+    ContactID const master_id = transport_->GetMasterId(network_id);
+    if (master_id == sm_->account->GetId()) {
+      return true;
+    }
+    auto const contact = sm_->contact_manager->GetContact(master_id);
+    return contact && contact->status == identity::ContactStatus::confirmed;
+  }
+
+  /// A peer may only request/control an attachment that was shared in a conversation it is part of.
+  [[nodiscard]] auto CanPeerAccessAttachment(ContactID const& master_id, std::string const& file_id) const -> bool {
+    if (master_id == sm_->account->GetId()) {
+      return true;  // our own verified devices sync everything
+    }
+    auto const topic_has = [&](TopicID const& topic) -> bool {
+      return std::ranges::any_of(storage_->GetAllAttachments(topic), [&](messaging::Attachment const& a) -> bool {
+        return a.id == file_id;
+      });
+    };
+    if (topic_has(TopicID(master_id))) {
+      return true;
+    }
+    auto const is_member = [&](auto const& members) -> bool {
+      return std::ranges::any_of(members, [&](auto const& m) -> bool { return m.contact_id == master_id; });
+    };
+    if (sm_->group_manager) {
+      for (auto const& g : sm_->group_manager->GetGroups()) {
+        if (is_member(g.members) && topic_has(TopicID(g.id))) {
+          return true;
+        }
+      }
+    }
+    if (sm_->channel_manager) {
+      for (auto const& c : sm_->channel_manager->GetChannels()) {
+        if (is_member(c.members) && topic_has(TopicID(c.id))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   static constexpr std::byte magicByte{0xFE};
   static constexpr std::size_t headerMinSize = 3;
   static constexpr std::size_t sequenceSize = 4;
@@ -676,6 +736,9 @@ class FileTransferService {
   }
 
   void HandlePause(ContactID const& peer_id, std::string const& file_id) {
+    if (!CanPeerAccessAttachment(peer_id, file_id)) {
+      return;
+    }
     auto const key = peer_id.ToString() + "_" + file_id;
     {
       std::lock_guard<std::mutex> const lock(transfers_mutex_);
@@ -701,6 +764,12 @@ class FileTransferService {
         transfer_queue_.Dispatch([this, peer_id, file_id]() -> void { PumpUploadBatch(peer_id, file_id); });
       }
     } else {
+      lock.unlock();
+      if (!CanPeerAccessAttachment(peer_id, file_id)) {
+        LGW << "Peer " << peer_id.ToString() << " requested attachment it has no access to: " << file_id;
+        return;
+      }
+      lock.lock();
       auto attachment = storage_->GetAttachment(file_id);
       if (attachment && attachment->status != messaging::AttachmentStatus::discarded) {
         upload_queue_.push_front({peer_id, file_id, 0});
@@ -1101,7 +1170,8 @@ class FileTransferService {
       std::memcpy(missing.data(), payload.data(), payload.size());
     }
 
-    auto const attachment = storage_->GetAttachment(file_id);
+    auto const attachment = CanPeerAccessAttachment(peer_id, file_id) ? storage_->GetAttachment(file_id)
+                                                                      : std::optional<messaging::Attachment>{};
     if (!attachment || attachment->status == messaging::AttachmentStatus::discarded ||
         attachment->status == messaging::AttachmentStatus::canceled ||
         attachment->status == messaging::AttachmentStatus::peerCanceled) {

@@ -45,6 +45,7 @@ class FileTransferResilienceTest : public ::testing::Test {
     client_->Contacts()->ReloadCache();
 
     client_->Start();
+    mock_dt_->MarkVerified(peer1);
   }
 
   void TearDown() override {
@@ -158,6 +159,7 @@ TEST_F(FileTransferResilienceTest, TransferProgressAndFileCreation) {
   constexpr auto chunk_size = services::FileTransferService::chunkSizeBytes;
   size_t const total_chunks = (file_data.size() + chunk_size - 1) / chunk_size;
 
+  mock_dt_->MarkVerified(peer1);
   for (size_t seq = 0; seq < total_chunks; ++seq) {
     size_t const offset = seq * chunk_size;
     std::string const chunk_str = file_data.substr(offset, chunk_size);
@@ -204,6 +206,7 @@ TEST_F(FileTransferResilienceTest, FailsGracefullyIfHashMismatch) {
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
   std::string const data = "0123456789";
+  mock_dt_->MarkVerified(peer1);
   auto chunk = CreateChunkPacket("bad_hash_file", 0, StringToBytes(data));
   EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
 
@@ -267,6 +270,7 @@ TEST_F(FileTransferResilienceTest, ChunkArrivesBeforeLedgerSyncDoesNotCancel) {
   std::string att_id = "racing_attachment_id";
 
   // Simulate receiving a chunk for an unknown attachment
+  mock_dt_->MarkVerified(peer1);
   auto chunk = CreateChunkPacket(att_id, 0, StringToBytes("chunk data"));
   EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
 
@@ -358,6 +362,7 @@ TEST_F(FileTransferResilienceTest, IncomingAttachmentNameCannotTraverse) {
   client_->Messaging()->ProjectMessage(entry, payload_msg, false);
   EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
 
+  mock_dt_->MarkVerified(peer1);
   EventQueue::Instance().Push(EventDataChannelMessage{peer1, CreateChunkPacket(att_id, 0, StringToBytes(file_data))});
   EventQueue::Instance().Push(EventDataChannelMessage{peer1, CreateEndPacket(att_id)});
   EventQueue::Instance().WaitFor([&] { return completed; }, std::chrono::seconds(2));

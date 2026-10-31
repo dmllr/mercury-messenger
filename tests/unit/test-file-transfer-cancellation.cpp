@@ -34,13 +34,16 @@ class FileTransferCancellationTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_dt_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     std::ignore = client_->GenerateNewIdentity();
     mock_storage_->UpdateContact({peer1, identity::ContactStatus::confirmed});
     client_->Contacts()->ReloadCache();
     client_->Start();
+    mock_dt_->MarkVerified(peer1);
   }
 
   void TearDown() override {
@@ -83,6 +86,7 @@ class FileTransferCancellationTest : public ::testing::Test {
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
+  transport::MockDataTransport* mock_dt_{};
 
   ContactID const peer1 = ContactID("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
 };
@@ -144,6 +148,7 @@ TEST_F(FileTransferCancellationTest, CancelDownload_PausesDownload) {
   );
 
   std::vector<std::byte> const payload = {std::byte{0x00}, std::byte{0x11}, std::byte{0x22}};
+  mock_dt_->MarkVerified(peer1);
   auto chunk = CreateChunkPacket("down_id", 0, payload);
 
   EventQueue::Instance().Push(EventDataChannelMessage{peer1, chunk});
@@ -184,4 +189,97 @@ TEST_F(FileTransferCancellationTest, ResumeSendsRequest) {
       },
       std::chrono::milliseconds(2000)
   );
+}
+
+// --- Security regression tests (audit H2): file transfer control messages require authorization ---
+
+namespace {
+auto ControlPacket(std::uint8_t type, std::string const& id) -> std::vector<std::byte> {
+  std::vector<std::byte> packet{std::byte{0xFE}, std::byte{type}, static_cast<std::byte>(id.size())};
+  for (char c : id) packet.push_back(static_cast<std::byte>(c));
+  return packet;
+}
+}  // namespace
+
+class FileTransferAuthorizationTest : public FileTransferCancellationTest {
+ protected:
+  void SetUp() override {
+    FileTransferCancellationTest::SetUp();
+    att_.id = "private_att";
+    att_.is_downloaded = true;
+    att_.file_path = (temp_dir_ / "private.dat").string();
+    std::ofstream(att_.file_path) << "secret-content";
+    att_.size_bytes = 14;
+    att_.hash = crypto::CalculateFileHash(att_.file_path);
+    att_.status = messaging::AttachmentStatus::done;
+
+    messaging::ChatMessageEntry msg_data;
+    msg_data.message.attachments.push_back(att_);
+    std::ignore = storage_->AddHistoryEntry({.data = msg_data, .topic_id = TopicID(peer1), .author_id = peer1});
+  }
+
+  [[nodiscard]] auto ChunksSentTo(ContactID const& id) const -> int {
+    int count = 0;
+    for (auto const& [to, data] : mock_dt_->sent_data) {
+      if (to == id && IsChunk(data)) ++count;
+    }
+    return count;
+  }
+
+  [[nodiscard]] static auto IsChunk(std::vector<std::byte> const& data) -> bool {
+    return data.size() >= 2 && data[0] == std::byte{0xFE} && data[1] == std::byte{0x01};
+  }
+
+  messaging::Attachment att_;
+};
+
+TEST_F(FileTransferAuthorizationTest, UnverifiedStrangerCannotPullAttachment) {
+  std::string mnemonic;
+  ContactID const stranger(crypto::Identity::CreateNew(mnemonic)->GetPublicKey());
+
+  EventQueue::Instance().Push(EventDataChannelMessage{stranger, ControlPacket(0x07, att_.id)});
+  EventQueue::Instance().Push(EventDataChannelMessage{stranger, ControlPacket(0x05, att_.id)});
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(300));
+
+  EXPECT_EQ(ChunksSentTo(stranger), 0);
+}
+
+TEST_F(FileTransferAuthorizationTest, ConfirmedContactCannotPullOtherConversationsAttachment) {
+  std::string mnemonic;
+  ContactID const other(crypto::Identity::CreateNew(mnemonic)->GetPublicKey());
+  mock_storage_->UpdateContact({other, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+  mock_dt_->MarkVerified(other);
+  mock_dt_->GetPeer(other)->data_channel_is_open = true;
+
+  EventQueue::Instance().Push(EventDataChannelMessage{other, ControlPacket(0x07, att_.id)});
+  EventQueue::Instance().Push(EventDataChannelMessage{other, ControlPacket(0x05, att_.id)});
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(300));
+
+  EXPECT_EQ(ChunksSentTo(other), 0);
+}
+
+TEST_F(FileTransferAuthorizationTest, ConfirmedContactCannotCancelOtherConversationsAttachment) {
+  std::string mnemonic;
+  ContactID const other(crypto::Identity::CreateNew(mnemonic)->GetPublicKey());
+  mock_storage_->UpdateContact({other, identity::ContactStatus::confirmed});
+  client_->Contacts()->ReloadCache();
+  mock_dt_->MarkVerified(other);
+
+  EventQueue::Instance().Push(EventDataChannelMessage{other, ControlPacket(0x03, att_.id)});
+  EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(200));
+
+  auto const db_att = storage_->GetAttachment(att_.id);
+  ASSERT_TRUE(db_att.has_value());
+  EXPECT_NE(db_att->status, messaging::AttachmentStatus::peerCanceled);
+}
+
+TEST_F(FileTransferAuthorizationTest, ConversationPeerCanPullAttachment) {
+  mock_dt_->MarkVerified(peer1);
+  mock_dt_->GetPeer(peer1)->data_channel_is_open = true;
+
+  EventQueue::Instance().Push(EventDataChannelMessage{peer1, ControlPacket(0x07, att_.id)});
+  EventQueue::Instance().WaitFor([&] { return ChunksSentTo(peer1) > 0; }, std::chrono::milliseconds(2000));
+
+  EXPECT_GT(ChunksSentTo(peer1), 0);
 }

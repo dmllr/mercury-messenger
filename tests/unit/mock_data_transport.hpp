@@ -49,6 +49,16 @@ class MockDataTransport : public DataTransport::Interface {
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
     peers_[peer_id] = peer;
   }
+  // Test helper: simulate a peer that completed a verified key exchange.
+  void MarkVerified(ContactID const& peer_id) {
+    auto p = GetPeer(peer_id);
+    if (!p) {
+      p = std::make_shared<Peer>(peer_id);
+      peers_[peer_id] = p;
+    }
+    p->crcp_verified = true;
+  }
+
   void RemovePeer(ContactID const& peer_id) override {
     peers_.erase(peer_id);
   }
