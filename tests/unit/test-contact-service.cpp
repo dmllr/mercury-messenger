@@ -166,3 +166,59 @@ TEST_F(ContactServiceTest, UnblockContact) {
   // Should revert to awaiting approval or similar non-blocked state
   EXPECT_NE(contact->status, identity::ContactStatus::rejected);
 }
+
+// --- Security regression tests (audit C2): crcp_confirm must not bypass approval ---
+
+TEST_F(ContactServiceTest, CrcpConfirmFromUnknownPeerDoesNotConfirm) {
+  std::string mnemonic;
+  auto const stranger = crypto::Identity::CreateNew(mnemonic);
+  ContactID const stranger_id(stranger->GetPublicKey());
+
+  nlohmann::json const msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(stranger->Sign(client_->GetId().Span()))},
+      {"profile", {{"display_name", "Stranger"}}}
+  };
+  contact_service_->ProcessCrcpMessage(stranger_id, stranger_id, msg);
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(stranger_id));
+  auto const contact = contact_service_->GetContact(stranger_id);
+  ASSERT_TRUE(contact.has_value());
+  EXPECT_EQ(contact->status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ContactServiceTest, CrcpConfirmForOurPendingRequestConfirms) {
+  std::string mnemonic;
+  auto const friend_ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(friend_ident->GetPublicKey());
+
+  contact_service_->AddContact(friend_id, std::nullopt);
+  ASSERT_EQ(contact_service_->GetContact(friend_id)->status, identity::ContactStatus::pendingApproval);
+
+  nlohmann::json const msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(friend_ident->Sign(client_->GetId().Span()))},
+      {"profile", nlohmann::json::object()}
+  };
+  contact_service_->ProcessCrcpMessage(friend_id, friend_id, msg);
+
+  EXPECT_TRUE(contact_service_->IsConfirmed(friend_id));
+}
+
+TEST_F(ContactServiceTest, CrcpConfirmFromBlockedPeerDoesNotConfirm) {
+  std::string mnemonic;
+  auto const ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const id(ident->GetPublicKey());
+
+  contact_service_->AddContact(id, std::nullopt);
+  contact_service_->BlockContact(id, false);
+
+  nlohmann::json const msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(ident->Sign(client_->GetId().Span()))},
+      {"profile", nlohmann::json::object()}
+  };
+  contact_service_->ProcessCrcpMessage(id, id, msg);
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(id));
+}

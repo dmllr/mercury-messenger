@@ -328,9 +328,10 @@ class ContactService {
       if (auto existing = manager_->GetContact(peer_id); existing) {
         OnContactConfirm(peer_id, sig, profile);
       } else {
-        LGI << "Received crcp_confirm from unknown peer (possibly restored from mnemonic). Auto-confirming.";
-        manager_->AddContact(peer_id);
-        OnContactConfirm(peer_id, sig, profile);
+        // Never auto-confirm: the signature only proves the sender owns its key, not that we approved it.
+        // Surface it as an incoming request (e.g. after restoring from mnemonic) so the user decides.
+        LGI << "Received crcp_confirm from unknown peer " << peer_id.ToString() << ". Treating as contact request.";
+        OnContactAddRequest(peer_id, std::nullopt, profile, sig);
       }
     } else if (type == "crcp_reject") {
       OnContactRemoved(peer_id);
