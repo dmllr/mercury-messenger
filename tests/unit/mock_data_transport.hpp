@@ -24,6 +24,7 @@ class MockDataTransport : public DataTransport::Interface {
 
   std::vector<std::pair<ContactID, nlohmann::json>> sent_jsons;
   std::vector<std::pair<ContactID, std::vector<std::byte>>> sent_data;
+  std::unordered_map<ContactID, ContactID> device_to_master_;
 
   void SetId(ContactID const& id) override {
     id_ = id;
@@ -70,9 +71,13 @@ class MockDataTransport : public DataTransport::Interface {
     return PeerConnectionState::disconnected;
   }
   [[nodiscard]] auto GetMasterId(ContactID const& network_id) const -> ContactID override {
-    return network_id;
+    auto const it = device_to_master_.find(network_id);
+    return it != device_to_master_.end() ? it->second : network_id;
   }
   void LinkDeviceToMaster(ContactID const& network_id, ContactID const& master_id) override {
+    if (network_id != master_id) {
+      device_to_master_[network_id] = master_id;
+    }
   }
 
   void Connect(ContactID const& peer_id) override {

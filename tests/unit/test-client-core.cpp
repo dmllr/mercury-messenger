@@ -74,7 +74,8 @@ TEST_F(ClientCoreTest, IncomingKeyExchangeTriggersReply) {
   });
 
   eillance::crypto::SessionCipher dummy_cipher;
-  auto test_sig = peer_ident_->Sign(client_->GetId().Span());
+  // Valid key exchange proof: the peer's master key signs its own network (device) ID.
+  auto test_sig = peer_ident_->Sign(peer1.Span());
   nlohmann::json const key_msg = {
       {"type", "key_exchange"},
       {"key", std::vector<std::byte>()},

@@ -333,28 +333,11 @@ class InternalMessagingService {
       auto const sig_hex = message.value("signature", "");
       auto sig = crypto::FromHex(sig_hex);
 
-      auto my_device_id = ContactID(sm_->account->GetDevicePublicKey());
-      auto my_master_id = sm_->account->GetId();
-
-      bool verified = false;
-      if (!sig.empty()) {
-        // Primary (New secure behavior): Check if remote master signed remote device ID
-        if (crypto::Identity::Verify(master_id.Span(), network_id.Span(), sig)) {
-          verified = true;
-        }
-        // Fallback 1: Check if remote master signed our local device ID (backwards compatibility)
-        else if (crypto::Identity::Verify(master_id.Span(), my_device_id.Span(), sig)) {
-          verified = true;
-        }
-        // Fallback 2: Check if remote master signed our local master ID (backwards compatibility)
-        else if (crypto::Identity::Verify(master_id.Span(), my_master_id.Span(), sig)) {
-          verified = true;
-        }
-        // Fallback 3: Check if remote device signed our local device ID
-        else if (crypto::Identity::Verify(network_id.Span(), my_device_id.Span(), sig)) {
-          verified = true;
-        }
-      }
+      // The claimed master identity (m_id) is attacker-controlled. The only acceptable proof is a signature by
+      // that master key over the remote device's network ID (which the transport already authenticates).
+      // Do NOT add fallbacks that verify against our own IDs or against the remote device key: those let any
+      // device claim an arbitrary master ID (including ours) and impersonate it.
+      bool const verified = !sig.empty() && crypto::Identity::Verify(master_id.Span(), network_id.Span(), sig);
 
       if (verified) {
         peer->crcp_verified = true;
