@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -336,6 +337,8 @@ struct LedgerEntry {
   std::string payload;
   LedgerHash prev_hash;
   LedgerHash hash;
+  // Ed25519 signature by author_id over LedgerSigningBytes() (empty for legacy entries).
+  std::vector<std::byte> signature{};
 };
 
 struct SyncRequest {

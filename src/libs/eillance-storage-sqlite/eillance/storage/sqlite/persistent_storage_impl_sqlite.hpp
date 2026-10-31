@@ -511,16 +511,10 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
     SQLiteStatement const s(
         db_,
-        "INSERT INTO ledger_entries (topic_id, author_id, created_at, type, payload, prev_hash, hash) VALUES (?, ?, ?, "
-        "?, ?, ?, ?);"
+        "INSERT INTO ledger_entries (topic_id, author_id, created_at, type, payload, prev_hash, hash, signature) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
     );
-    BindText(s.Get(), 1, entry.topic_id.ToString());
-    BindText(s.Get(), 2, entry.author_id.ToString());
-    sqlite3_bind_int64(s.Get(), 3, entry.created_at.value);
-    sqlite3_bind_int(s.Get(), 4, static_cast<int>(entry.type));
-    BindText(s.Get(), 5, entry.payload);
-    BindText(s.Get(), 6, entry.prev_hash.ToString());
-    BindText(s.Get(), 7, entry.hash.ToString());
+    BindLedgerEntry(s.Get(), entry);
     sqlite3_step(s.Get());
   }
 
@@ -530,22 +524,14 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
     SQLiteStatement const s(
         db_,
-        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash FROM ledger_entries WHERE "
+        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash, signature FROM ledger_entries "
+        "WHERE "
         "topic_id = ? AND hash = ? LIMIT 1;"
     );
     BindText(s.Get(), 1, topic_id.ToString());
     BindText(s.Get(), 2, hash.ToString());
     if (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      return messaging::LedgerEntry{
-          static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)),
-          TopicID(ColumnString(s.Get(), 1)),
-          ContactID(ColumnString(s.Get(), 2)),
-          Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
-          static_cast<messaging::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
-          ColumnString(s.Get(), 5),
-          messaging::LedgerHash(ColumnString(s.Get(), 6)),
-          messaging::LedgerHash(ColumnString(s.Get(), 7))
-      };
+      return ReadLedgerEntry(s.Get());
     }
     return std::nullopt;
   }
@@ -570,22 +556,14 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     SQLiteStatement const s(
         db_,
-        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash FROM ledger_entries WHERE "
+        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash, signature FROM ledger_entries "
+        "WHERE "
         "topic_id = ? AND seq_id > ? ORDER BY seq_id ASC;"
     );
     BindText(s.Get(), 1, topic_id.ToString());
     sqlite3_bind_int64(s.Get(), 2, start_seq);
     while (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      entries.push_back(
-          {static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)),
-           TopicID(ColumnString(s.Get(), 1)),
-           ContactID(ColumnString(s.Get(), 2)),
-           Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
-           static_cast<messaging::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
-           ColumnString(s.Get(), 5),
-           messaging::LedgerHash(ColumnString(s.Get(), 6)),
-           messaging::LedgerHash(ColumnString(s.Get(), 7))}
-      );
+      entries.push_back(ReadLedgerEntry(s.Get()));
     }
     return entries;
   }
@@ -599,21 +577,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
     INVARIANT(db_);
     SQLiteStatement const s(
         db_,
-        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash FROM ledger_entries WHERE "
+        "SELECT seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash, signature FROM ledger_entries "
+        "WHERE "
         "topic_id = ? ORDER BY seq_id DESC LIMIT 1;"
     );
     BindText(s.Get(), 1, topic_id.ToString());
     if (sqlite3_step(s.Get()) == SQLITE_ROW) {
-      return messaging::LedgerEntry{
-          static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 0)),
-          TopicID(ColumnString(s.Get(), 1)),
-          ContactID(ColumnString(s.Get(), 2)),
-          Timestamp{static_cast<uint64_t>(sqlite3_column_int64(s.Get(), 3))},
-          static_cast<messaging::LedgerActionType>(sqlite3_column_int(s.Get(), 4)),
-          ColumnString(s.Get(), 5),
-          messaging::LedgerHash(ColumnString(s.Get(), 6)),
-          messaging::LedgerHash(ColumnString(s.Get(), 7))
-      };
+      return ReadLedgerEntry(s.Get());
     }
     return std::nullopt;
   }
@@ -713,20 +683,13 @@ class SQLiteStorage final : public PersistentStorageImpl {
 
     SQLiteStatement const s(
         db_,
-        "INSERT OR REPLACE INTO ledger_entries (topic_id, author_id, created_at, type, payload, prev_hash, hash) "
-        "VALUES (?, ?, ?, "
-        "?, ?, ?, ?);"
+        "INSERT OR REPLACE INTO ledger_entries (topic_id, author_id, created_at, type, payload, prev_hash, hash, "
+        "signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
     );
     for (auto const& entry : entries) {
       sqlite3_reset(s.Get());
       sqlite3_clear_bindings(s.Get());
-      BindText(s.Get(), 1, entry.topic_id.ToString());
-      BindText(s.Get(), 2, entry.author_id.ToString());
-      sqlite3_bind_int64(s.Get(), 3, entry.created_at.value);
-      sqlite3_bind_int(s.Get(), 4, static_cast<int>(entry.type));
-      BindText(s.Get(), 5, entry.payload);
-      BindText(s.Get(), 6, entry.prev_hash.ToString());
-      BindText(s.Get(), 7, entry.hash.ToString());
+      BindLedgerEntry(s.Get(), entry);
       sqlite3_step(s.Get());
     }
 
@@ -1597,7 +1560,43 @@ class SQLiteStorage final : public PersistentStorageImpl {
     if (user_version < 15) migrations::MigrateToV0015(db_);
     if (user_version < 16) migrations::MigrateToV0016(db_);
     if (user_version < 17) migrations::MigrateToV0017(db_);
+    if (user_version < 18) migrations::MigrateToV0018(db_);
     // NOLINTEND(*-braces-around-statements)
+  }
+
+  // Column order: seq_id, topic_id, author_id, created_at, type, payload, prev_hash, hash, signature
+  static auto ReadLedgerEntry(sqlite3_stmt* stmt) -> messaging::LedgerEntry {
+    messaging::LedgerEntry entry{
+        static_cast<uint64_t>(sqlite3_column_int64(stmt, 0)),
+        TopicID(ColumnString(stmt, 1)),
+        ContactID(ColumnString(stmt, 2)),
+        Timestamp{static_cast<uint64_t>(sqlite3_column_int64(stmt, 3))},
+        static_cast<messaging::LedgerActionType>(sqlite3_column_int(stmt, 4)),
+        ColumnString(stmt, 5),
+        messaging::LedgerHash(ColumnString(stmt, 6)),
+        messaging::LedgerHash(ColumnString(stmt, 7))
+    };
+    if (auto const* blob = static_cast<std::byte const*>(sqlite3_column_blob(stmt, 8)); blob != nullptr) {
+      auto const size = static_cast<std::size_t>(sqlite3_column_bytes(stmt, 8));
+      entry.signature.assign(blob, blob + size);
+    }
+    return entry;
+  }
+
+  // Parameter order: topic_id, author_id, created_at, type, payload, prev_hash, hash, signature
+  static void BindLedgerEntry(sqlite3_stmt* stmt, messaging::LedgerEntry const& entry) {
+    BindText(stmt, 1, entry.topic_id.ToString());
+    BindText(stmt, 2, entry.author_id.ToString());
+    sqlite3_bind_int64(stmt, 3, static_cast<sqlite3_int64>(entry.created_at.value));
+    sqlite3_bind_int(stmt, 4, static_cast<int>(entry.type));
+    BindText(stmt, 5, entry.payload);
+    BindText(stmt, 6, entry.prev_hash.ToString());
+    BindText(stmt, 7, entry.hash.ToString());
+    if (entry.signature.empty()) {
+      sqlite3_bind_null(stmt, 8);
+    } else {
+      sqlite3_bind_blob(stmt, 8, entry.signature.data(), static_cast<int>(entry.signature.size()), SQLITE_TRANSIENT);
+    }
   }
 
   static auto ParseHistoryEntry(sqlite3_stmt* stmt) -> messaging::HistoryEntryRecord {

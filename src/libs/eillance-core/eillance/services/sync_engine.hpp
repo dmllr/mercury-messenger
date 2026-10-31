@@ -18,6 +18,7 @@
 #include "eillance/identity/contact_id.hpp"
 #include "eillance/identity/topic_id.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/messaging/ledger_signature.hpp"
 #include "eillance/storage/persistent_storage.hpp"
 #include "eillance/transport/data_transport.hpp"
 #include "eillance/utils/dispatch_queue.hpp"
@@ -35,6 +36,13 @@ class SyncEngine {
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<transport::DataTransport> transport_;
   ContactID my_id_;
+
+ public:
+  /// Signs bytes with our master identity key.
+  using Signer = std::function<std::vector<std::byte>(std::span<std::byte const>)>;
+
+ private:
+  Signer signer_;
 
   std::atomic<bool> isRunning_{false};
   DispatchQueue dispatchQueue_{"SyncEngine", 1};
@@ -65,11 +73,13 @@ class SyncEngine {
   SyncEngine(
       std::shared_ptr<storage::PersistentStorage> storage,
       std::shared_ptr<transport::DataTransport> transport,
-      ContactID const& my_id
+      ContactID const& my_id,
+      Signer signer = {}
   )
       : storage_(std::move(storage)),
         transport_(std::move(transport)),
-        my_id_(my_id) {
+        my_id_(my_id),
+        signer_(std::move(signer)) {
     event_unsubs_.push_back(EventQueue::Instance().Subscribe<EventSendQueuedMessages>([this](auto const& e) -> void {
       dispatchQueue_.Dispatch([this, master_id = e.peer_id]() -> void {
         if (master_id == my_id_) {
@@ -218,6 +228,7 @@ class SyncEngine {
                                      std::to_string(entry.created_at.value) +
                                      std::to_string(static_cast<int>(entry.type)) + entry.payload;
     entry.hash = ComputeSHA256(data_to_hash);
+    SignEntry(entry);
 
     storage_->AddLedgerEntry(entry);
     lock.unlock();
@@ -506,6 +517,50 @@ class SyncEngine {
     return topic_id.ToString() + "_" + peer_id.ToString();
   }
 
+  [[nodiscard]] auto IsGroupLikeTopic(TopicID const& topic_id) const -> bool {
+    return storage_->GetGroup(GroupID(topic_id.Span())).has_value() ||
+           storage_->GetChannel(ChannelID(topic_id.Span())).has_value();
+  }
+
+  void SignEntry(messaging::LedgerEntry& entry) const {
+    if (!signer_) {
+      return;
+    }
+    auto const canonical = IsGroupLikeTopic(entry.topic_id) ? messaging::CanonicalGroupTopic(entry.topic_id)
+                                                             : messaging::CanonicalPairTopic(my_id_, entry.topic_id);
+    auto const bytes = messaging::LedgerSigningBytes(canonical, entry);
+    // NOLINTNEXTLINE(*-reinterpret-cast)
+    entry.signature = signer_(std::span(reinterpret_cast<std::byte const*>(bytes.data()), bytes.size()));
+  }
+
+  /// Verifies the author's signature against both canonical topic forms (the receiver may not know yet whether
+  /// a topic is a group, e.g. while receiving its group_create entry). Prefixes keep the forms distinct.
+  [[nodiscard]] auto HasValidSignature(messaging::LedgerEntry const& entry) const -> bool {
+    if (entry.signature.empty()) {
+      return false;
+    }
+    for (auto const& canonical : {messaging::CanonicalGroupTopic(entry.topic_id),
+                                  messaging::CanonicalPairTopic(my_id_, entry.topic_id)}) {
+      auto const bytes = messaging::LedgerSigningBytes(canonical, entry);
+      // NOLINTNEXTLINE(*-reinterpret-cast)
+      std::span const msg(reinterpret_cast<std::byte const*>(bytes.data()), bytes.size());
+      if (crypto::Identity::Verify(entry.author_id.Span(), msg, entry.signature)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Signed entries must carry a valid author signature. Unsigned (legacy) entries are only accepted when they
+  /// cannot be forged by the relaying peer: it is their author, or it is one of our own verified devices.
+  [[nodiscard]] auto IsEntryAcceptable(messaging::LedgerEntry const& entry, ContactID const& relayer_master) const
+      -> bool {
+    if (!entry.signature.empty()) {
+      return HasValidSignature(entry);
+    }
+    return relayer_master == entry.author_id || relayer_master == my_id_;
+  }
+
   static auto ComputeSHA256(std::string const& data) -> messaging::LedgerHash {
     unsigned char hash[EVP_MAX_MD_SIZE];
     unsigned int length_of_hash = 0;
@@ -645,6 +700,7 @@ class SyncEngine {
     if (!peer || !peer->session_cipher->IsReady()) {
       return parsed;
     }
+    ContactID const relayer_master = transport_->GetMasterId(peer_id);
 
     for (auto const& e_json : msg_entries) {
       messaging::LedgerEntry e;
@@ -655,11 +711,18 @@ class SyncEngine {
       e.prev_hash = messaging::LedgerHash(e_json.value("prev_hash", ""));
       e.hash = messaging::LedgerHash(e_json.value("hash", ""));
 
+      e.signature = crypto::FromHex(e_json.value("sig", ""));
+
       if (auto const encrypted_bytes = crypto::FromHex(e_json["payload"].get<std::string>());
           !encrypted_bytes.empty()) {
         auto const decrypted = peer->session_cipher->Decrypt(encrypted_bytes);
         if (!decrypted.empty()) {
           e.payload = std::string(decrypted.data(), decrypted.size());
+          if (!IsEntryAcceptable(e, relayer_master)) {
+            LGW << "[Sync] Dropping unauthenticated ledger entry by " << e.author_id.ToString() << " relayed by "
+                << relayer_master.ToString();
+            continue;
+          }
           parsed.push_back(e);
         } else {
           LGE << "[Sync] Decryption failed for entry " << e.hash.ToString();
@@ -731,7 +794,8 @@ class SyncEngine {
                  {"type", static_cast<int>(e.type)},
                  {"payload", crypto::ToHex(encrypted)},
                  {"prev_hash", e.prev_hash.ToString()},
-                 {"hash", e.hash.ToString()}}
+                 {"hash", e.hash.ToString()},
+                 {"sig", crypto::ToHex(e.signature)}}
             );
           }
         }
@@ -920,7 +984,8 @@ class SyncEngine {
                {"type", static_cast<int>(e.type)},
                {"payload", crypto::ToHex(encrypted)},
                {"prev_hash", e.prev_hash.ToString()},
-               {"hash", e.hash.ToString()}}
+               {"hash", e.hash.ToString()},
+               {"sig", crypto::ToHex(e.signature)}}
           );
         }
       }

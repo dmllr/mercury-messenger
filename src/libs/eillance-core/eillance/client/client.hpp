@@ -67,7 +67,12 @@ class Client final {
     sm_->profile = std::make_shared<services::ProfileService>(sm_.get());
     sm_->contact = std::make_shared<services::ContactService>(sm_.get());
     sm_->internal_messaging = std::make_shared<services::InternalMessagingService>(sm_.get());
-    sm_->sync_engine = std::make_shared<sync::SyncEngine>(sm_->storage, sm_->data_transport, sm_->account->GetId());
+    sm_->sync_engine = std::make_shared<sync::SyncEngine>(
+        sm_->storage,
+        sm_->data_transport,
+        sm_->account->GetId(),
+        [account = sm_->account](std::span<std::byte const> bytes) { return account->Sign(bytes); }
+    );
     sm_->projection_service = std::make_shared<services::LedgerProjectionService>(sm_.get());
     sm_->delivery_service = std::make_shared<messaging::DeliveryService>(sm_.get());
 
