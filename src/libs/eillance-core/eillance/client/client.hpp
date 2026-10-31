@@ -240,6 +240,20 @@ class Client final {
       EventQueue::Instance().Unsubscribe(evnt);
     }
     Terminate();
+
+    // Tear services down in dependency order. Each service unsubscribes from the EventQueue in its destructor
+    // (waiting for an in-flight handler), so services that call into others must go first; otherwise the default
+    // reverse-declaration order destroys e.g. sync_engine while a ProfileService/ContactService handler is still
+    // running on the event thread and calling into it (use-after-free on shutdown).
+    sm_->projection_service.reset();
+    sm_->delivery_service.reset();
+    sm_->internal_messaging.reset();
+    sm_->contact.reset();
+    sm_->profile.reset();
+    sm_->media_call.reset();
+    sm_->messaging.reset();
+    sm_->file_transfer.reset();
+    sm_->sync_engine.reset();
   }
 
   [[nodiscard]] auto Account() const -> std::shared_ptr<services::AccountService> {
