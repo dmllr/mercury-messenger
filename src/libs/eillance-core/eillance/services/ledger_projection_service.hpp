@@ -77,6 +77,15 @@ class LedgerProjectionService {
             c.name = json.value("name", "");
             c.description = json.value("description", "");
             c.owner_id = ContactID(json.value("owner_id", ""));
+            // The creator is the owner; an existing channel (possibly a subscription stub) can only be
+            // (re-)created by its owner.
+            if (c.owner_id != entry.author_id) {
+              break;
+            }
+            if (auto const existing = sm_->channel_manager->GetChannel(c.id);
+                existing && existing->owner_id != entry.author_id) {
+              break;
+            }
             sm_->channel_manager->CreateChannelLocal(c);
             EventQueue::Instance().Push(EventGroupsStateUpdated{});
           } else if (type == "channel_subscribe" || type == "channel_member_add") {

@@ -582,7 +582,11 @@ class MessagingService {
     }
     std::uint64_t const target_id = json.value("target_id", 0ULL);
     std::string const content = json.value("content", "");
-    if (history_->GetHistoryEntry(topic_id, target_id)) {
+    if (auto const record = history_->GetHistoryEntry(topic_id, target_id)) {
+      if (!IsOriginalAuthor(*record, topic_id, entry.author_id)) {
+        LGW << "Ignoring edit of message " << target_id << " by non-author " << entry.author_id.ToString();
+        return;
+      }
       history_->UpdateMessageContent(topic_id, target_id, content);
       EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
@@ -594,10 +598,32 @@ class MessagingService {
       topic_id = TopicID(entry.author_id);
     }
     std::uint64_t const target_id = json.value("target_id", 0ULL);
-    if (history_->GetHistoryEntry(topic_id, target_id)) {
+    if (auto const record = history_->GetHistoryEntry(topic_id, target_id)) {
+      // Our own deletes mirror across our devices; anyone else may only delete messages they authored.
+      if (entry.author_id != sm_->account->GetId() && !IsOriginalAuthor(*record, topic_id, entry.author_id)) {
+        LGW << "Ignoring delete of message " << target_id << " by non-author " << entry.author_id.ToString();
+        return;
+      }
       history_->MarkMessageDeleted(topic_id, target_id);
       EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
+  }
+
+  /// Who wrote a stored message. Older rows may lack author_id; then derive it from the direction (1:1 only).
+  [[nodiscard]] auto IsOriginalAuthor(
+      messaging::HistoryEntryRecord const& record,
+      TopicID const& topic_id,
+      ContactID const& actor
+  ) const -> bool {
+    if (!record.author_id.IsEmpty()) {
+      return record.author_id == actor;
+    }
+    if (record.direction == messaging::MessageDirection::sent) {
+      return actor == sm_->account->GetId();
+    }
+    // Legacy received message: only attributable in a 1:1 conversation, where the topic is the other party.
+    return TopicID(actor) == topic_id && !storage_->GetGroup(GroupID(topic_id.Span())) &&
+           !storage_->GetChannel(ChannelID(topic_id.Span()));
   }
 
   void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool /*is_mine*/) {

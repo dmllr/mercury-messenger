@@ -97,6 +97,13 @@ class GroupManager {
       g.id = GroupID(entry.topic_id.Span());
       g.name = json.value("name", "");
       g.owner_id = ContactID(json.value("owner_id", ""));
+      // The creator is the owner, and an existing group can only be re-created by its owner (no takeover).
+      if (g.owner_id != entry.author_id) {
+        return;
+      }
+      if (auto const existing = GetGroup(g.id); existing && existing->owner_id != entry.author_id) {
+        return;
+      }
       if (json.contains("photo") && !json["photo"].is_null()) {
         g.photo_base64 = json.value("photo", "");
       }
