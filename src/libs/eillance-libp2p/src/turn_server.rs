@@ -33,7 +33,12 @@ impl TurnAuthenticator {
   #[allow(dead_code)]
   pub fn get_password(&self, username: &str) -> Option<String> {
     let lock = self.users.lock().unwrap();
-    lock.get(username).map(|(pw, _)| pw.clone())
+    if let Some((pw, time)) = lock.get(username) {
+      if time.elapsed() < Duration::from_secs(86400) {
+        return Some(pw.clone());
+      }
+    }
+    None
   }
 }
 
@@ -43,10 +48,6 @@ struct MercuryAuthHandler {
 
 impl turn::auth::AuthHandler for MercuryAuthHandler {
   fn auth_handle(&self, username: &str, realm: &str, src_addr: std::net::SocketAddr) -> Result<Vec<u8>, turn::Error> {
-    {
-      let mut lock = self.auth.users.lock().unwrap();
-      lock.retain(|_, (_, time)| time.elapsed() < Duration::from_secs(86400));
-    }
     crate::node_log!(
       &self.auth.callbacks,
       5,
@@ -95,10 +96,6 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
     requested_port: u16,
   ) -> Result<(Arc<dyn webrtc_util::Conn + Send + Sync>, std::net::SocketAddr), turn::Error> {
     let bind_ip = if use_ipv4 { "0.0.0.0" } else { "::" };
-    let mut port = requested_port;
-    if port == 0 {
-      port = self.min_port + (rand::random::<u16>() % (self.max_port - self.min_port + 1));
-    }
 
     crate::node_log!(
       &self.callbacks,
@@ -108,8 +105,26 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
       requested_port
     );
 
-    let mut attempts = 0;
-    loop {
+    if requested_port != 0 {
+      let bind_addr = format!("{}:{}", bind_ip, requested_port);
+      if let Ok(socket) = UdpSocket::bind(&bind_addr).await {
+        if let Ok(local_addr) = socket.local_addr() {
+          let relay_addr = std::net::SocketAddr::new(self.relay_address, local_addr.port());
+          crate::node_log!(
+            &self.callbacks,
+            4,
+            "[TURN] Allocated requested relay connection on {} mapped to {}",
+            local_addr,
+            relay_addr
+          );
+          return Ok((Arc::new(socket), relay_addr));
+        }
+      }
+    }
+
+    let offset = rand::random::<u16>() % (self.max_port - self.min_port + 1);
+    for i in 0..=(self.max_port - self.min_port) {
+      let port = self.min_port + ((offset + i) % (self.max_port - self.min_port + 1));
       let bind_addr = format!("{}:{}", bind_ip, port);
       if let Ok(socket) = UdpSocket::bind(&bind_addr).await {
         if let Ok(local_addr) = socket.local_addr() {
@@ -124,19 +139,14 @@ impl RelayAddressGenerator for MercuryRelayAddressGenerator {
           return Ok((Arc::new(socket), relay_addr));
         }
       }
-
-      attempts += 1;
-      if attempts >= 10 {
-        crate::node_log!(
-          &self.callbacks,
-          1,
-          "[TURN] Failed to allocate relay connection after 10 attempts"
-        );
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "max retries exceeded").into());
-      }
-
-      port = self.min_port + (rand::random::<u16>() % (self.max_port - self.min_port + 1));
     }
+
+    crate::node_log!(
+      &self.callbacks,
+      1,
+      "[TURN] Failed to allocate relay connection after trying all ports"
+    );
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "all ports exhausted").into())
   }
 }
 
@@ -146,27 +156,88 @@ pub struct TurnServerHandle {
 
 pub async fn start_turn_server(
   public_ip: String,
-  requested_port: u16,
+  custom_port: Option<u16>,
+  custom_range: Option<(u16, u16)>,
+  fallback_port: u16,
   auth: Arc<TurnAuthenticator>,
 ) -> Result<(u16, TurnServerHandle), String> {
+  if custom_port.is_some() && custom_range.is_some() {
+    return Err("Cannot specify both exact port and port range for TURN server".to_string());
+  }
+
   let is_ipv6 = public_ip.contains(':');
   let bind_ip = if is_ipv6 { "::" } else { "0.0.0.0" };
-  let bind_addr = format!("{}:{}", bind_ip, requested_port);
-  crate::node_log!(
-    &auth.callbacks,
-    3,
-    "[TURN] Attempting to bind TURN server to {}",
-    bind_addr
-  );
-  let udp_socket = match UdpSocket::bind(&bind_addr).await {
-    Ok(s) => s,
-    Err(e) => {
-      crate::node_log!(&auth.callbacks, 2, "[TURN] Failed to bind to {}: {}", bind_addr, e);
-      UdpSocket::bind(format!("{}:0", bind_ip))
-        .await
-        .map_err(|err| err.to_string())?
+
+  let udp_socket = if let Some(port) = custom_port {
+    let bind_addr = format!("{}:{}", bind_ip, port);
+    crate::node_log!(
+      &auth.callbacks,
+      3,
+      "[TURN] Attempting to bind TURN server to exact port {}",
+      bind_addr
+    );
+    UdpSocket::bind(&bind_addr).await.map_err(|e| {
+      crate::node_log!(
+        &auth.callbacks,
+        1,
+        "[TURN] Failed to bind to exact port {}: {}",
+        bind_addr,
+        e
+      );
+      e.to_string()
+    })?
+  } else if let Some((min_port, max_port)) = custom_range {
+    if min_port > max_port || min_port == 0 {
+      return Err(format!("Invalid TURN port range: {}-{}", min_port, max_port));
+    }
+    let total = (max_port - min_port + 1) as usize;
+    let offset = rand::random::<u16>() % (max_port - min_port + 1);
+    let mut bound = None;
+    for i in 0..total {
+      let p = min_port + ((offset + i as u16) % (max_port - min_port + 1));
+      let bind_addr = format!("{}:{}", bind_ip, p);
+      if let Ok(s) = UdpSocket::bind(&bind_addr).await {
+        crate::node_log!(
+          &auth.callbacks,
+          3,
+          "[TURN] Successfully bound TURN server to dynamic port in range: {}:{}",
+          bind_ip,
+          p
+        );
+        bound = Some(s);
+        break;
+      }
+    }
+    match bound {
+      Some(s) => s,
+      None => {
+        let err = format!(
+          "[TURN] Failed to bind to any port in specified range {}-{}",
+          min_port, max_port
+        );
+        crate::node_log!(&auth.callbacks, 1, "{}", err);
+        return Err(err);
+      }
+    }
+  } else {
+    let bind_addr = format!("{}:{}", bind_ip, fallback_port);
+    crate::node_log!(
+      &auth.callbacks,
+      3,
+      "[TURN] Attempting to bind TURN server to {}",
+      bind_addr
+    );
+    match UdpSocket::bind(&bind_addr).await {
+      Ok(s) => s,
+      Err(e) => {
+        crate::node_log!(&auth.callbacks, 2, "[TURN] Failed to bind to {}: {}", bind_addr, e);
+        UdpSocket::bind(format!("{}:0", bind_ip))
+          .await
+          .map_err(|err| err.to_string())?
+      }
     }
   };
+
   let port = udp_socket.local_addr().map_err(|e| e.to_string())?.port();
   crate::node_log!(
     &auth.callbacks,
@@ -186,14 +257,18 @@ pub async fn start_turn_server(
   });
 
   let callbacks_for_gen = auth.callbacks.clone();
+  let (relay_min_port, relay_max_port) = match custom_range {
+    Some((min_p, max_p)) => (min_p, max_p),
+    None => (50000, 50500),
+  };
 
   let config = ServerConfig {
     conn_configs: vec![ConnConfig {
       conn: conn as std::sync::Arc<dyn webrtc_util::Conn + std::marker::Send + std::marker::Sync>,
       relay_addr_generator: Box::new(MercuryRelayAddressGenerator {
         relay_address: parsed_public_ip,
-        min_port: 50000,
-        max_port: 50500,
+        min_port: relay_min_port,
+        max_port: relay_max_port,
         callbacks: callbacks_for_gen,
       }),
     }],

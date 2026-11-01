@@ -12,10 +12,8 @@
 namespace eillance {
 
 struct IceConfigParams {
-  std::string stun;
   std::string turn;
-  std::string turn_user;
-  std::string turn_pass;
+  bool use_custom_turn_only = false;
 };
 
 class SettingsManager {
@@ -33,18 +31,41 @@ class SettingsManager {
     return transport::ParseUrls(input);
   }
 
-  // Retrieves the libp2p bootstrap node URLs. Returns an empty optional if not set.
   [[nodiscard]] auto GetBootstrapNodeUrls() const -> std::optional<std::string> {
-    if (!bootstrapNodeUrls_ || bootstrapNodeUrls_->empty()) {
-      return GetDefaultBootstrapNodeUrls();
-    }
     return bootstrapNodeUrls_;
   }
 
-  // Sets and persists the libp2p bootstrap node URLs.
-  void SetBootstrapNodeUrls(std::string const& urls) {
+  [[nodiscard]] auto GetAppendBootstrapNodes() const -> bool {
+    auto const val = storage_->GetSetting(keyAppendBootstrapNodes);
+    return !val || (*val == "1");
+  }
+
+  [[nodiscard]] auto GetEffectiveBootstrapNodeUrls() const -> std::vector<std::string> {
+    auto&& default_urls = ParseUrls(GetDefaultBootstrapNodeUrls());
+    if (!bootstrapNodeUrls_ || bootstrapNodeUrls_->empty()) {
+      return default_urls;
+    }
+    auto&& custom_urls = ParseUrls(*bootstrapNodeUrls_);
+    if (custom_urls.empty()) {
+      return default_urls;
+    }
+    if (!GetAppendBootstrapNodes()) {
+      return custom_urls;
+    }
+    std::vector<std::string> combined = default_urls;
+    for (auto const& url : custom_urls) {
+      if (std::ranges::find(combined, url) == combined.end()) {
+        combined.push_back(url);
+      }
+    }
+    return combined;
+  }
+
+  void SetBootstrapNodeUrls(std::string const& urls, bool const append_to_default) {
+    appendBootstrapNodes_ = append_to_default;
+    storage_->SetSetting(keyAppendBootstrapNodes, append_to_default ? "1" : "0");
     bootstrapNodeUrls_ = urls;
-    storage_->SetSetting(kBootstrapNodeUrlsKey, urls);
+    storage_->SetSetting(keyBootstrapNodeUrls, urls);
   }
 
   // --- User Profile ---
@@ -65,7 +86,7 @@ class SettingsManager {
     } else {
       myDisplayName_ = name;
     }
-    storage_->SetSetting(kMyDisplayNameKey, *myDisplayName_);
+    storage_->SetSetting(keyMyDisplayName, *myDisplayName_);
   }
 
   void SetMyBio(std::string const& bio) {
@@ -75,46 +96,46 @@ class SettingsManager {
     } else {
       myBio_ = bio;
     }
-    storage_->SetSetting(kMyBioKey, *myBio_);
+    storage_->SetSetting(keyMyBio, *myBio_);
   }
 
   void SetMyPhotoBase64(std::string const& photo) {
     myPhotoBase64_ = photo;
-    storage_->SetSetting(kMyPhotoBase64Key, photo);
+    storage_->SetSetting(keyMyPhotoBase64, photo);
   }
 
   // --- Auditory Feedback ---
   [[nodiscard]] auto GetPlaySoundOnSend() const -> bool {
-    auto val = storage_->GetSetting(kPlaySoundOnSendKey);
+    auto const val = storage_->GetSetting(keyPlaySoundOnSend);
     return !val || (*val == "1");
   }
 
   void SetPlaySoundOnSend(bool enabled) {
-    storage_->SetSetting(kPlaySoundOnSendKey, enabled ? "1" : "0");
+    storage_->SetSetting(keyPlaySoundOnSend, enabled ? "1" : "0");
   }
 
   [[nodiscard]] auto GetPlaySoundOnReceive() const -> bool {
-    auto val = storage_->GetSetting(kPlaySoundOnRecvKey);
+    auto const val = storage_->GetSetting(keyPlaySoundOnRecv);
     return !val || (*val == "1");
   }
 
   void SetPlaySoundOnReceive(bool enabled) {
-    storage_->SetSetting(kPlaySoundOnRecvKey, enabled ? "1" : "0");
+    storage_->SetSetting(keyPlaySoundOnRecv, enabled ? "1" : "0");
   }
 
   // --- Notifications ---
   [[nodiscard]] auto GetShowNotificationContent() const -> bool {
-    auto val = storage_->GetSetting(kShowNotificationContentKey);
+    auto const val = storage_->GetSetting(keyShowNotificationContent);
     return !val || (*val == "1");
   }
 
   void SetShowNotificationContent(bool enabled) {
-    storage_->SetSetting(kShowNotificationContentKey, enabled ? "1" : "0");
+    storage_->SetSetting(keyShowNotificationContent, enabled ? "1" : "0");
   }
 
   // --- Peer Connection ---
   [[nodiscard]] auto GetPeerInactivityTimeout() -> std::chrono::seconds {
-    if (auto str_val = storage_->GetSetting(kPeerInactivityTimeoutKey)) {
+    if (auto const str_val = storage_->GetSetting(keyPeerInactivityTimeout)) {
       // TODO(unknown): check for user input correctness
       return std::chrono::seconds(std::stoi(*str_val));
     }
@@ -123,104 +144,88 @@ class SettingsManager {
   }
 
   void SetPeerInactivityTimeout(std::chrono::seconds timeout) {
-    storage_->SetSetting(kPeerInactivityTimeoutKey, std::to_string(timeout.count()));
+    storage_->SetSetting(keyPeerInactivityTimeout, std::to_string(timeout.count()));
   }
 
-  // --- Custom ICE Servers ---
-  [[nodiscard]] auto GetCustomStun() const -> std::optional<std::string> {
-    return customStun_;
-  }
   [[nodiscard]] auto GetCustomTurn() const -> std::optional<std::string> {
     return customTurn_;
   }
-  [[nodiscard]] auto GetCustomTurnUser() const -> std::optional<std::string> {
-    return customTurnUser_;
-  }
-  [[nodiscard]] auto GetCustomTurnPass() const -> std::optional<std::string> {
-    return customTurnPass_;
+  [[nodiscard]] auto GetUseCustomTurnOnly() const -> bool {
+    return useCustomTurnOnly_;
   }
 
   void SetCustomIceConfig(IceConfigParams const& params) {
-    customStun_ = params.stun;
     customTurn_ = params.turn;
-    customTurnUser_ = params.turn_user;
-    customTurnPass_ = params.turn_pass;
+    useCustomTurnOnly_ = params.use_custom_turn_only;
 
-    storage_->SetSetting(kCustomStunKey, params.stun);
-    storage_->SetSetting(kCustomTurnKey, params.turn);
-    storage_->SetSetting(kCustomTurnUserKey, params.turn_user);
+    storage_->SetSetting(keyCustomTurn, params.turn);
+    storage_->SetSetting(keyUseCustomTurnOnly, params.use_custom_turn_only ? "1" : "0");
   }
 
   [[nodiscard]] auto GetIgnoreBatteryOptimization() const -> bool {
-    auto val = storage_->GetSetting(kIgnoreBatteryKey);
+    auto const val = storage_->GetSetting(keyIgnoreBattery);
     return val && (*val == "1");
   }
 
   void SetIgnoreBatteryOptimization(bool ignore) {
-    storage_->SetSetting(kIgnoreBatteryKey, ignore ? "1" : "0");
+    storage_->SetSetting(keyIgnoreBattery, ignore ? "1" : "0");
   }
 
   [[nodiscard]] auto GetIgnoreCallPermissions() const -> bool {
-    auto val = storage_->GetSetting(kIgnoreCallsKey);
+    auto const val = storage_->GetSetting(keyIgnoreCalls);
     return val && (*val == "1");
   }
 
   void SetIgnoreCallPermissions(bool ignore) {
-    storage_->SetSetting(kIgnoreCallsKey, ignore ? "1" : "0");
+    storage_->SetSetting(keyIgnoreCalls, ignore ? "1" : "0");
   }
 
  private:
   void Load() {
-    bootstrapNodeUrls_ = storage_->GetSetting(kBootstrapNodeUrlsKey);
+    bootstrapNodeUrls_ = storage_->GetSetting(keyBootstrapNodeUrls);
     if (!bootstrapNodeUrls_) {
-      // Fallback to legacy key to migrate user data seamlessly
-      auto legacy = storage_->GetSetting("bootstrap_node_url");
-      if (legacy) {
-        if (*legacy == "/dns4/app.hela.me/tcp/10807") {
-          bootstrapNodeUrls_ = GetDefaultBootstrapNodeUrls();
-        } else {
+      if (auto const legacy = storage_->GetSetting("bootstrap_node_url")) {
+        if (*legacy != "/dns4/app.hela.me/tcp/10807") {
           bootstrapNodeUrls_ = *legacy;
+          storage_->SetSetting(keyBootstrapNodeUrls, *bootstrapNodeUrls_);
         }
-        storage_->SetSetting(kBootstrapNodeUrlsKey, *bootstrapNodeUrls_);
         storage_->DeleteSetting("bootstrap_node_url");
       }
     }
+    appendBootstrapNodes_ = GetAppendBootstrapNodes();
 
-    myDisplayName_ = storage_->GetSetting(kMyDisplayNameKey);
-    myBio_ = storage_->GetSetting(kMyBioKey);
-    myPhotoBase64_ = storage_->GetSetting(kMyPhotoBase64Key);
-    customStun_ = storage_->GetSetting(kCustomStunKey);
-    customTurn_ = storage_->GetSetting(kCustomTurnKey);
-    customTurnUser_ = storage_->GetSetting(kCustomTurnUserKey);
-    customTurnPass_ = storage_->GetSetting(kCustomTurnPassKey);
+    myDisplayName_ = storage_->GetSetting(keyMyDisplayName);
+    myBio_ = storage_->GetSetting(keyMyBio);
+    myPhotoBase64_ = storage_->GetSetting(keyMyPhotoBase64);
+    customTurn_ = storage_->GetSetting(keyCustomTurn);
+    auto const turn_only_val = storage_->GetSetting(keyUseCustomTurnOnly);
+    useCustomTurnOnly_ = turn_only_val && (*turn_only_val == "1");
   }
 
-  static constexpr auto kBootstrapNodeUrlsKey = "bootstrap_node_urls";
-  static constexpr auto kMyDisplayNameKey = "my_display_name";
-  static constexpr auto kMyBioKey = "my_bio";
-  static constexpr auto kMyPhotoBase64Key = "my_photo_base64";
-  static constexpr auto kPeerInactivityTimeoutKey = "peer_inactivity_timeout";
-  static constexpr auto kCustomStunKey = "custom_ice_stun";
-  static constexpr auto kCustomTurnKey = "custom_ice_turn";
-  static constexpr auto kCustomTurnUserKey = "custom_ice_turn_user";
-  static constexpr auto kCustomTurnPassKey = "custom_ice_turn_pass";
-  static constexpr auto kPlaySoundOnSendKey = "sound_on_send";
-  static constexpr auto kPlaySoundOnRecvKey = "sound_on_recv";
-  static constexpr auto kShowNotificationContentKey = "show_notifications_content";
-  static constexpr auto kIgnoreBatteryKey = "ignore_battery_opt";
-  static constexpr auto kIgnoreCallsKey = "ignore_call_perms";
+  static constexpr auto keyBootstrapNodeUrls = "bootstrap_node_urls";
+  static constexpr auto keyAppendBootstrapNodes = "append_bootstrap_nodes";
+  static constexpr auto keyMyDisplayName = "my_display_name";
+  static constexpr auto keyMyBio = "my_bio";
+  static constexpr auto keyMyPhotoBase64 = "my_photo_base64";
+  static constexpr auto keyPeerInactivityTimeout = "peer_inactivity_timeout";
+  static constexpr auto keyCustomTurn = "custom_ice_turn";
+  static constexpr auto keyUseCustomTurnOnly = "use_custom_turn_only";
+  static constexpr auto keyPlaySoundOnSend = "sound_on_send";
+  static constexpr auto keyPlaySoundOnRecv = "sound_on_recv";
+  static constexpr auto keyShowNotificationContent = "show_notifications_content";
+  static constexpr auto keyIgnoreBattery = "ignore_battery_opt";
+  static constexpr auto keyIgnoreCalls = "ignore_call_perms";
 
   std::shared_ptr<storage::PersistentStorage> storage_;
 
   // Cached settings
   std::optional<std::string> bootstrapNodeUrls_;
+  bool appendBootstrapNodes_ = true;
   std::optional<std::string> myDisplayName_;
   std::optional<std::string> myBio_;
   std::optional<std::string> myPhotoBase64_;
-  std::optional<std::string> customStun_;
   std::optional<std::string> customTurn_;
-  std::optional<std::string> customTurnUser_;
-  std::optional<std::string> customTurnPass_;
+  bool useCustomTurnOnly_ = false;
 };
 
 }  // namespace eillance

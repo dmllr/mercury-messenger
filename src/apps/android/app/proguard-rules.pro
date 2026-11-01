@@ -1,13 +1,18 @@
-# Keep my stuff
--keepnames class hela.eillance.** { *; }
--keepclassmembers class hela.eillance.** { *; }
-
-# Keep Native Methods and their classes
--keep class hela.eillance.streamer.StreamerService{
+### NDK/JNI bindings
+# Keep all native methods and their enclosing classes to ensure JNI linking works
+-keepclasseswithmembernames class * {
     native <methods>;
 }
--keep class hela.eillance.viewer.ViewerActivity{
-    native <methods>;
+
+# Keep data classes used by C++ via JNI
+-keep class hela.eillance.ndkio.** { *; }
+
+# Keep classes whose methods are invoked from C++
+-keep class hela.eillance.events.NativeEventBus { *; }
+-keep class hela.eillance.webrtc.WebRtcMediaTransport { *; }
+-keepclassmembers class hela.eillance.MessengerService {
+    public void setWebRtcMediaTransport(hela.eillance.webrtc.WebRtcMediaTransport);
+    public void onNativeCoreCrash();
 }
 
 # Keep Kotlin Serialization necessary classes and annotations

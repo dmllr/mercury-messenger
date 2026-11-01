@@ -1,9 +1,9 @@
 FROM ubuntu:24.04
 
-RUN apt-get update
-RUN apt-get install -y \
+RUN apt-get update && \
+    apt-get install -y \
     ca-certificates curl wget ninja-build git pkg-config rsync \
-    software-properties-common gnupg lsb-release
+    software-properties-common gnupg lsb-release build-essential
 
 # Install CMake 4.0+ from Kitware repository
 RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
@@ -29,7 +29,12 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 # Setup alternatives for clang, clang++, and llvm-strip
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${LLVM_VERSION} 100 && \
     update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${LLVM_VERSION} 100 && \
-    update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-${LLVM_VERSION} 100
+    update-alternatives --install /usr/bin/llvm-strip llvm-strip /usr/bin/llvm-strip-${LLVM_VERSION} 100 && \
+    update-alternatives --install /usr/bin/cc cc /usr/bin/clang 100 && \
+    update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++ 100
+
+ENV CC=clang \
+    CXX=clang++
 
 # Install Rust globally so any host UID/GID can access and use it
 ENV RUSTUP_HOME=/usr/local/rustup \

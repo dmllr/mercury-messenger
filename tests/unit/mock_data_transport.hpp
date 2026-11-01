@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -24,6 +25,7 @@ class MockDataTransport : public DataTransport::Interface {
 
   std::vector<std::pair<ContactID, nlohmann::json>> sent_jsons;
   std::vector<std::pair<ContactID, std::vector<std::byte>>> sent_data;
+  std::unordered_map<ContactID, ContactID> device_to_master_;
 
   void SetId(ContactID const& id) override {
     id_ = id;
@@ -48,6 +50,16 @@ class MockDataTransport : public DataTransport::Interface {
   void AddPeer(ContactID const& peer_id, std::shared_ptr<Peer> const& peer) override {
     peers_[peer_id] = peer;
   }
+  // Test helper: simulate a peer that completed a verified key exchange.
+  void MarkVerified(ContactID const& peer_id) {
+    auto p = GetPeer(peer_id);
+    if (!p) {
+      p = std::make_shared<Peer>(peer_id);
+      peers_[peer_id] = p;
+    }
+    p->crcp_verified = true;
+  }
+
   void RemovePeer(ContactID const& peer_id) override {
     peers_.erase(peer_id);
   }
@@ -70,9 +82,13 @@ class MockDataTransport : public DataTransport::Interface {
     return PeerConnectionState::disconnected;
   }
   [[nodiscard]] auto GetMasterId(ContactID const& network_id) const -> ContactID override {
-    return network_id;
+    auto const it = device_to_master_.find(network_id);
+    return it != device_to_master_.end() ? it->second : network_id;
   }
   void LinkDeviceToMaster(ContactID const& network_id, ContactID const& master_id) override {
+    if (network_id != master_id) {
+      device_to_master_[network_id] = master_id;
+    }
   }
 
   void Connect(ContactID const& peer_id) override {
@@ -106,13 +122,32 @@ class MockDataTransport : public DataTransport::Interface {
   }
 
   auto SendData(ContactID const& peer_id, std::span<std::byte const> data) -> bool override {
+    std::lock_guard const lock(sent_mutex_);
     sent_data.push_back({peer_id, std::vector<std::byte>(data.begin(), data.end())});
     return true;
   }
   auto SendJson(ContactID const& peer_id, nlohmann::json const& msg) -> bool override {
+    std::lock_guard const lock(sent_mutex_);
     sent_jsons.push_back({peer_id, msg});
     return true;
   }
+
+  // Thread-safe accessors for tests that inspect sends while background services are running.
+  [[nodiscard]] auto SentJsonsSnapshot() const -> std::vector<std::pair<ContactID, nlohmann::json>> {
+    std::lock_guard const lock(sent_mutex_);
+    return sent_jsons;
+  }
+  [[nodiscard]] auto SentDataSnapshot() const -> std::vector<std::pair<ContactID, std::vector<std::byte>>> {
+    std::lock_guard const lock(sent_mutex_);
+    return sent_data;
+  }
+  void ClearSent() {
+    std::lock_guard const lock(sent_mutex_);
+    sent_jsons.clear();
+    sent_data.clear();
+  }
+
+  mutable std::mutex sent_mutex_;
   void DiscoverTurnRelays() override {
   }
   void AuthTurnRelay(ContactID const&) override {

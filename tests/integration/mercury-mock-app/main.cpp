@@ -51,6 +51,49 @@ void GenerateFile(std::string const& path, size_t size) {
   }
 }
 
+auto Trim(std::string s) -> std::string {
+  s.erase(0, s.find_first_not_of(' '));
+  s.erase(s.find_last_not_of(' ') + 1);
+  return s;
+}
+
+auto SplitWords(std::string const& s) -> std::vector<std::string> {
+  std::vector<std::string> words;
+  std::stringstream ss(s);
+  std::string w;
+  while (ss >> w) {
+    words.push_back(w);
+  }
+  return words;
+}
+
+auto ContactStatusName(eillance::identity::ContactStatus status) -> char const* {
+  switch (status) {
+    case eillance::identity::ContactStatus::pendingApproval:
+      return "pendingApproval";
+    case eillance::identity::ContactStatus::awaitingApproval:
+      return "awaitingApproval";
+    case eillance::identity::ContactStatus::confirmed:
+      return "confirmed";
+    case eillance::identity::ContactStatus::rejected:
+      return "rejected";
+  }
+  return "unknown";
+}
+
+// Network (device) IDs of all connected devices that belong to `target` (master ID).
+auto TargetNetworkIds(eillance::Client const& client, eillance::ContactID const& target)
+    -> std::vector<eillance::ContactID> {
+  std::vector<eillance::ContactID> ids;
+  auto const transport = client.GetDataTransport();
+  for (auto const& [net_id, peer] : transport->GetPeers()) {
+    if (net_id == target || transport->GetMasterId(net_id) == target) {
+      ids.push_back(net_id);
+    }
+  }
+  return ids;
+}
+
 auto main(int argc, char** argv) -> int {
   // Disable stdout buffering for real-time docker logs
   std::setbuf(stdout, nullptr);
@@ -101,6 +144,12 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
 
+  // Delay the whole client (including networking) - e.g. to emulate a device restored later from mnemonic.
+  if (auto const delay = args.Get("--start-delay")) {
+    LGI << "[mock] Delaying start by " << *delay << "s";
+    std::this_thread::sleep_for(std::chrono::seconds(std::stoi(*delay)));
+  }
+
   // --- Setup Client ---
   auto storage_impl = std::make_unique<eillance::storage::SQLiteStorage>(db_path);
   auto storage = std::make_shared<eillance::storage::PersistentStorage>(std::move(storage_impl));
@@ -116,7 +165,7 @@ auto main(int argc, char** argv) -> int {
 
   auto client = std::make_shared<eillance::Client>(storage, media_transport);
 
-  client->UpdateBootstrapNodeUrls(*signaling_url);
+  client->UpdateBootstrapNodeUrls(*signaling_url, false);
 
   bool const auto_confirm = !args.Has("--no-auto-confirm");
 
@@ -229,8 +278,8 @@ auto main(int argc, char** argv) -> int {
     } else if (cmd == "start") {
       client->Start();
     } else if (cmd == "reconnect") {
-      client->GetSettingsManager()->SetBootstrapNodeUrls(*signaling_url);
-      client->UpdateBootstrapNodeUrls(*signaling_url);
+      client->GetSettingsManager()->SetBootstrapNodeUrls(*signaling_url, false);
+      client->UpdateBootstrapNodeUrls(*signaling_url, false);
       LGI << "[mock] Executed reconnect";
     } else if (cmd.starts_with("confirm ")) {
       auto peer_hex = cmd.substr(8);
@@ -297,6 +346,129 @@ auto main(int argc, char** argv) -> int {
       auto peer_hex = cmd.substr(7);
       eillance::ContactID const peer_id(peer_hex);
       client->Hangup(peer_id, true);
+    } else if (cmd.starts_with("dial ")) {
+      // dial <id>: connect to a peer without adding it as a contact
+      eillance::ContactID const peer_id(Trim(cmd.substr(5)));
+      client->Connect(peer_id);
+      LGI << "[mock] Dialing " << peer_id.ToString();
+    } else if (cmd.starts_with("status ")) {
+      eillance::ContactID const peer_id(Trim(cmd.substr(7)));
+      auto const contact = client->Contacts()->GetContact(peer_id);
+      LGI << "[mock] STATUS " << peer_id.ToString() << " " << (contact ? ContactStatusName(contact->status) : "none");
+    } else if (cmd.starts_with("check-file ")) {
+      std::string const path = Trim(cmd.substr(11));
+      std::error_code ec;
+      LGI << "[mock] FILE " << (std::filesystem::exists(path, ec) ? "EXISTS " : "MISSING ") << path;
+    } else if (cmd.starts_with("attach-named ")) {
+      // attach-named <id> <local path> <name sent to the peer>
+      auto const words = SplitWords(cmd.substr(13));
+      if (words.size() == 3) {
+        eillance::ContactID const peer_id(words[0]);
+        std::ignore = client->AddContact(peer_id, std::nullopt);
+        std::vector<eillance::messaging::AttachmentRequest> atts{
+            {.file_path = words[1],
+             .type = eillance::messaging::AttachmentType::file,
+             .mime_type = "application/octet-stream",
+             .file_name = words[2]}
+        };
+        std::ignore = client->Messaging()->SendChatMessage(eillance::TopicID(peer_id), "named attachment", atts);
+        LGI << "[mock] Named attachment " << words[2] << " sent to " << words[0];
+      } else {
+        LGE << "Invalid attach-named command: " << cmd;
+      }
+    }
+    // ---------------------------------------------------------------------------------------------------------
+    // Attack commands (security regression tests only): send crafted protocol messages over the real transport.
+    // ---------------------------------------------------------------------------------------------------------
+    else if (cmd.starts_with("forge-confirm ")) {
+      // crcp_confirm signed with our own key but WITHOUT proof of the victim's prior approval.
+      eillance::ContactID const victim(Trim(cmd.substr(14)));
+      nlohmann::json const msg = {
+          {"type", "crcp_confirm"},
+          {"signature", eillance::crypto::ToHex(client->Sign(victim.Span()))},
+          {"profile", nlohmann::json::object()}
+      };
+      for (auto const& net_id : TargetNetworkIds(*client, victim)) {
+        std::ignore = client->GetDataTransport()->SendJson(net_id, msg);
+      }
+      LGI << "[mock] Sent forged crcp_confirm to " << victim.ToString();
+    } else if (cmd.starts_with("forge-keyexchange ")) {
+      // forge-keyexchange <victim> <claimed master>: our device signs the victim's device ID (old "fallback 3")
+      // while claiming somebody else's master identity.
+      auto const words = SplitWords(cmd.substr(18));
+      if (words.size() == 2) {
+        eillance::ContactID const victim(words[0]);
+        eillance::ContactID const claimed(words[1]);
+        for (auto const& net_id : TargetNetworkIds(*client, victim)) {
+          eillance::crypto::SessionCipher const cipher;
+          nlohmann::json const msg = {
+              {"type", "key_exchange"},
+              {"key", cipher.GetPublicKey()},
+              {"signature", eillance::crypto::ToHex(client->Account()->SignWithDevice(net_id.Span()))},
+              {"is_reply", false},
+              {"m_id", claimed.ToString()},
+              {"sync_version", 2},
+              {"ft_version", 1}
+          };
+          std::ignore = client->GetDataTransport()->SendJson(net_id, msg);
+        }
+        LGI << "[mock] Sent forged key_exchange to " << victim.ToString() << " claiming " << claimed.ToString();
+      } else {
+        LGE << "Invalid forge-keyexchange command: " << cmd;
+      }
+    } else if (cmd.starts_with("forge-ledger ")) {
+      // Unsigned history entry in our 1:1 topic, claiming to be authored by the victim itself.
+      eillance::ContactID const victim(Trim(cmd.substr(13)));
+      nlohmann::json const payload = {
+          {"type", "chat"},
+          {"message_id", eillance::messaging::GenerateMessageId()},
+          {"payload", {{"c", "FORGED-BY-ATTACKER"}, {"v", 2}}}
+      };
+      for (auto const& net_id : TargetNetworkIds(*client, victim)) {
+        auto const peer = client->GetDataTransport()->GetPeer(net_id);
+        if (!peer || !peer->session_cipher->IsReady()) {
+          continue;
+        }
+        nlohmann::json const entry = {
+            {"author", victim.ToString()},
+            {"created", eillance::Timestamp::Now().value},
+            {"type", static_cast<int>(eillance::messaging::LedgerActionType::Message)},
+            {"payload", eillance::crypto::ToHex(peer->session_cipher->Encrypt(payload.dump()))},
+            {"prev_hash", ""},
+            {"hash", ""}
+        };
+        nlohmann::json const msg = {
+            {"type", "sync_batch"},
+            {"topic", victim.ToString()},  // our 1:1 topic as stored by us; the victim maps it to our ID
+            {"lca", ""},
+            {"batch_index", 0},
+            {"total_entries", 1},
+            {"entries", nlohmann::json::array({entry})},
+            {"sync_version", 2},
+            {"ft_version", 1}
+        };
+        std::ignore = client->GetDataTransport()->SendJson(net_id, msg);
+      }
+      LGI << "[mock] Sent forged ledger entry to " << victim.ToString();
+    } else if (cmd.starts_with("sync-steal ")) {
+      // sync-steal <victim> <topic>: request the history of a conversation we are not part of.
+      auto const words = SplitWords(cmd.substr(11));
+      if (words.size() == 2) {
+        eillance::ContactID const victim(words[0]);
+        nlohmann::json const msg = {
+            {"type", "sync_checkpoints"},
+            {"topic", words[1]},
+            {"checkpoints", nlohmann::json::array({""})},
+            {"sync_version", 2},
+            {"ft_version", 1}
+        };
+        for (auto const& net_id : TargetNetworkIds(*client, victim)) {
+          std::ignore = client->GetDataTransport()->SendJson(net_id, msg);
+        }
+        LGI << "[mock] Sent sync request to " << victim.ToString() << " for topic " << words[1];
+      } else {
+        LGE << "Invalid sync-steal command: " << cmd;
+      }
     } else if (cmd.starts_with("attach")) {
       size_t const id_start = cmd.find(' ');
       size_t const quote_start = cmd.find('"', id_start + 1);

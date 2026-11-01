@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import coil.compose.AsyncImage
 import hela.eillance.camera.R
+import hela.eillance.utils.BitmapUtils
 import java.io.File
 
 @Composable
@@ -37,7 +38,14 @@ fun ZoomableImage(file: File) {
 
   val isGif = file.extension.lowercase() == "gif"
   val gifBitmap = remember(file.absolutePath) {
-    if (isGif) android.graphics.BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() else null
+    if (isGif) {
+      val options = android.graphics.BitmapFactory.Options()
+      options.inJustDecodeBounds = true
+      android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)
+      options.inSampleSize = BitmapUtils.calculateInSampleSize(options, 2048, 2048)
+      options.inJustDecodeBounds = false
+      android.graphics.BitmapFactory.decodeFile(file.absolutePath, options)?.asImageBitmap()
+    } else null
   }
 
   Box(

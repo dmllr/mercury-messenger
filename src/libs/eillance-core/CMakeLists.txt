@@ -1,5 +1,7 @@
 add_library(eillance-core STATIC
   eillance/client/client.cpp
+  eillance/transport/network_config.cpp
+  eillance/transport/network_parser.cpp
 )
 
 set(shared_cmake_libs_path "${REPO_ROOT}/src/cmake")

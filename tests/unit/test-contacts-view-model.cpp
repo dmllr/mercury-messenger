@@ -98,7 +98,7 @@ TEST_F(ContactsViewModelTest, ContactConnectionState) {
       std::chrono::milliseconds(2000)
   );
 
-  auto contacts = observer->GetContacts();
+  auto const contacts = observer->GetContacts();
   ASSERT_FALSE(contacts.empty());
   EXPECT_EQ(contacts[0].connection_state, transport::PeerConnectionState::connected);
 }

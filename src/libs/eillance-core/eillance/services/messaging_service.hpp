@@ -5,6 +5,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -18,12 +19,15 @@
 #include <variant>
 #include <vector>
 
+#include <openssl/rand.h>
+
 #include "eillance/crypto/crypto.hpp"
 #include "eillance/events/client_events.hpp"
 #include "eillance/identity/channel_manager.hpp"
 #include "eillance/identity/contact_manager.hpp"
 #include "eillance/identity/group_manager.hpp"
 #include "eillance/logging/logging.hpp"
+#include "eillance/messaging/attachment_paths.hpp"
 #include "eillance/messaging/history.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
@@ -59,7 +63,13 @@ auto GetExtensionForMimeType(std::string_view const mime_type) -> std::string {
   return ".dat";
 }
 
-auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& filename) -> std::filesystem::path {
+auto ResolvePathConflict(std::filesystem::path const& dir, std::string const& untrusted_filename)
+    -> std::filesystem::path {
+  // File names may come from remote peers: always reduce them to a single safe path component.
+  std::string filename = messaging::SanitizeAttachmentFileName(untrusted_filename);
+  if (filename.empty()) {
+    filename = "attachment.dat";
+  }
   std::filesystem::path candidate = dir / filename;
   if (!std::filesystem::exists(candidate)) {
     return candidate;
@@ -408,7 +418,13 @@ class MessagingService {
     auto att = storage_->GetAttachment(attachment_id);
     if (att && att->is_downloaded) {
       std::error_code ec;
-      std::filesystem::remove(att->file_path, ec);
+      std::filesystem::path const attachments_dir =
+          std::filesystem::path(storage_->GetPath()).parent_path() / "attachments";
+      if (messaging::IsPathInsideDirectory(attachments_dir, att->file_path)) {
+        std::filesystem::remove(att->file_path, ec);
+      } else {
+        LGW << "Refusing to delete attachment file outside attachments directory: " << att->file_path;
+      }
       storage_->UpdateAttachmentStatus(attachment_id, messaging::AttachmentStatus::discarded, false);
       EventQueue::Instance().Push(
           EventAttachmentStatusChanged{topic_id, attachment_id, messaging::AttachmentStatus::discarded}
@@ -566,7 +582,11 @@ class MessagingService {
     }
     std::uint64_t const target_id = json.value("target_id", 0ULL);
     std::string const content = json.value("content", "");
-    if (history_->GetHistoryEntry(topic_id, target_id)) {
+    if (auto const record = history_->GetHistoryEntry(topic_id, target_id)) {
+      if (!IsOriginalAuthor(*record, topic_id, entry.author_id)) {
+        LGW << "Ignoring edit of message " << target_id << " by non-author " << entry.author_id.ToString();
+        return;
+      }
       history_->UpdateMessageContent(topic_id, target_id, content);
       EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
@@ -578,10 +598,32 @@ class MessagingService {
       topic_id = TopicID(entry.author_id);
     }
     std::uint64_t const target_id = json.value("target_id", 0ULL);
-    if (history_->GetHistoryEntry(topic_id, target_id)) {
+    if (auto const record = history_->GetHistoryEntry(topic_id, target_id)) {
+      // Our own deletes mirror across our devices; anyone else may only delete messages they authored.
+      if (entry.author_id != sm_->account->GetId() && !IsOriginalAuthor(*record, topic_id, entry.author_id)) {
+        LGW << "Ignoring delete of message " << target_id << " by non-author " << entry.author_id.ToString();
+        return;
+      }
       history_->MarkMessageDeleted(topic_id, target_id);
       EventQueue::Instance().Push(EventMessageUpdated{topic_id, target_id});
     }
+  }
+
+  /// Who wrote a stored message. Older rows may lack author_id; then derive it from the direction (1:1 only).
+  [[nodiscard]] auto IsOriginalAuthor(
+      messaging::HistoryEntryRecord const& record,
+      TopicID const& topic_id,
+      ContactID const& actor
+  ) const -> bool {
+    if (!record.author_id.IsEmpty()) {
+      return record.author_id == actor;
+    }
+    if (record.direction == messaging::MessageDirection::sent) {
+      return actor == sm_->account->GetId();
+    }
+    // Legacy received message: only attributable in a 1:1 conversation, where the topic is the other party.
+    return TopicID(actor) == topic_id && !storage_->GetGroup(GroupID(topic_id.Span())) &&
+           !storage_->GetChannel(ChannelID(topic_id.Span()));
   }
 
   void ProjectReaction(messaging::LedgerEntry const& entry, Json const& json, bool /*is_mine*/) {
@@ -984,6 +1026,11 @@ class MessagingService {
         att.note = j_att.value("note", "");
         att.file_name = j_att.value("name", "");
 
+        if (!messaging::IsValidAttachmentId(att.id)) {
+          LGW << "Dropping incoming attachment with invalid id from " << entry.author_id.ToString();
+          continue;
+        }
+
         att.is_downloaded = false;
         att.status = messaging::AttachmentStatus::pending;
         std::string filename = att.file_name;
@@ -1051,6 +1098,13 @@ class MessagingService {
     if (!local_attachments.empty()) {
       std::error_code err;
       std::filesystem::create_directories(attachments_dir, err);
+      std::erase_if(local_attachments, [](messaging::Attachment const& att) -> bool {
+        if (!messaging::IsValidAttachmentId(att.id)) {
+          LGW << "Dropping incoming attachment with invalid id";
+          return true;
+        }
+        return false;
+      });
       for (auto& att : local_attachments) {
         std::string filename = att.file_name;
         if (filename.empty()) {
@@ -1139,13 +1193,12 @@ class MessagingService {
     }
   }
 
+  /// 128-bit random attachment ID (32 hex chars). Attachment IDs act as capabilities for file transfer,
+  /// so they must come from a CSPRNG.
   static auto GenerateAttachmentId() -> std::string {
-    static std::random_device random_device;
-    static std::mt19937 gen(random_device());
-    static std::uniform_int_distribution<uint64_t> dis;
-    std::stringstream sstream;
-    sstream << std::hex << dis(gen) << dis(gen);
-    return sstream.str();
+    std::array<std::byte, 16> bytes{};
+    RAND_bytes(reinterpret_cast<unsigned char*>(bytes.data()), static_cast<int>(bytes.size()));  // NOLINT
+    return crypto::ToHex(std::span<std::byte const>(bytes));
   }
 
   void FlushDeliveryReceipts(TopicID const& topic_id) {

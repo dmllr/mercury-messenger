@@ -125,7 +125,7 @@ TEST_F(ContactServiceTest, ConfirmContact) {
   EXPECT_TRUE(contact_service_->IsConfirmed(peer1));
 
   bool signaling_sent = false;
-  for (auto const& [p, json] : mock_dt_->sent_jsons) {
+  for (auto const& [p, json] : mock_dt_->SentJsonsSnapshot()) {
     if (p == peer1 && json.value("type", "") == "crcp_confirm") {
       signaling_sent = true;
       break;
@@ -165,4 +165,191 @@ TEST_F(ContactServiceTest, UnblockContact) {
   ASSERT_TRUE(contact.has_value());
   // Should revert to awaiting approval or similar non-blocked state
   EXPECT_NE(contact->status, identity::ContactStatus::rejected);
+}
+
+// --- Security regression tests (audit C2): crcp_confirm must not bypass approval ---
+
+TEST_F(ContactServiceTest, CrcpConfirmFromUnknownPeerDoesNotConfirm) {
+  std::string mnemonic;
+  auto const stranger = crypto::Identity::CreateNew(mnemonic);
+  ContactID const stranger_id(stranger->GetPublicKey());
+
+  nlohmann::json const msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(stranger->Sign(client_->GetId().Span()))},
+      {"profile", {{"display_name", "Stranger"}}}
+  };
+  contact_service_->ProcessCrcpMessage(stranger_id, stranger_id, msg);
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(stranger_id));
+  auto const contact = contact_service_->GetContact(stranger_id);
+  ASSERT_TRUE(contact.has_value());
+  EXPECT_EQ(contact->status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ContactServiceTest, CrcpConfirmForOurPendingRequestConfirms) {
+  std::string mnemonic;
+  auto const friend_ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(friend_ident->GetPublicKey());
+
+  contact_service_->AddContact(friend_id, std::nullopt);
+  ASSERT_EQ(contact_service_->GetContact(friend_id)->status, identity::ContactStatus::pendingApproval);
+
+  nlohmann::json const msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(friend_ident->Sign(client_->GetId().Span()))},
+      {"profile", nlohmann::json::object()}
+  };
+  contact_service_->ProcessCrcpMessage(friend_id, friend_id, msg);
+
+  EXPECT_TRUE(contact_service_->IsConfirmed(friend_id));
+}
+
+TEST_F(ContactServiceTest, CrcpConfirmFromBlockedPeerDoesNotConfirm) {
+  std::string mnemonic;
+  auto const ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const id(ident->GetPublicKey());
+
+  contact_service_->AddContact(id, std::nullopt);
+  contact_service_->BlockContact(id, false);
+
+  nlohmann::json const msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(ident->Sign(client_->GetId().Span()))},
+      {"profile", nlohmann::json::object()}
+  };
+  contact_service_->ProcessCrcpMessage(id, id, msg);
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(id));
+}
+
+// --- P0-2b: auto-confirm only with proof of our prior approval (our signature over the peer's ID) ---
+
+namespace {
+auto ConfirmMsg(crypto::Identity const& from, ContactID const& me, std::optional<std::vector<std::byte>> proof)
+    -> nlohmann::json {
+  nlohmann::json msg = {
+      {"type", "crcp_confirm"},
+      {"signature", crypto::ToHex(from.Sign(me.Span()))},
+      {"profile", nlohmann::json::object()}
+  };
+  if (proof) {
+    msg["proof"] = crypto::ToHex(*proof);
+  }
+  return msg;
+}
+}  // namespace
+
+TEST_F(ContactServiceTest, CrcpConfirmFromUnknownPeerWithOurProofAutoConfirms) {
+  std::string mnemonic;
+  auto const old_friend = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(old_friend->GetPublicKey());
+
+  // We signed the friend's ID when we approved them in the past (before losing our contact list).
+  auto const proof = client_->Sign(friend_id.Span());
+  contact_service_->ProcessCrcpMessage(friend_id, friend_id, ConfirmMsg(*old_friend, client_->GetId(), proof));
+
+  EXPECT_TRUE(contact_service_->IsConfirmed(friend_id));
+}
+
+TEST_F(ContactServiceTest, CrcpConfirmWithProofSignedByOtherKeyDoesNotConfirm) {
+  std::string mnemonic;
+  auto const stranger = crypto::Identity::CreateNew(mnemonic);
+  ContactID const stranger_id(stranger->GetPublicKey());
+
+  auto const forged = stranger->Sign(stranger_id.Span());
+  contact_service_->ProcessCrcpMessage(stranger_id, stranger_id, ConfirmMsg(*stranger, client_->GetId(), forged));
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(stranger_id));
+  ASSERT_TRUE(contact_service_->GetContact(stranger_id).has_value());
+  EXPECT_EQ(contact_service_->GetContact(stranger_id)->status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ContactServiceTest, CrcpConfirmWithOurProofForDifferentPeerDoesNotConfirm) {
+  std::string mnemonic;
+  auto const real_friend = crypto::Identity::CreateNew(mnemonic);
+  auto const attacker = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(real_friend->GetPublicKey());
+  ContactID const attacker_id(attacker->GetPublicKey());
+
+  // A genuine proof we issued to someone else must not work for the attacker.
+  auto const proof_for_friend = client_->Sign(friend_id.Span());
+  contact_service_->ProcessCrcpMessage(
+      attacker_id,
+      attacker_id,
+      ConfirmMsg(*attacker, client_->GetId(), proof_for_friend)
+  );
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(attacker_id));
+}
+
+TEST_F(ContactServiceTest, ConfirmMessageCarriesProofFromPeer) {
+  std::string mnemonic;
+  auto const friend_ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(friend_ident->GetPublicKey());
+
+  contact_service_->AddContact(friend_id, std::nullopt);
+  auto const their_sig = friend_ident->Sign(client_->GetId().Span());
+  contact_service_->ProcessCrcpMessage(friend_id, friend_id, ConfirmMsg(*friend_ident, client_->GetId(), std::nullopt));
+  ASSERT_TRUE(contact_service_->IsConfirmed(friend_id));
+
+  mock_dt_->MarkVerified(friend_id);
+  mock_dt_->GetPeer(friend_id)->data_channel_is_open = true;
+  mock_dt_->ClearSent();
+  contact_service_->ConfirmContact(friend_id);
+
+  auto const sent = mock_dt_->SentJsonsSnapshot();
+  auto const it = std::ranges::find_if(sent, [&](auto const& p) {
+    return p.first == friend_id && p.second.value("type", "") == "crcp_confirm";
+  });
+  ASSERT_NE(it, sent.end());
+  ASSERT_TRUE(it->second.contains("proof"));
+  // The proof we echo is the friend's signature over our ID - which the friend can verify with its own key.
+  EXPECT_TRUE(crypto::Identity::Verify(
+      friend_id.Span(),
+      client_->GetId().Span(),
+      crypto::FromHex(it->second["proof"].get<std::string>())
+  ));
+  EXPECT_EQ(crypto::FromHex(it->second["proof"].get<std::string>()), their_sig);
+}
+
+TEST_F(ContactServiceTest, AwaitingContactWithOurProofAutoConfirms) {
+  std::string mnemonic;
+  auto const old_friend = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(old_friend->GetPublicKey());
+
+  // The restored device first saw a plain request from the friend...
+  contact_service_->OnContactAddRequest(friend_id, std::nullopt, nlohmann::json::object(), {});
+  ASSERT_EQ(contact_service_->GetContact(friend_id)->status, identity::ContactStatus::awaitingApproval);
+
+  // ...then the friend's crcp_confirm proves we approved it before.
+  auto const proof = client_->Sign(friend_id.Span());
+  contact_service_->ProcessCrcpMessage(friend_id, friend_id, ConfirmMsg(*old_friend, client_->GetId(), proof));
+
+  EXPECT_TRUE(contact_service_->IsConfirmed(friend_id));
+}
+
+TEST_F(ContactServiceTest, AwaitingContactWithForgedProofStaysAwaiting) {
+  std::string mnemonic;
+  auto const stranger = crypto::Identity::CreateNew(mnemonic);
+  ContactID const stranger_id(stranger->GetPublicKey());
+
+  contact_service_->OnContactAddRequest(stranger_id, std::nullopt, nlohmann::json::object(), {});
+  auto const forged = stranger->Sign(stranger_id.Span());
+  contact_service_->ProcessCrcpMessage(stranger_id, stranger_id, ConfirmMsg(*stranger, client_->GetId(), forged));
+
+  EXPECT_EQ(contact_service_->GetContact(stranger_id)->status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ContactServiceTest, BlockedContactWithOurProofStaysBlocked) {
+  std::string mnemonic;
+  auto const ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const id(ident->GetPublicKey());
+
+  contact_service_->AddContact(id, std::nullopt);
+  contact_service_->BlockContact(id, false);
+  auto const proof = client_->Sign(id.Span());
+  contact_service_->ProcessCrcpMessage(id, id, ConfirmMsg(*ident, client_->GetId(), proof));
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(id));
 }

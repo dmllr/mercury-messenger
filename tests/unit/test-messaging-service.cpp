@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cctype>
+#include <set>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -53,7 +55,9 @@ class MessagingServiceTest : public ::testing::Test {
     auto media_transport =
         std::make_shared<transport::MediaTransport>(std::make_unique<transport::MockMediaTransport>(mock_log_));
 
-    auto data_transport = std::make_shared<transport::DataTransport>(std::make_unique<transport::MockDataTransport>());
+    auto mock_dt = std::make_unique<transport::MockDataTransport>();
+    mock_dt_ = mock_dt.get();
+    auto data_transport = std::make_shared<transport::DataTransport>(std::move(mock_dt));
     client_ = std::make_shared<Client>(storage_, media_transport, data_transport);
 
     std::ignore = client_->GenerateNewIdentity();
@@ -106,6 +110,7 @@ class MessagingServiceTest : public ::testing::Test {
   std::shared_ptr<transport::MockCallLog> mock_log_;
   std::shared_ptr<storage::PersistentStorage> storage_;
   std::shared_ptr<Client> client_;
+  transport::MockDataTransport* mock_dt_{};
   std::vector<ContactID> connection_requests_;
   std::filesystem::path temp_dir_;
   std::uint64_t conn_sub_id_ = 0;
@@ -151,6 +156,7 @@ TEST_F(MessagingServiceTest, DownloadTriggersCallback) {
   std::transform(key_str.begin(), key_str.end(), key_bytes.begin(), [](char c) { return static_cast<std::byte>(c); });
   eillance::EventQueue::Instance().Push(EventDataChannelMessage{peer1, key_bytes});
   eillance::EventQueue::Instance().WaitFor([] { return false; }, std::chrono::milliseconds(50));
+  mock_dt_->MarkVerified(peer1);
 
   bool download_cb_called = false;
   auto sub = EventQueue::Instance().Subscribe<EventAttachmentDownloaded>([&](auto const& e) {
@@ -271,4 +277,34 @@ TEST_F(MessagingServiceTest, MarkAsRead_AppendsToLedger) {
       std::chrono::milliseconds(2000)
   );
   EXPECT_TRUE(read_recorded);
+}
+
+// --- Security regression (audit H3): attachment IDs are 128-bit CSPRNG hex strings ---
+
+TEST_F(MessagingServiceTest, AttachmentIdsAreRandom128BitHex) {
+  std::set<std::string> ids;
+  for (int i = 0; i < 3; ++i) {
+    auto const file_path = (temp_dir_ / ("id_test_" + std::to_string(i) + ".txt")).string();
+    std::ofstream(file_path) << "data" << i;
+    std::vector<messaging::AttachmentRequest> atts;
+    atts.push_back({file_path, messaging::AttachmentType::file, "", "text/plain", ""});
+    client_->SendChatMessage(TopicID(peer1), "Msg", atts);
+  }
+  eillance::EventQueue::Instance().WaitFor(
+      [&]() { return storage_->GetLedgerEntries(TopicID(peer1)).size() >= 3; },
+      std::chrono::milliseconds(3000)
+  );
+
+  for (auto const& entry : storage_->GetLedgerEntries(TopicID(peer1))) {
+    auto const json = nlohmann::json::parse(entry.payload);
+    if (!json.contains("attachments")) continue;
+    for (auto const& att : json["attachments"]) {
+      std::string const id = att.value("id", "");
+      EXPECT_EQ(id.size(), 32U) << id;
+      EXPECT_TRUE(std::ranges::all_of(id, [](char c) { return std::isxdigit(static_cast<unsigned char>(c)) != 0; }))
+          << id;
+      ids.insert(id);
+    }
+  }
+  EXPECT_EQ(ids.size(), 3U);
 }

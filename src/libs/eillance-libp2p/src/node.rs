@@ -9,4 +9,6 @@ pub struct Node {
   pub keypair: identity::Keypair,
   pub role: NodeRole,
   pub callbacks: Callbacks,
+  pub turn_port: Option<u16>,
+  pub turn_port_range: Option<(u16, u16)>,
 }

@@ -29,6 +29,7 @@ enable_testing()
 add_executable(h-e-tests
   test-account-service.cpp
   test-args-parser.cpp
+  test-attachment-paths.cpp
   test-attachments.cpp
   test-audio-encoder.cpp
   test-backup-manager.cpp

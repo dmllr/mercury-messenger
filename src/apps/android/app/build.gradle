@@ -42,6 +42,8 @@ def versionPropsFile = new File(repoRoot, 'version.properties')
 if (versionPropsFile.exists()) {
     versionProps.load(new FileInputStream(versionPropsFile))
 }
+def vMajor = (versionProps['VERSION_MAJOR'] ?: versionProps['version_major'] ?: "0").toInteger()
+def vMinor = (versionProps['VERSION_MINOR'] ?: versionProps['version_minor'] ?: "0").toInteger()
 def vCode = (versionProps['VERSION_CODE'] ?: "0").toInteger()
 def runTasks = gradle.startParameter.taskNames
 if (runTasks.any { it.contains('bundleRelease') || it.contains('assembleRelease') }) {
@@ -73,7 +75,7 @@ android {
         minSdkVersion 28
         targetSdkVersion 37
         versionCode vCode
-        versionName "2.2.${vCode}"
+        versionName "${vMajor}.${vMinor}.${vCode}"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

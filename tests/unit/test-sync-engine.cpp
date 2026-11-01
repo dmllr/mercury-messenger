@@ -1,5 +1,9 @@
+#include <algorithm>
+#include <thread>
+
 #include <gtest/gtest.h>
 
+#include "eillance/messaging/ledger_signature.hpp"
 #include "eillance/services/account_service.hpp"
 #include "eillance/services/file_transfer_service.hpp"
 #include "eillance/services/messaging_service.hpp"
@@ -20,7 +24,7 @@ struct PeerNode {
   std::unique_ptr<sync::SyncEngine> engine;
   std::shared_ptr<transport::Peer> peer_for_other;
 
-  PeerNode(ContactID my_id, ContactID other_id)
+  PeerNode(ContactID my_id, ContactID other_id, sync::SyncEngine::Signer signer = {})
       : id(my_id) {
     auto mock_storage = std::make_unique<storage::MockPersistentStorageImpl>();
     mock_storage->UpdateContact({.peer_id = other_id, .status = identity::ContactStatus::confirmed});
@@ -28,7 +32,7 @@ struct PeerNode {
     auto mock = std::make_unique<transport::MockDataTransport>();
     transport_mock = mock.get();
     transport = std::make_shared<transport::DataTransport>(std::move(mock));
-    engine = std::make_unique<sync::SyncEngine>(storage, transport, id);
+    engine = std::make_unique<sync::SyncEngine>(storage, transport, id, std::move(signer));
 
     peer_for_other = std::make_shared<transport::Peer>(other_id);
     peer_for_other->data_channel_is_open = true;
@@ -346,7 +350,10 @@ TEST_F(SyncEngineTest, SyncHistoryLargerThanMaxBatchSize) {
   EXPECT_EQ(total_transferred_B_to_A_, 0);
 }
 
-TEST_F(SyncEngineTest, RestoreDeletedContactHistoryTriggersSyncedEvents) {
+// Without signatures (legacy entries) our own messages cannot be restored from a contact: the contact could
+// otherwise forge entries in our name. See SignedSyncEngineTest.RestoreDeletedContactHistoryTriggersSyncedEvents
+// for the signed (current) behaviour.
+TEST_F(SyncEngineTest, RestoreDeletedContactHistoryRejectsUnsignedOwnEntries) {
   A->engine->AppendAction(
       TopicID(idB_),
       messaging::LedgerActionType::Message,
@@ -375,8 +382,9 @@ TEST_F(SyncEngineTest, RestoreDeletedContactHistoryTriggersSyncedEvents) {
 
   EventQueue::Instance().Unsubscribe(sub_id);
 
-  // B should have received 1 synced event for its own message
-  EXPECT_EQ(synced_events_received, 1);
+  // B's own unsigned message relayed by A is not accepted
+  EXPECT_EQ(synced_events_received, 0);
+  EXPECT_EQ(B->storage->GetLedgerEntries(TopicID(idA_)).size(), 1U);
 }
 
 TEST_F(SyncEngineTest, SyncValidateAndRepairChain) {
@@ -445,4 +453,271 @@ TEST_F(SyncEngineTest, SyncKeepsReadStatusInsteadOfDowngradingToDelivered) {
   if (entry) {
     EXPECT_EQ(entry->status, messaging::MessageStatus::read);
   }
+}
+
+// --- Security regression tests (audit H1): peers may only sync topics they participate in ---
+
+namespace {
+auto CountEntriesSentForTopic(transport::MockDataTransport const* mock, TopicID const& topic) -> size_t {
+  size_t count = 0;
+  for (auto const& [to, msg] : mock->sent_jsons) {
+    if (msg.value("topic", "") == topic.ToString() && msg.contains("entries")) {
+      count += msg["entries"].size();
+    }
+  }
+  return count;
+}
+}  // namespace
+
+TEST_F(SyncEngineTest, PeerCannotSyncForeignOneToOneTopic) {
+  ContactID const idC("aa4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e99");
+  A->InjectEntry(TopicID(idC), "private conversation with C", 1000, idC);
+
+  nlohmann::json const checkpoints = {
+      {"type", "sync_checkpoints"}, {"topic", TopicID(idC).ToString()}, {"checkpoints", {""}}
+  };
+  A->engine->ProcessSyncMessage(idB_, checkpoints);
+  nlohmann::json const batch = {
+      {"type", "sync_batch"},
+      {"topic", TopicID(idC).ToString()},
+      {"lca", ""},
+      {"batch_index", 0},
+      {"total_entries", 0},
+      {"entries", nlohmann::json::array()}
+  };
+  A->engine->ProcessSyncMessage(idB_, batch);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(CountEntriesSentForTopic(A->transport_mock, TopicID(idC)), 0U);
+}
+
+TEST_F(SyncEngineTest, PeerCannotSyncGroupItIsNotMemberOf) {
+  identity::Group g;
+  g.id = GroupID("bb4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e11");
+  g.owner_id = idA_;
+  g.members = {{idA_, 0}};
+  A->storage->AddGroup(g);
+  A->InjectEntry(TopicID(g.id), "group secret", 1000, idA_);
+
+  nlohmann::json const checkpoints = {
+      {"type", "sync_checkpoints"}, {"topic", TopicID(g.id).ToString()}, {"checkpoints", {""}}
+  };
+  A->engine->ProcessSyncMessage(idB_, checkpoints);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(CountEntriesSentForTopic(A->transport_mock, TopicID(g.id)), 0U);
+}
+
+TEST_F(SyncEngineTest, GroupMemberCanSyncGroup) {
+  identity::Group g;
+  g.id = GroupID("cc4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e22");
+  g.owner_id = idA_;
+  g.members = {{idA_, 0}, {idB_, 0}};
+  A->storage->AddGroup(g);
+  A->InjectEntry(TopicID(g.id), "group message", 1000, idA_);
+
+  nlohmann::json const checkpoints = {
+      {"type", "sync_checkpoints"}, {"topic", TopicID(g.id).ToString()}, {"checkpoints", {""}}
+  };
+  A->engine->ProcessSyncMessage(idB_, checkpoints);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  EXPECT_EQ(CountEntriesSentForTopic(A->transport_mock, TopicID(g.id)), 1U);
+}
+
+// --- Security regression tests (audit C4): ledger entries are authenticated by their author ---
+
+namespace {
+auto MakeSigner(crypto::Identity const* ident) -> sync::SyncEngine::Signer {
+  return [ident](std::span<std::byte const> bytes) { return ident->Sign(bytes); };
+}
+
+auto SignWith(crypto::Identity const& ident, std::string const& canonical, messaging::LedgerEntry const& e)
+    -> std::vector<std::byte> {
+  auto const bytes = messaging::LedgerSigningBytes(canonical, e);
+  return ident.Sign(std::span(reinterpret_cast<std::byte const*>(bytes.data()), bytes.size()));
+}
+}  // namespace
+
+// Real identities for both nodes, with signing enabled.
+class SignedSyncEngineTest : public SyncEngineTest {
+ protected:
+  void SetUp() override {
+    std::string mnemonic;
+    alice_ = crypto::Identity::CreateNew(mnemonic);
+    bob_ = crypto::Identity::CreateNew(mnemonic);
+    idA_ = ContactID(alice_->GetPublicKey());
+    idB_ = ContactID(bob_->GetPublicKey());
+    A = std::make_unique<PeerNode>(idA_, idB_, MakeSigner(alice_.get()));
+    B = std::make_unique<PeerNode>(idB_, idA_, MakeSigner(bob_.get()));
+    A->InitCipher(*B);
+    B->InitCipher(*A);
+  }
+
+  std::unique_ptr<crypto::Identity> alice_;
+  std::unique_ptr<crypto::Identity> bob_;
+};
+
+TEST_F(SignedSyncEngineTest, SignedEntriesSyncAndVerifyAcrossPerspectives) {
+  A->engine->AppendAction(TopicID(idB_), messaging::LedgerActionType::Message, {{"msg", "from A"}});
+  B->engine->AppendAction(TopicID(idA_), messaging::LedgerActionType::Message, {{"msg", "from B"}});
+  PumpMessages();
+
+  auto const b_entries = B->storage->GetLedgerEntries(TopicID(idA_));
+  ASSERT_EQ(b_entries.size(), 2U);
+  for (auto const& e : b_entries) {
+    EXPECT_FALSE(e.signature.empty());
+  }
+  EXPECT_EQ(A->storage->GetLedgerEntries(TopicID(idB_)).size(), 2U);
+}
+
+TEST_F(SignedSyncEngineTest, RestoreDeletedContactHistoryTriggersSyncedEvents) {
+  A->engine->AppendAction(
+      TopicID(idB_),
+      messaging::LedgerActionType::Message,
+      {{"type", "chat"}, {"message_id", 1}, {"payload", {{"c", "Hello from A"}}}}
+  );
+  B->engine->AppendAction(
+      TopicID(idA_),
+      messaging::LedgerActionType::Message,
+      {{"type", "chat"}, {"message_id", 2}, {"payload", {{"c", "Hello from B"}}}}
+  );
+  PumpMessages();
+
+  B->storage->DeleteLedgerEntriesAfter(TopicID(idA_), messaging::LedgerHash());
+
+  int synced_events_received = 0;
+  auto sub_id = EventQueue::Instance().Subscribe<EventLedgerAppended>([&](auto const& e) {
+    if (e.is_synced && e.entry.author_id == idB_) {
+      synced_events_received++;
+    }
+  });
+
+  B->engine->ProposeSync(TopicID(idA_), idA_);
+  PumpMessages();
+  EventQueue::Instance().Unsubscribe(sub_id);
+
+  // B's own signed message is restored from A
+  EXPECT_EQ(synced_events_received, 1);
+}
+
+// "Me" is Bob; Carol is a confirmed contact relaying entries in a group shared with Alice.
+class LedgerRelayTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    std::string mnemonic;
+    alice_ = crypto::Identity::CreateNew(mnemonic);
+    bob_ = crypto::Identity::CreateNew(mnemonic);
+    carol_ = crypto::Identity::CreateNew(mnemonic);
+    alice_id_ = ContactID(alice_->GetPublicKey());
+    bob_id_ = ContactID(bob_->GetPublicKey());
+    carol_id_ = ContactID(carol_->GetPublicKey());
+
+    me_ = std::make_unique<PeerNode>(bob_id_, carol_id_, MakeSigner(bob_.get()));
+    me_->peer_for_other->session_cipher->ComputeSharedSecret(carol_cipher_.GetPublicKey());
+    carol_cipher_.ComputeSharedSecret(me_->peer_for_other->session_cipher->GetPublicKey());
+
+    identity::Group g;
+    g.id = gid_;
+    g.owner_id = alice_id_;
+    g.members = {{alice_id_, 1}, {bob_id_, 0}, {carol_id_, 0}};
+    me_->storage->AddGroup(g);
+  }
+
+  auto Entry(ContactID const& author, TopicID const& topic, std::string const& text) -> messaging::LedgerEntry {
+    messaging::LedgerEntry e;
+    e.topic_id = topic;
+    e.author_id = author;
+    e.created_at = Timestamp{++ts_};
+    e.type = messaging::LedgerActionType::Message;
+    e.payload = nlohmann::json{{"msg", text}}.dump();
+    return e;
+  }
+
+  // Carol sends one entry to us via sync_batch for `wire_topic`.
+  void DeliverFromCarol(std::string const& wire_topic, messaging::LedgerEntry const& e) {
+    nlohmann::json const entry_json = {
+        {"author", e.author_id.ToString()},
+        {"created", e.created_at.value},
+        {"type", static_cast<int>(e.type)},
+        {"payload", crypto::ToHex(carol_cipher_.Encrypt(e.payload))},
+        {"prev_hash", ""},
+        {"hash", ""},
+        {"sig", crypto::ToHex(e.signature)}
+    };
+    nlohmann::json const msg = {
+        {"type", "sync_batch"},
+        {"topic", wire_topic},
+        {"lca", ""},
+        {"batch_index", 0},
+        {"total_entries", 1},
+        {"entries", nlohmann::json::array({entry_json})}
+    };
+    me_->engine->ProcessSyncMessage(carol_id_, msg);
+  }
+
+  [[nodiscard]] auto Stored(TopicID const& topic, std::string const& text) const -> bool {
+    auto const payload = nlohmann::json{{"msg", text}}.dump();
+    return std::ranges::any_of(me_->storage->GetLedgerEntries(topic), [&](auto const& e) {
+      return e.payload == payload;
+    });
+  }
+
+  std::unique_ptr<crypto::Identity> alice_, bob_, carol_;
+  ContactID alice_id_, bob_id_, carol_id_;
+  std::unique_ptr<PeerNode> me_;
+  crypto::SessionCipher carol_cipher_;
+  GroupID const gid_{"ee4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e44"};
+  std::uint64_t ts_ = 1000;
+};
+
+TEST_F(LedgerRelayTest, SignedThirdPartyEntryIsAccepted) {
+  auto e = Entry(alice_id_, TopicID(gid_), "alice says hi");
+  e.signature = SignWith(*alice_, messaging::CanonicalGroupTopic(TopicID(gid_)), e);
+  DeliverFromCarol(TopicID(gid_).ToString(), e);
+  EXPECT_TRUE(Stored(TopicID(gid_), "alice says hi"));
+}
+
+TEST_F(LedgerRelayTest, UnsignedThirdPartyEntryIsRejected) {
+  DeliverFromCarol(TopicID(gid_).ToString(), Entry(alice_id_, TopicID(gid_), "forged alice"));
+  EXPECT_FALSE(Stored(TopicID(gid_), "forged alice"));
+}
+
+TEST_F(LedgerRelayTest, ForgedEntryAuthoredByMeIsRejected) {
+  DeliverFromCarol(TopicID(gid_).ToString(), Entry(bob_id_, TopicID(gid_), "forged me unsigned"));
+  EXPECT_FALSE(Stored(TopicID(gid_), "forged me unsigned"));
+
+  auto e = Entry(bob_id_, TopicID(gid_), "forged me carol-signed");
+  e.signature = SignWith(*carol_, messaging::CanonicalGroupTopic(TopicID(gid_)), e);
+  DeliverFromCarol(TopicID(gid_).ToString(), e);
+  EXPECT_FALSE(Stored(TopicID(gid_), "forged me carol-signed"));
+}
+
+TEST_F(LedgerRelayTest, TamperedPayloadIsRejected) {
+  auto e = Entry(alice_id_, TopicID(gid_), "original");
+  e.signature = SignWith(*alice_, messaging::CanonicalGroupTopic(TopicID(gid_)), e);
+  e.payload = nlohmann::json{{"msg", "tampered"}}.dump();
+  DeliverFromCarol(TopicID(gid_).ToString(), e);
+  EXPECT_FALSE(Stored(TopicID(gid_), "tampered"));
+}
+
+TEST_F(LedgerRelayTest, SignatureForAnotherTopicIsRejected) {
+  GroupID const other("ff4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968ce0eb0f6226252e55");
+  auto e = Entry(alice_id_, TopicID(gid_), "moved");
+  e.signature = SignWith(*alice_, messaging::CanonicalGroupTopic(TopicID(other)), e);
+  DeliverFromCarol(TopicID(gid_).ToString(), e);
+  EXPECT_FALSE(Stored(TopicID(gid_), "moved"));
+}
+
+TEST_F(LedgerRelayTest, UnsignedLegacyEntryFromItsAuthorIsAccepted) {
+  DeliverFromCarol(TopicID(gid_).ToString(), Entry(carol_id_, TopicID(gid_), "legacy carol"));
+  EXPECT_TRUE(Stored(TopicID(gid_), "legacy carol"));
+}
+
+TEST_F(LedgerRelayTest, OneToOneSignatureVerifiesOnReceiver) {
+  // Carol stores our conversation under TopicID(bob); she signs the canonical pair {carol, bob}.
+  auto e = Entry(carol_id_, TopicID(bob_id_), "carol 1:1");
+  e.signature = SignWith(*carol_, messaging::CanonicalPairTopic(carol_id_, TopicID(bob_id_)), e);
+  DeliverFromCarol(TopicID(bob_id_).ToString(), e);  // wire topic = our ID, mapped to TopicID(carol) locally
+  EXPECT_TRUE(Stored(TopicID(carol_id_), "carol 1:1"));
 }

@@ -1,4 +1,4 @@
-project(mercury-bot CXX)
+project(mercury-bot-feedback CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,14 +13,14 @@ set(shared_cmake_libs_path "${REPO_ROOT}/src/cmake")
 include("${shared_cmake_libs_path}/setup.cmake")
 include("${shared_cmake_libs_path}/import_remote.cmake")
 
-add_executable(mercury-bot
-  mercury-bot.cpp
+add_executable(mercury-bot-feedback
+  mercury-bot-feedback.cpp
 )
 
-set_property(TARGET mercury-bot PROPERTY CXX_STANDARD 20)
-target_compile_features(mercury-bot PRIVATE cxx_std_20)
+set_property(TARGET mercury-bot-feedback PROPERTY CXX_STANDARD 20)
+target_compile_features(mercury-bot-feedback PRIVATE cxx_std_20)
 
-target_link_libraries(mercury-bot PRIVATE
+target_link_libraries(mercury-bot-feedback PRIVATE
   eillance-bot-api
   eillance-logging
 )

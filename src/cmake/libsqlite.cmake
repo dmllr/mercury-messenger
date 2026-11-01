@@ -24,7 +24,11 @@ if(ANDROID)
 endif()
 
 if(NOT TARGET SQLite::SQLite3)
-  add_library(SQLite::SQLite3 ALIAS SQLite3)
+  add_library(SQLite::SQLite3 INTERFACE IMPORTED)
+  set_target_properties(SQLite::SQLite3 PROPERTIES
+    INTERFACE_LINK_LIBRARIES SQLite3
+    INTERFACE_INCLUDE_DIRECTORIES "${sqlite3_source_SOURCE_DIR}"
+  )
 endif()
 
 # Set standard find_package variables to indicate success.

@@ -55,8 +55,7 @@ pub fn build_behaviour(
   mdns_config.query_interval = Duration::from_secs(300);
   let mdns = mdns::tokio::Behaviour::new(mdns_config, peer_id).expect("mDNS valid");
 
-  let mut rr_config = request_response::Config::default();
-  rr_config.set_request_timeout(Duration::from_secs(30));
+  let rr_config = request_response::Config::default().with_request_timeout(Duration::from_secs(30));
 
   let chat = request_response::cbor::Behaviour::new(
     [(StreamProtocol::new("/mercury/chat/1.0.0"), ProtocolSupport::Full)],
@@ -95,7 +94,7 @@ pub fn build_behaviour(
       max_circuits_per_peer: 1024,
       circuit_src_rate_limiters: vec![],
       max_circuit_duration: Duration::from_secs(86400 * 7), // 7 days
-      max_circuit_bytes: 1 << 40,                           // 1 TB
+      max_circuit_bytes: 1_u64 << 40,                       // 1 TB
       reservation_duration: Duration::from_secs(3600),      // 1 hour
       ..Default::default()
     }

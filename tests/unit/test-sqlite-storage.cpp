@@ -770,3 +770,46 @@ TEST_F(SQLiteStorageTest, Reactions) {
   loaded = storage_->GetHistoryEntry(TopicID(peer1), entry.id);
   EXPECT_TRUE(loaded->reactions.empty());
 }
+
+TEST_F(SQLiteStorageTest, LedgerSignatureRoundTrip) {
+  TopicID const topic(peer1);
+  std::vector<std::byte> sig(64);
+  for (size_t i = 0; i < sig.size(); ++i) sig[i] = static_cast<std::byte>(i);
+
+  messaging::LedgerEntry signed_entry{
+      .seq_id = 0,
+      .topic_id = topic,
+      .author_id = peer1,
+      .created_at = Timestamp{100},
+      .type = messaging::LedgerActionType::Message,
+      .payload = "signed",
+      .prev_hash = messaging::LedgerHash(),
+      .hash = messaging::LedgerHash(std::string(64, 'a')),
+      .signature = sig
+  };
+  storage_->AddLedgerEntry(signed_entry);
+
+  messaging::LedgerEntry unsigned_entry = signed_entry;
+  unsigned_entry.created_at = Timestamp{101};
+  unsigned_entry.payload = "legacy";
+  unsigned_entry.prev_hash = signed_entry.hash;
+  unsigned_entry.hash = messaging::LedgerHash(std::string(64, 'b'));
+  unsigned_entry.signature.clear();
+  storage_->AddLedgerEntry(unsigned_entry);
+
+  auto entries = storage_->GetLedgerEntries(topic);
+  ASSERT_EQ(entries.size(), 2U);
+  EXPECT_EQ(entries[0].signature, sig);
+  EXPECT_TRUE(entries[1].signature.empty());
+
+  auto by_hash = storage_->GetLedgerEntryByHash(topic, signed_entry.hash);
+  ASSERT_TRUE(by_hash);
+  EXPECT_EQ(by_hash->signature, sig);
+
+  // Repairs rewrite the chain via ReplaceLedgerEntries: signatures must survive.
+  storage_->ReplaceLedgerEntries(topic, messaging::LedgerHash(), entries);
+  auto latest = storage_->GetLatestLedgerEntry(topic);
+  ASSERT_TRUE(latest);
+  EXPECT_TRUE(latest->signature.empty());
+  EXPECT_EQ(storage_->GetLedgerEntries(topic)[0].signature, sig);
+}

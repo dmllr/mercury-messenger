@@ -20,27 +20,28 @@ class SettingsManagerTest : public ::testing::Test {
 };
 
 TEST_F(SettingsManagerTest, GetDefaultUrl) {
-  auto url = settings_manager_->GetBootstrapNodeUrls();
-  EXPECT_TRUE(url.has_value());
-  EXPECT_EQ(url.value(), SettingsManager::GetDefaultBootstrapNodeUrls());
+  auto const urls = settings_manager_->GetBootstrapNodeUrls();
+  EXPECT_FALSE(urls.has_value());
+  auto const default_urls = settings_manager_->GetEffectiveBootstrapNodeUrls();
+  EXPECT_EQ(default_urls.size(), 4);
 }
 
 TEST_F(SettingsManagerTest, SetAndGetUrl) {
   std::string const custom_url = "/ip4/127.0.0.1/tcp/8080";
-  settings_manager_->SetBootstrapNodeUrls(custom_url);
+  settings_manager_->SetBootstrapNodeUrls(custom_url, false);
 
-  auto url = settings_manager_->GetBootstrapNodeUrls();
+  auto const url = settings_manager_->GetBootstrapNodeUrls();
   ASSERT_TRUE(url.has_value());
   EXPECT_EQ(url.value(), custom_url);
 }
 
 TEST_F(SettingsManagerTest, Persistence) {
   std::string const custom_url = "/ip4/192.168.1.1/tcp/9000";
-  settings_manager_->SetBootstrapNodeUrls(custom_url);
+  settings_manager_->SetBootstrapNodeUrls(custom_url, false);
 
   // Create a new manager with the same storage to simulate app restart
-  auto new_manager = std::make_unique<SettingsManager>(storage_);
-  auto url = new_manager->GetBootstrapNodeUrls();
+  auto const new_manager = std::make_unique<SettingsManager>(storage_);
+  auto const url = new_manager->GetBootstrapNodeUrls();
 
   ASSERT_TRUE(url.has_value());
   EXPECT_EQ(url.value(), custom_url);

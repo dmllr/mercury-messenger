@@ -37,6 +37,14 @@ if(NOT OPENSSL_INCLUDE_DIR)
   endif()
 endif()
 
+# Add include directories to the imported targets so try_compile checks work correctly
+if(TARGET OpenSSL::Crypto)
+  set_property(TARGET OpenSSL::Crypto PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}")
+endif()
+if(TARGET OpenSSL::SSL)
+  set_property(TARGET OpenSSL::SSL PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}")
+endif()
+
 set(OPENSSL_CRYPTO_LIBRARY OpenSSL::Crypto)
 set(OPENSSL_SSL_LIBRARY OpenSSL::SSL)
 set(OPENSSL_LIBRARIES ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
