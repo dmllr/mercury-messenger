@@ -267,6 +267,10 @@ class Client final {
   [[nodiscard]] auto Contacts() const -> std::shared_ptr<services::ContactService> {
     return sm_->contact;
   }
+  /// Low-level transport access (diagnostics and integration tooling only).
+  [[nodiscard]] auto GetDataTransport() const -> std::shared_ptr<transport::DataTransport> {
+    return sm_->data_transport;
+  }
   [[nodiscard]] auto Messaging() const -> std::shared_ptr<services::MessagingService> {
     return sm_->messaging;
   }
