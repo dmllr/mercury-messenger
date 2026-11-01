@@ -312,3 +312,44 @@ TEST_F(ContactServiceTest, ConfirmMessageCarriesProofFromPeer) {
   ));
   EXPECT_EQ(crypto::FromHex(it->second["proof"].get<std::string>()), their_sig);
 }
+
+TEST_F(ContactServiceTest, AwaitingContactWithOurProofAutoConfirms) {
+  std::string mnemonic;
+  auto const old_friend = crypto::Identity::CreateNew(mnemonic);
+  ContactID const friend_id(old_friend->GetPublicKey());
+
+  // The restored device first saw a plain request from the friend...
+  contact_service_->OnContactAddRequest(friend_id, std::nullopt, nlohmann::json::object(), {});
+  ASSERT_EQ(contact_service_->GetContact(friend_id)->status, identity::ContactStatus::awaitingApproval);
+
+  // ...then the friend's crcp_confirm proves we approved it before.
+  auto const proof = client_->Sign(friend_id.Span());
+  contact_service_->ProcessCrcpMessage(friend_id, friend_id, ConfirmMsg(*old_friend, client_->GetId(), proof));
+
+  EXPECT_TRUE(contact_service_->IsConfirmed(friend_id));
+}
+
+TEST_F(ContactServiceTest, AwaitingContactWithForgedProofStaysAwaiting) {
+  std::string mnemonic;
+  auto const stranger = crypto::Identity::CreateNew(mnemonic);
+  ContactID const stranger_id(stranger->GetPublicKey());
+
+  contact_service_->OnContactAddRequest(stranger_id, std::nullopt, nlohmann::json::object(), {});
+  auto const forged = stranger->Sign(stranger_id.Span());
+  contact_service_->ProcessCrcpMessage(stranger_id, stranger_id, ConfirmMsg(*stranger, client_->GetId(), forged));
+
+  EXPECT_EQ(contact_service_->GetContact(stranger_id)->status, identity::ContactStatus::awaitingApproval);
+}
+
+TEST_F(ContactServiceTest, BlockedContactWithOurProofStaysBlocked) {
+  std::string mnemonic;
+  auto const ident = crypto::Identity::CreateNew(mnemonic);
+  ContactID const id(ident->GetPublicKey());
+
+  contact_service_->AddContact(id, std::nullopt);
+  contact_service_->BlockContact(id, false);
+  auto const proof = client_->Sign(id.Span());
+  contact_service_->ProcessCrcpMessage(id, id, ConfirmMsg(*ident, client_->GetId(), proof));
+
+  EXPECT_FALSE(contact_service_->IsConfirmed(id));
+}

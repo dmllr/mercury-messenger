@@ -326,6 +326,12 @@ class ContactService {
         ConfirmContact(peer_id);
         return;
       }
+      if (existing && existing->status == identity::ContactStatus::awaitingApproval &&
+          HasValidApprovalProof(peer_id, json)) {
+        LGI << "CRCP request from " << peer_id.ToString() << " carries proof of our prior approval.";
+        AutoConfirmAwaiting(peer_id, sig, profile);
+        return;
+      }
 
       OnContactAddRequest(peer_id, token, profile, sig);
     } else if (type == "crcp_confirm") {
@@ -340,7 +346,15 @@ class ContactService {
         peer->crcp_verified = true;
       }
       if (auto existing = manager_->GetContact(peer_id); existing) {
-        OnContactConfirm(peer_id, sig, profile);
+        // A pending incoming request (e.g. a restored device that received the peer's messages first) is also
+        // resolved by a valid proof. Blocked contacts are never auto-confirmed.
+        if (existing->status == identity::ContactStatus::awaitingApproval && HasValidApprovalProof(peer_id, json)) {
+          LGI << "Received crcp_confirm from " << peer_id.ToString()
+              << " with proof of prior approval. Auto-confirming.";
+          AutoConfirmAwaiting(peer_id, sig, profile);
+        } else {
+          OnContactConfirm(peer_id, sig, profile);
+        }
       } else {
         // Auto-confirm only if the peer proves we approved it before (e.g. we restored from mnemonic and lost the
         // contact list): `proof` must be OUR master signature over its ID. The peer's own `signature` over our
@@ -488,6 +502,13 @@ class ContactService {
   [[nodiscard]] auto HasValidApprovalProof(ContactID const& peer_id, Json const& json) const -> bool {
     auto const proof = crypto::FromHex(json.value("proof", ""));
     return !proof.empty() && crypto::Identity::Verify(sm_->account->GetId().Span(), peer_id.Span(), proof);
+  }
+
+  /// Confirms a contact that is waiting for our approval after it proved we approved it before.
+  void AutoConfirmAwaiting(ContactID const& peer_id, std::vector<std::byte> const& sig, Json const& profile) {
+    manager_->StoreSignatureFrom(peer_id, sig);
+    manager_->UpdateContactProfile(peer_id, ParseProfileJson(profile));
+    ConfirmContact(peer_id);
   }
 
   /// Echo the signature the peer gave us (its master key over our ID) so it can recognise a prior approval after
